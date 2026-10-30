@@ -33,20 +33,10 @@ vi.mock("@/components/networking", () => ({
   teamMemberAddCall: vi.fn(),
   teamMemberUpdateCall: vi.fn(),
   teamUpdateCall: vi.fn(),
-  getGuardrailsList: vi.fn(),
-  getPoliciesList: vi.fn(),
-  getPolicyInfoWithGuardrails: vi.fn(),
-  fetchMCPAccessGroups: vi.fn(),
   getTeamPermissionsCall: vi.fn(),
   organizationInfoCall: vi.fn(),
   getRouterSettingsCall: vi.fn().mockResolvedValue({ fields: [] }),
   getPassThroughEndpointsCall: vi.fn().mockResolvedValue({ endpoints: [] }),
-  fetchMCPServers: vi.fn().mockResolvedValue([]),
-  fetchMCPToolsets: vi.fn().mockResolvedValue([]),
-  listMCPTools: vi.fn().mockResolvedValue({ tools: [] }),
-  vectorStoreListCall: vi.fn().mockResolvedValue({ data: [] }),
-  getAgentsList: vi.fn().mockResolvedValue({ agents: [] }),
-  getClaudeCodePluginsList: vi.fn().mockResolvedValue({ plugins: [], count: 0 }),
 }));
 
 const { bulkUpdatePOST } = vi.hoisted(() => ({ bulkUpdatePOST: vi.fn() }));
@@ -54,11 +44,6 @@ vi.mock("@/lib/http/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/http/api")>();
   return { ...actual, fetchClient: { ...actual.fetchClient, POST: bulkUpdatePOST } };
 });
-
-const can = vi.fn();
-vi.mock("@/app/(dashboard)/hooks/useCan", () => ({
-  default: (...args: unknown[]) => can(...args),
-}));
 
 vi.mock("@/components/utils/dataUtils", () => ({
   copyToClipboard: vi.fn().mockResolvedValue(true),
@@ -91,38 +76,6 @@ vi.mock("@/app/(dashboard)/hooks/organizations/useOrganizations", () => ({
 
 vi.mock("@/app/(dashboard)/hooks/users/useCurrentUser", () => ({
   useCurrentUser: vi.fn(),
-}));
-
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPServers", () => ({
-  useMCPServers: vi.fn(),
-}));
-
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPToolsets", () => ({
-  useMCPToolsets: vi.fn(),
-}));
-
-vi.mock("@/components/mcp_server_management/MCPServerSelector", () => ({
-  default: ({
-    value,
-    onChange,
-  }: {
-    value?: { servers: string[]; accessGroups: string[]; toolsets?: string[] };
-    onChange: (next: { servers: string[]; accessGroups: string[]; toolsets: string[] }) => void;
-  }) => (
-    <>
-      <button
-        type="button"
-        onClick={() =>
-          onChange({ servers: [], accessGroups: value?.accessGroups ?? [], toolsets: value?.toolsets ?? [] })
-        }
-      >
-        deselect all mcp servers
-      </button>
-      <button type="button" onClick={() => onChange({ servers: value?.servers ?? [], accessGroups: [], toolsets: [] })}>
-        remove all access groups
-      </button>
-    </>
-  ),
 }));
 
 vi.mock("@/components/team/TeamMemberTab", () => ({
@@ -188,25 +141,6 @@ vi.mock("@/components/common_components/ModelAliasManager", () => ({
   )),
 }));
 
-vi.mock("@/app/(dashboard)/hooks/accessGroups/useAccessGroups", () => ({
-  useAccessGroups: vi.fn().mockReturnValue({
-    data: [
-      { access_group_id: "ag-1", access_group_name: "Group 1", access_mcp_server_ids: [] },
-      { access_group_id: "ag-2", access_group_name: "Group 2", access_mcp_server_ids: [] },
-    ],
-    isLoading: false,
-    isError: false,
-  }),
-}));
-
-vi.mock("@/components/common_components/AccessGroupSelector", () => ({
-  default: ({ value, onChange }: { value?: string[]; onChange?: (next: string[]) => void }) => (
-    <button type="button" onClick={() => onChange?.((value ?? []).slice(1))}>
-      remove first unified access group
-    </button>
-  ),
-}));
-
 vi.mock("@/app/(dashboard)/hooks/keys/useKeys", () => {
   const useKeysResult = {
     data: { keys: [], total_count: 0, current_page: 1, total_pages: 1 },
@@ -232,9 +166,6 @@ import { useKeys } from "@/app/(dashboard)/hooks/keys/useKeys";
 import { useOrganization } from "@/app/(dashboard)/hooks/organizations/useOrganizations";
 import { useTeam } from "@/app/(dashboard)/hooks/teams/useTeams";
 import { useCurrentUser } from "@/app/(dashboard)/hooks/users/useCurrentUser";
-import { useMCPServers } from "@/app/(dashboard)/hooks/mcpServers/useMCPServers";
-import { useMCPToolsets } from "@/app/(dashboard)/hooks/mcpServers/useMCPToolsets";
-import { useAccessGroups } from "@/app/(dashboard)/hooks/accessGroups/useAccessGroups";
 import { useUISettings } from "@/app/(dashboard)/hooks/uiSettings/useUISettings";
 
 const mockUseAllProxyModels = vi.mocked(useAllProxyModels);
@@ -242,9 +173,6 @@ const mockUseKeys = vi.mocked(useKeys);
 const mockUseTeam = vi.mocked(useTeam);
 const mockUseOrganization = vi.mocked(useOrganization);
 const mockUseCurrentUser = vi.mocked(useCurrentUser);
-const mockUseMCPServers = vi.mocked(useMCPServers);
-const mockUseMCPToolsets = vi.mocked(useMCPToolsets);
-const mockUseAccessGroups = vi.mocked(useAccessGroups);
 const mockUseUISettings = vi.mocked(useUISettings);
 
 const createMockTeamData = (overrides = {}) => ({
@@ -278,9 +206,6 @@ const createMockTeamData = (overrides = {}) => ({
     litellm_model_table: null,
     created_at: "2024-01-01T00:00:00Z",
     team_member_budget_table: null,
-    guardrails: [],
-    policies: [],
-    object_permission: null,
     ...overrides,
   },
   keys: [],
@@ -304,20 +229,6 @@ const seedDefaultMocks = () => {
     data: { models: [] },
     isLoading: false,
   } as unknown as ReturnType<typeof useCurrentUser>);
-  mockUseMCPServers.mockReturnValue({ data: [], isLoading: false, isError: false } as unknown as ReturnType<
-    typeof useMCPServers
-  >);
-  mockUseMCPToolsets.mockReturnValue({ data: [], isLoading: false, isError: false } as unknown as ReturnType<
-    typeof useMCPToolsets
-  >);
-  mockUseAccessGroups.mockReturnValue({
-    data: [
-      { access_group_id: "ag-1", access_group_name: "Group 1", access_mcp_server_ids: [] },
-      { access_group_id: "ag-2", access_group_name: "Group 2", access_mcp_server_ids: [] },
-    ],
-    isLoading: false,
-    isError: false,
-  } as unknown as ReturnType<typeof useAccessGroups>);
   mockUseUISettings.mockReturnValue({
     data: { values: {} },
     isLoading: false,
@@ -333,10 +244,6 @@ const seedDefaultMocks = () => {
     isLoading: false,
   } as unknown as ReturnType<typeof useTeamMetadataSchema>);
 
-  can.mockReturnValue(true);
-  vi.mocked(networking.getGuardrailsList).mockResolvedValue({ guardrails: [] });
-  vi.mocked(networking.getPoliciesList).mockResolvedValue({ policies: [] });
-  vi.mocked(networking.fetchMCPAccessGroups).mockResolvedValue([]);
   vi.mocked(networking.getTeamPermissionsCall).mockResolvedValue({
     all_available_permissions: [],
     team_member_permissions: [],

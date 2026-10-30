@@ -25,26 +25,18 @@ import {
 } from "@/components/shared/Sidebar";
 import {
   Activity,
-  Aperture,
   BarChart3,
   Bell,
-  Blocks,
-  Bot,
-  BookOpen,
   Building2,
-  Boxes,
   ChevronRight,
   Code2,
   Database,
-  ExternalLink,
   FileText,
   FlaskConical,
   Folder,
   Globe,
-  HeartPulse,
   House,
   KeyRound,
-  LayoutGrid,
   Network,
   Palette,
   PanelLeftClose,
@@ -52,20 +44,13 @@ import {
   PiggyBank,
   PlayCircle,
   Route,
-  ScrollText,
-  Search,
-  Server,
   Settings as SettingsIcon,
-  Shield,
-  ShieldCheck,
   Tags,
   Terminal,
   Trophy,
   User,
   Users,
   Wallet,
-  Wrench,
-  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -101,10 +86,6 @@ interface SidebarProps {
   onToggleCollapsed?: () => void;
   enabledPagesInternalUsers?: string[] | null;
   enableProjectsUI?: boolean;
-  disableAgentsForInternalUsers?: boolean;
-  allowAgentsForTeamAdmins?: boolean;
-  disableVectorStoresForInternalUsers?: boolean;
-  allowVectorStoresForTeamAdmins?: boolean;
 }
 
 export interface MenuItem {
@@ -115,7 +96,6 @@ export interface MenuItem {
   roles?: string[];
   children?: MenuItem[];
   icon?: React.ReactNode;
-  external_url?: string;
 }
 
 export interface MenuGroup {
@@ -131,10 +111,6 @@ export interface MenuVisibilityContext {
   isTeamAdmin: boolean;
   enabledPagesInternalUsers?: string[] | null;
   enableProjectsUI?: boolean;
-  disableAgentsForInternalUsers?: boolean;
-  allowAgentsForTeamAdmins?: boolean;
-  disableVectorStoresForInternalUsers?: boolean;
-  allowVectorStoresForTeamAdmins?: boolean;
 }
 
 const adminPageVisibility = (item: MenuItem, context: MenuVisibilityContext, isAdmin: boolean): boolean | null => {
@@ -157,20 +133,6 @@ const projectPageIsVisible = (item: MenuItem, context: MenuVisibilityContext): b
   });
 };
 
-const pageIsDisabledForInternalUsers = (
-  item: MenuItem,
-  pageKey: "agents" | "vector-stores",
-  isAdmin: boolean,
-  context: MenuVisibilityContext,
-): boolean => {
-  const isDisabled =
-    pageKey === "agents" ? context.disableAgentsForInternalUsers : context.disableVectorStoresForInternalUsers;
-  const allowedForTeamAdmins =
-    pageKey === "agents" ? context.allowAgentsForTeamAdmins : context.allowVectorStoresForTeamAdmins;
-  if (item.key !== pageKey || isAdmin || !isDisabled) return false;
-  return !(allowedForTeamAdmins && context.isTeamAdmin);
-};
-
 const pageIsEnabledForInternalUser = (item: MenuItem, context: MenuVisibilityContext): boolean => {
   const enabledPages = context.enabledPagesInternalUsers;
   if (enabledPages == null) return true;
@@ -184,8 +146,6 @@ const menuItemIsVisible = (item: MenuItem, context: MenuVisibilityContext, isAdm
   const adminVisibility = adminPageVisibility(item, context, isAdmin);
   if (adminVisibility !== null) return adminVisibility;
   if (!projectPageIsVisible(item, context)) return false;
-  if (pageIsDisabledForInternalUsers(item, "agents", isAdmin, context)) return false;
-  if (pageIsDisabledForInternalUsers(item, "vector-stores", isAdmin, context)) return false;
   if (item.roles && !item.roles.includes(context.userRole)) return false;
   if (!isAdmin && context.enabledPagesInternalUsers != null) return pageIsEnabledForInternalUser(item, context);
   return true;
@@ -229,62 +189,6 @@ const menuGroups: MenuGroup[] = [
         icon: <Network {...ICON} />,
         roles: rolesAllowedToViewWriteScopedPages,
       },
-      {
-        key: "agentic",
-        page: "agentic",
-        label: "Agentic",
-        icon: <Bot {...ICON} />,
-        children: [
-          {
-            key: "agents",
-            page: "agents",
-            label: "Agents",
-            icon: <Bot {...ICON} />,
-            roles: rolesAllowedToViewWriteScopedPages,
-          },
-          {
-            key: "workflows",
-            page: "workflows",
-            label: "Workflow Runs",
-            icon: <Workflow {...ICON} />,
-            roles: rolesWithCapability("viewWorkflowRuns"),
-          },
-          {
-            key: "memory",
-            page: "memory",
-            label: "Memory",
-            icon: <Database {...ICON} />,
-            roles: rolesWithCapability("viewMemory"),
-          },
-        ],
-      },
-      { key: "mcp-servers", page: "mcp-servers", label: "MCP Servers", icon: <Server {...ICON} /> },
-      { key: "skills", page: "skills", label: "Skills", icon: <Blocks {...ICON} />, roles: all_admin_roles },
-      { key: "guardrails", page: "guardrails", label: "Guardrails", icon: <Shield {...ICON} /> },
-      {
-        key: "policies",
-        page: "policies",
-        label: "Policies",
-        icon: <ScrollText {...ICON} />,
-        roles: rolesWithCapability("viewPolicies"),
-      },
-      {
-        key: "tools",
-        page: "tools",
-        label: "Tools",
-        icon: <Wrench {...ICON} />,
-        children: [
-          { key: "search-tools", page: "search-tools", label: "Search Tools", icon: <Search {...ICON} /> },
-          { key: "vector-stores", page: "vector-stores", label: "Vector Stores", icon: <Database {...ICON} /> },
-          {
-            key: "tool-policies",
-            page: "tool-policies",
-            label: "Tool Policies",
-            icon: <ShieldCheck {...ICON} />,
-            roles: rolesWithCapability("viewToolPolicies"),
-          },
-        ],
-      },
     ],
   },
   {
@@ -324,23 +228,6 @@ const menuGroups: MenuGroup[] = [
         label: "Cost Optimization",
       },
       { key: "logs", page: "logs", label: "Logs", icon: <Activity {...ICON} /> },
-      {
-        key: "lens",
-        page: "lens",
-        label: (
-          <span className="flex items-center gap-2">
-            Lens <BetaBadge />
-          </span>
-        ),
-        icon: <Aperture {...ICON} />,
-      },
-      {
-        key: "guardrails-monitor",
-        page: "guardrails-monitor",
-        label: "Guardrails Monitor",
-        icon: <HeartPulse {...ICON} />,
-        roles: rolesWithCapability("viewGuardrailUsage"),
-      },
     ],
   },
   {
@@ -366,13 +253,6 @@ const menuGroups: MenuGroup[] = [
         icon: <Building2 {...ICON} />,
         roles: all_admin_roles,
       },
-      {
-        key: "access-groups",
-        page: "access-groups",
-        label: "Access Groups",
-        icon: <Boxes {...ICON} />,
-        roles: all_admin_roles,
-      },
       { key: "budgets", page: "budgets", label: "Budgets", icon: <Wallet {...ICON} />, roles: all_admin_roles },
     ],
   },
@@ -380,14 +260,6 @@ const menuGroups: MenuGroup[] = [
     groupLabel: "DEVELOPER TOOLS",
     items: [
       { key: "api_ref", page: "api_ref", route: "api-reference", label: "API Reference", icon: <Code2 {...ICON} /> },
-      { key: "model-hub-table", page: "model-hub-table", label: "AI Hub", icon: <LayoutGrid {...ICON} /> },
-      {
-        key: "learning-resources",
-        page: "learning-resources",
-        label: "Learning Resources",
-        icon: <BookOpen {...ICON} />,
-        external_url: "https://models.litellm.ai/cookbook",
-      },
       {
         key: "caching",
         page: "caching",
@@ -421,14 +293,6 @@ const menuGroups: MenuGroup[] = [
             label: "Tag Management",
             icon: <Tags {...ICON} />,
             roles: all_admin_roles,
-          },
-          {
-            key: "4",
-            page: "usage",
-            route: "old-usage",
-            label: "Old Usage",
-            icon: <BarChart3 {...ICON} />,
-            roles: rolesWithCapability("viewGlobalSpend"),
           },
         ],
       },
@@ -550,10 +414,6 @@ const Sidebar_: React.FC<SidebarProps> = ({
   onToggleCollapsed,
   enabledPagesInternalUsers,
   enableProjectsUI,
-  disableAgentsForInternalUsers,
-  allowAgentsForTeamAdmins,
-  disableVectorStoresForInternalUsers,
-  allowVectorStoresForTeamAdmins,
 }) => {
   const { userId, accessToken, userRole, isViewOnly } = useAuthorized();
   const term = useTerminology();
@@ -597,24 +457,9 @@ const Sidebar_: React.FC<SidebarProps> = ({
       isTeamAdmin,
       enabledPagesInternalUsers,
       enableProjectsUI,
-      disableAgentsForInternalUsers,
-      allowAgentsForTeamAdmins,
-      disableVectorStoresForInternalUsers,
-      allowVectorStoresForTeamAdmins,
     };
     return visibleMenuGroups(menuGroups, context);
-  }, [
-    allowAgentsForTeamAdmins,
-    allowVectorStoresForTeamAdmins,
-    disableAgentsForInternalUsers,
-    disableVectorStoresForInternalUsers,
-    enableProjectsUI,
-    enabledPagesInternalUsers,
-    isOrgAdmin,
-    isTeamAdmin,
-    isViewOnly,
-    userRole,
-  ]);
+  }, [enableProjectsUI, enabledPagesInternalUsers, isOrgAdmin, isTeamAdmin, isViewOnly, userRole]);
 
   const toggleGroup = (key: string) => {
     if (collapsed) {
@@ -634,24 +479,6 @@ const Sidebar_: React.FC<SidebarProps> = ({
     const active = selectedKey === item.key;
     const size = isChild ? "sub" : "default";
     const label = <span className="flex-1 truncate group-data-[collapsed=true]/sidebar:hidden">{labelOf(item)}</span>;
-
-    if (item.external_url) {
-      return (
-        <a
-          key={item.key}
-          href={item.external_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={collapsed ? term(labelText(item)) : undefined}
-          data-active={active || undefined}
-          className={cn(sidebarMenuButtonVariants({ isActive: active, size }))}
-        >
-          {item.icon}
-          {label}
-          <ExternalLink className="size-3.5 shrink-0 opacity-70 group-data-[collapsed=true]/sidebar:hidden" />
-        </a>
-      );
-    }
 
     return (
       <Link

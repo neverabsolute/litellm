@@ -1,14 +1,10 @@
-import { createRef } from "react";
 import { createPortal } from "react-dom";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { EndpointType } from "@/components/chat_ui/mode_endpoint_mapping";
-import type { MCPToolArgumentsFormRef } from "@/components/mcp_tools/MCPToolArgumentsForm";
-import { Composer, type ChecklistProps, type DraftState } from "./Composer";
+import { Composer, type DraftState } from "./Composer";
 import { capabilitiesFor } from "./endpointCapabilities";
-
-const checklist: ChecklistProps = { groups: [], value: [], onValueChange: vi.fn(), isLoading: false };
 
 const draft: DraftState = {
   text: "",
@@ -28,11 +24,6 @@ const renderComposer = () =>
       endpoint={EndpointType.CHAT}
       targetRow={<input aria-label="Model search" />}
       draft={draft}
-      directTool={null}
-      toolArgsForm={createRef<MCPToolArgumentsFormRef>()}
-      mcpControl={null}
-      vectorStores={checklist}
-      guardrails={checklist}
       codeInterpreter={{ enabled: false, onToggle: vi.fn() }}
       settingsControl={createPortal(<input aria-label="Request tags" />, document.body)}
       sendDisabled

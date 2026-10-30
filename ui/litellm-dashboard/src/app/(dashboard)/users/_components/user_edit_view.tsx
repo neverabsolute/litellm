@@ -6,9 +6,6 @@ import { ModelMaxBudget, ModelMaxBudgetField } from "@/components/key_team_helpe
 import { modelMaxBudgetUpdate } from "@/components/key_team_helpers/modelMaxBudgetPayload";
 import { useSeededState } from "@/components/key_team_helpers/useSeededState";
 import { getModelDisplayName } from "@/components/key_team_helpers/fetch_available_models_team_key";
-import MCPServerSelector from "@/components/mcp_server_management/MCPServerSelector";
-import MCPToolPermissions from "@/components/mcp_server_management/MCPToolPermissions";
-import type { ObjectPermission } from "@/components/object_permission_types";
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import { FieldGroup } from "@/components/ui/field";
 import { FormField } from "@/components/shared/form/FormField";
@@ -41,15 +38,8 @@ interface UserEditViewProps {
   userModels: string[];
   possibleUIRoles: Record<string, Record<string, string>> | null;
   isBulkEdit?: boolean;
-  objectPermission?: ObjectPermission | null;
   premiumUser?: boolean;
 }
-
-const MCP_SELECTION_SHAPE = z.object({
-  servers: z.array(z.string()),
-  accessGroups: z.array(z.string()),
-  toolsets: z.array(z.string()),
-});
 
 // The proxy stores unset user fields as null rather than leaving them out, and
 // antd forwarded whatever it was handed, so nullish is what keeps a loaded user
@@ -64,8 +54,6 @@ const userEditShape = {
   metadata: z.string().nullish(),
   tpm_limit: rateLimitField,
   rpm_limit: rateLimitField,
-  mcp_servers_and_groups: MCP_SELECTION_SHAPE.optional(),
-  mcp_tool_permissions: z.record(z.string(), z.array(z.string())).optional(),
 };
 
 const userEditSchema = (unlimitedBudget: boolean) =>
@@ -80,24 +68,10 @@ const userEditSchema = (unlimitedBudget: boolean) =>
 type UserEditFormInput = z.input<ReturnType<typeof userEditSchema>>;
 type UserEditFormValues = z.output<ReturnType<typeof userEditSchema>>;
 
-const buildMcpFieldValues = (objectPermission: ObjectPermission | null | undefined) => ({
-  mcp_servers_and_groups: {
-    servers: objectPermission?.mcp_servers ?? [],
-    accessGroups: objectPermission?.mcp_access_groups ?? [],
-    toolsets: objectPermission?.mcp_toolsets ?? [],
-  },
-  mcp_tool_permissions: objectPermission?.mcp_tool_permissions ?? {},
-});
-
-// antd only reported the fields that were actually mounted, so the identity and
-// MCP keys have to stay out of the store entirely when their controls are not
-// rendered, or the request grows keys the previous form never sent.
-const toFormValues = (
-  userData: any,
-  objectPermission: ObjectPermission | null | undefined,
-  isBulkEdit: boolean,
-  canEditMcpPermissions: boolean,
-): UserEditFormInput => {
+// antd only reported the fields that were actually mounted, so the identity keys
+// have to stay out of the store entirely when their controls are not rendered, or
+// the request grows keys the previous form never sent.
+const toFormValues = (userData: any, isBulkEdit: boolean): UserEditFormInput => {
   const maxBudget = userData.user_info?.max_budget;
   const isUnlimited = maxBudget === null || maxBudget === undefined;
   return {
@@ -115,7 +89,6 @@ const toFormValues = (
     max_budget: isUnlimited ? "" : maxBudget,
     budget_duration: userData.user_info?.budget_duration,
     metadata: userData.user_info?.metadata ? JSON.stringify(userData.user_info.metadata, null, 2) : undefined,
-    ...(canEditMcpPermissions ? buildMcpFieldValues(objectPermission) : {}),
   };
 };
 
@@ -157,10 +130,8 @@ export function UserEditView({
   userModels,
   possibleUIRoles,
   isBulkEdit = false,
-  objectPermission,
   premiumUser = false,
 }: UserEditViewProps) {
-  const canEditMcpPermissions = !isBulkEdit && all_admin_roles.includes(userRole || "");
   const [unlimitedBudget, setUnlimitedBudget] = useState(false);
   const [modelMaxBudget, setModelMaxBudget] = useSeededState<ModelMaxBudget>(
     userData.user_id,
@@ -168,14 +139,14 @@ export function UserEditView({
   );
   const schema = useMemo(() => userEditSchema(unlimitedBudget), [unlimitedBudget]);
   const form = useZodForm(schema, {
-    defaultValues: toFormValues(userData, objectPermission, isBulkEdit, canEditMcpPermissions),
+    defaultValues: toFormValues(userData, isBulkEdit),
   });
 
   React.useEffect(() => {
     const maxBudget = userData.user_info?.max_budget;
     setUnlimitedBudget(maxBudget === null || maxBudget === undefined);
-    form.reset(toFormValues(userData, objectPermission, isBulkEdit, canEditMcpPermissions));
-  }, [userData, objectPermission, canEditMcpPermissions, isBulkEdit, form]);
+    form.reset(toFormValues(userData, isBulkEdit));
+  }, [userData, isBulkEdit, form]);
 
   const handleUnlimitedBudgetChange = (checked: boolean) => {
     setUnlimitedBudget(checked);
@@ -394,38 +365,6 @@ export function UserEditView({
               <Textarea {...control} ref={ref} value={value ?? ""} rows={4} placeholder="Enter metadata as JSON" />
             )}
           </FormField>
-
-          {canEditMcpPermissions && (
-            <>
-              <FormField
-                control={form.control}
-                name="mcp_servers_and_groups"
-                label={labelWithHint(
-                  "MCP Servers / Access Groups",
-                  "Caps which MCP servers, access groups, and tools this user may reach. Every key the user holds is limited to this set.",
-                )}
-              >
-                {({ value, onChange }) => (
-                  <MCPServerSelector
-                    onChange={onChange}
-                    value={value}
-                    accessToken={accessToken || ""}
-                    userId={isBulkEdit ? null : userData.user_id}
-                    placeholder="Select MCP servers or access groups (optional)"
-                  />
-                )}
-              </FormField>
-
-              <MCPToolPermissions
-                accessToken={accessToken || ""}
-                selectedServers={form.watch("mcp_servers_and_groups")?.servers || []}
-                selectedAccessGroups={form.watch("mcp_servers_and_groups")?.accessGroups || []}
-                selectedToolsets={form.watch("mcp_servers_and_groups")?.toolsets || []}
-                toolPermissions={form.watch("mcp_tool_permissions") || {}}
-                onChange={(toolPerms) => form.setValue("mcp_tool_permissions", toolPerms)}
-              />
-            </>
-          )}
         </FieldGroup>
 
         <div className="mt-6 flex justify-end gap-2">

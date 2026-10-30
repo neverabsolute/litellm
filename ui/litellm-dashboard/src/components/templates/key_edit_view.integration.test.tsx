@@ -4,16 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseSelectOption, renderWithProviders, testQueryClient } from "../../../tests/test-utils";
 import { KeyResponse } from "../key_team_helpers/key_list";
 import { MODEL_MAX_BUDGET_PREMIUM_HINT } from "../key_team_helpers/ModelMaxBudgetEditor";
-import {
-  fetchMCPServers,
-  getPassThroughEndpointsCall,
-  getPoliciesList,
-  getUiSettings,
-  getPromptsList,
-  listMCPTools,
-  modelAvailableCall,
-  vectorStoreListCall,
-} from "../networking";
+import { getPassThroughEndpointsCall, getUiSettings, getPromptsList, modelAvailableCall } from "../networking";
 import { KeyEditView } from "./key_edit_view";
 
 const can = vi.fn();
@@ -36,34 +27,9 @@ vi.mock("../networking", async () => {
       tag1: { name: "tag1", description: "Test tag 1" },
       tag2: { name: "tag2", description: "Test tag 2" },
     }),
-    getGuardrailsList: vi.fn().mockResolvedValue({
-      guardrails: [{ guardrail_name: "guardrail-1" }],
-    }),
-    getPoliciesList: vi.fn().mockResolvedValue({
-      policies: [{ policy_name: "policy-1" }],
-    }),
     getPassThroughEndpointsCall: vi.fn().mockResolvedValue({
       endpoints: [],
     }),
-    vectorStoreListCall: vi.fn().mockResolvedValue({
-      data: [],
-    }),
-    agentListCall: vi.fn().mockResolvedValue({
-      data: [],
-    }),
-    fetchMCPServers: vi.fn().mockResolvedValue([]),
-    fetchMCPAccessGroups: vi.fn().mockResolvedValue([]),
-    listMCPTools: vi.fn().mockResolvedValue({
-      tools: [],
-      error: null,
-      message: null,
-      stack_trace: null,
-    }),
-    getAgentsList: vi.fn().mockResolvedValue({
-      agents: [],
-    }),
-    getAgentAccessGroups: vi.fn().mockResolvedValue([]),
-    getClaudeCodePluginsList: vi.fn().mockResolvedValue({ plugins: [], count: 0 }),
   };
 });
 
@@ -110,71 +76,6 @@ vi.mock("@/app/(dashboard)/hooks/organizations/useOrganizations", () => ({
     ],
     isLoading: false,
   }),
-}));
-
-vi.mock("@/app/(dashboard)/hooks/accessGroups/useAccessGroups", () => ({
-  useAccessGroups: vi.fn().mockReturnValue({
-    data: [
-      { access_group_id: "ag-1", access_group_name: "Group 1" },
-      { access_group_id: "ag-2", access_group_name: "Group 2" },
-    ],
-    isLoading: false,
-    isError: false,
-  }),
-}));
-
-vi.mock("../mcp_server_management/MCPServerSelector", () => ({
-  default: ({
-    value,
-    onChange,
-    teamId,
-    userId,
-  }: {
-    value?: { servers?: string[]; accessGroups?: string[]; toolsets?: string[] };
-    onChange?: (v: { servers: string[]; accessGroups: string[]; toolsets: string[] }) => void;
-    teamId?: string | null;
-    userId?: string | null;
-  }) => (
-    <button
-      type="button"
-      data-testid="mcp-server-selector"
-      data-team-id={teamId ?? ""}
-      data-user-id={userId ?? ""}
-      onClick={() => onChange?.({ servers: ["mcp-1"], accessGroups: [], toolsets: value?.toolsets ?? [] })}
-    >
-      pick mcp server
-    </button>
-  ),
-}));
-
-vi.mock("../agent_management/AgentSelector", () => ({
-  default: ({ onChange }: { onChange?: (v: { agents: string[]; accessGroups: string[] }) => void }) => (
-    <button
-      type="button"
-      data-testid="agent-selector"
-      onClick={() => onChange?.({ agents: ["agent-1"], accessGroups: [] })}
-    >
-      pick agent
-    </button>
-  ),
-}));
-
-vi.mock("../skills/SkillSelector", () => ({
-  default: ({ onChange }: { onChange: (selected: string[]) => void }) => (
-    <button type="button" data-testid="skill-selector" onClick={() => onChange(["private-skill"])}>
-      pick skill
-    </button>
-  ),
-}));
-
-vi.mock("../common_components/AccessGroupSelector", () => ({
-  default: ({ value = [], onChange }: { value?: string[]; onChange?: (v: string[]) => void }) => (
-    <input
-      data-testid="access-group-selector"
-      value={Array.isArray(value) ? value.join(",") : ""}
-      onChange={(e) => onChange?.(e.target.value ? e.target.value.split(",").map((s) => s.trim()) : [])}
-    />
-  ),
 }));
 
 const visibleOptions = (): HTMLElement[] => screen.queryAllByRole("option");
@@ -456,7 +357,7 @@ describe("KeyEditView", () => {
     });
   });
 
-  describe("policy and prompt fields", () => {
+  describe("prompt field", () => {
     const renderAs = (userRole: string) =>
       renderWithProviders(
         <KeyEditView
@@ -512,14 +413,13 @@ describe("KeyEditView", () => {
       expect(await screen.findByLabelText("allowed-prompt")).toBeInTheDocument();
     });
 
-    it("should render both fields and load prompts for an admin", async () => {
+    it("should render the field and load prompts for an admin", async () => {
       renderAs("Admin");
 
       await waitFor(() => {
         expect(getPromptsList).toHaveBeenCalledWith("test-token");
       });
       expect(screen.getByText("Prompts", { selector: "label" })).toBeInTheDocument();
-      expect(screen.getByText("Policies")).toBeInTheDocument();
     });
 
     it("lists a prompt existing in several environments once in the dropdown", async () => {
@@ -538,7 +438,7 @@ describe("KeyEditView", () => {
       expect(await screen.findAllByRole("option", { name: "envgreet" })).toHaveLength(1);
     });
 
-    it("should omit both fields and fire neither admin-only request for an internal user", async () => {
+    it("should omit the field and skip the admin-only request for an internal user", async () => {
       renderAs("Internal User");
 
       await waitFor(() => {
@@ -546,9 +446,7 @@ describe("KeyEditView", () => {
       });
 
       expect(getPromptsList).not.toHaveBeenCalled();
-      expect(getPoliciesList).not.toHaveBeenCalled();
       expect(screen.queryByText("Prompts", { selector: "label" })).not.toBeInTheDocument();
-      expect(screen.queryByText("Policies")).not.toBeInTheDocument();
     });
   });
 
@@ -784,24 +682,6 @@ describe("KeyEditView", () => {
     });
   });
 
-  it("should disable guardrails selector when user is not premium and has no write access role", async () => {
-    renderWithProviders(
-      <KeyEditView
-        keyData={MOCK_KEY_DATA}
-        onCancel={() => {}}
-        onSubmit={async () => {}}
-        accessToken={"test-token"}
-        userID={""}
-        userRole={""}
-        premiumUser={false}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Guardrails")).toBeInTheDocument();
-    });
-  });
-
   it("should parse comma-separated allowed routes on submit", async () => {
     const onSubmitMock = vi.fn().mockResolvedValue(undefined);
     renderWithProviders(
@@ -966,77 +846,6 @@ describe("KeyEditView", () => {
     });
   });
 
-  it("should pass access_group_ids to onSubmit when saving key with access groups", async () => {
-    const onSubmitMock = vi.fn().mockResolvedValue(undefined);
-    const keyDataWithAccessGroups = {
-      ...MOCK_KEY_DATA,
-      access_group_ids: ["ag-1"],
-    };
-
-    renderWithProviders(
-      <KeyEditView
-        keyData={keyDataWithAccessGroups}
-        onCancel={() => {}}
-        onSubmit={onSubmitMock}
-        accessToken="test-token"
-        userID="test-user"
-        userRole="admin"
-        premiumUser={false}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("access-group-selector")).toBeInTheDocument();
-    });
-
-    const accessGroupInput = screen.getByTestId("access-group-selector");
-    await userEvent.clear(accessGroupInput);
-    await userEvent.type(accessGroupInput, "ag-1,ag-2");
-
-    const submitButton = screen.getByRole("button", { name: /save changes/i });
-    await userEvent.click(submitButton);
-
-    await waitFor(() => {
-      expect(onSubmitMock).toHaveBeenCalled();
-      const callArgs = onSubmitMock.mock.calls[0][0];
-      expect(callArgs.access_group_ids).toEqual(["ag-1", "ag-2"]);
-    });
-  });
-
-  it("should keep mcp_toolsets when saving an edit that does not touch the MCP selector", async () => {
-    const onSubmitMock = vi.fn().mockResolvedValue(undefined);
-    const keyDataWithToolset = {
-      ...MOCK_KEY_DATA,
-      object_permission: {
-        ...MOCK_KEY_DATA.object_permission!,
-        mcp_toolsets: ["ts-1"],
-      },
-    };
-
-    renderWithProviders(
-      <KeyEditView
-        keyData={keyDataWithToolset}
-        onCancel={() => {}}
-        onSubmit={onSubmitMock}
-        accessToken="test-token"
-        userID="test-user"
-        userRole="admin"
-        premiumUser={false}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Save Changes")).toBeInTheDocument();
-    });
-
-    await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => {
-      expect(onSubmitMock).toHaveBeenCalled();
-    });
-    expect(onSubmitMock.mock.calls[0][0].mcp_servers_and_groups.toolsets).toEqual(["ts-1"]);
-  });
-
   it("should submit budget_limits: [] when the last budget window is deleted", async () => {
     const onSubmitMock = vi.fn().mockResolvedValue(undefined);
     const keyDataWithWindow = {
@@ -1092,7 +901,6 @@ describe("KeyEditView", () => {
           rpm_limit: 75,
           models: ["gpt-4"],
           metadata: { note: "new" },
-          object_permission: { ...MOCK_KEY_DATA.object_permission, vector_stores: ["store-new"] },
         }}
       />,
     );
@@ -1105,89 +913,11 @@ describe("KeyEditView", () => {
       rpm_limit: 75,
       models: ["gpt-4"],
       metadata: JSON.stringify({ note: "new" }, null, 2),
-      vector_stores: ["store-new"],
     };
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining(expected), expect.any(Array)));
     const [, dirtyFields] = onSubmit.mock.calls[0];
     expect(dirtyFields).toContain("max_budget");
     expect(dirtyFields).not.toContain("rpm_limit");
-  });
-
-  const mcpServer = (server_id: string) => ({
-    server_id,
-    server_name: server_id,
-    url: `https://${server_id}.example`,
-    transport: "http",
-    auth_type: "none",
-    created_at: "",
-    created_by: "",
-    updated_at: "",
-    updated_by: "",
-  });
-  const mcpTools = (names: string[]) => ({
-    tools: names.map((name) => ({ name })),
-    error: null,
-    message: null,
-    stack_trace: null,
-  });
-
-  it("should not mark MCP tool defaults as an edit when saving only a budget", async () => {
-    vi.mocked(fetchMCPServers).mockResolvedValue([mcpServer("srv-a")]);
-    vi.mocked(listMCPTools).mockResolvedValue(mcpTools(["read_page", "delete_page"]));
-    testQueryClient.clear();
-    const onSubmit = vi.fn().mockResolvedValue(undefined);
-    renderWithProviders(
-      <KeyEditView
-        keyData={{ ...MOCK_KEY_DATA, object_permission: { mcp_servers: ["srv-a"] } }}
-        onCancel={vi.fn()}
-        onSubmit={onSubmit}
-        accessToken="test-token"
-        userID="test-user"
-        userRole="admin"
-      />,
-    );
-    await waitFor(() => expect(listMCPTools).toHaveBeenCalledWith("test-token", "srv-a"));
-
-    fireEvent.change(await screen.findByRole("spinbutton", { name: "Max Budget (USD)" }), {
-      target: { value: "12.5" },
-    });
-    await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
-    const [values, dirtyFields] = onSubmit.mock.calls[0];
-    expect(values.mcp_tool_permissions).toHaveProperty("srv-a");
-    expect(dirtyFields).toEqual(["max_budget"]);
-    vi.mocked(fetchMCPServers).mockResolvedValue([]);
-    vi.mocked(listMCPTools).mockResolvedValue(mcpTools([]));
-  });
-
-  it("should keep default tool limits for a newly added MCP server when the same key refreshes", async () => {
-    vi.mocked(fetchMCPServers).mockResolvedValue([mcpServer("mcp-1")]);
-    vi.mocked(listMCPTools).mockResolvedValue(mcpTools(["read-page", "delete-page"]));
-    testQueryClient.clear();
-    const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const props = {
-      keyData: MOCK_KEY_DATA,
-      onCancel: vi.fn(),
-      onSubmit,
-      accessToken: "test-token",
-      userID: "test-user",
-      userRole: "admin",
-    };
-    const view = renderWithProviders(<KeyEditView {...props} />);
-
-    await userEvent.click(await screen.findByTestId("mcp-server-selector"));
-    await waitFor(() => expect(listMCPTools).toHaveBeenCalledWith("test-token", "mcp-1"));
-    view.rerender(<KeyEditView {...props} keyData={{ ...MOCK_KEY_DATA, rpm_limit: 75 }} />);
-    await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
-    expect(onSubmit.mock.calls[0][0]).toMatchObject({
-      rpm_limit: 75,
-      mcp_tool_permissions: { "mcp-1": ["read-page"] },
-    });
-    vi.mocked(fetchMCPServers).mockResolvedValue([]);
-    vi.mocked(listMCPTools).mockResolvedValue(mcpTools([]));
   });
 
   it("should start a fresh budget draft when switching between keys identified only by token_id", async () => {
@@ -1892,141 +1622,6 @@ describe("KeyEditView", () => {
       });
     });
 
-    it("scopes the MCP server selector to the key's team and owner", async () => {
-      renderWithProviders(
-        <KeyEditView
-          keyData={{ ...MOCK_KEY_DATA, team_id: "group-maple", user_id: "owner-7" }}
-          onCancel={() => {}}
-          onSubmit={vi.fn()}
-          accessToken=""
-          userID=""
-          userRole="Admin"
-          premiumUser={false}
-        />,
-      );
-
-      const selector = await screen.findByTestId("mcp-server-selector");
-      expect(selector).toHaveAttribute("data-team-id", "group-maple");
-      expect(selector).toHaveAttribute("data-user-id", "owner-7");
-    });
-
-    it("keeps a saved MCP grant editable when it falls outside the key's team scope", async () => {
-      const server = (server_id: string, server_name: string) => ({
-        server_id,
-        server_name,
-        url: `https://${server_id}.example`,
-        transport: "http",
-        auth_type: "none",
-        created_at: "",
-        created_by: "",
-        updated_at: "",
-        updated_by: "",
-      });
-      vi.mocked(fetchMCPServers).mockImplementation(async (_token, teamId) =>
-        teamId ? [server("srv-a", "team-wiki")] : [server("srv-a", "team-wiki"), server("srv-b", "direct-grant")],
-      );
-      testQueryClient.clear();
-      renderWithProviders(
-        <KeyEditView
-          keyData={{
-            ...MOCK_KEY_DATA,
-            team_id: "group-maple",
-            object_permission: { mcp_servers: ["srv-b"], mcp_tool_permissions: { "srv-b": ["read"] } },
-          }}
-          onCancel={() => {}}
-          onSubmit={vi.fn()}
-          accessToken=""
-          userID=""
-          userRole="Admin"
-          premiumUser={false}
-        />,
-      );
-
-      expect(await screen.findByText("direct-grant")).toBeInTheDocument();
-      expect(screen.getByTestId("mcp-server-selector")).toHaveAttribute("data-team-id", "group-maple");
-      vi.mocked(fetchMCPServers).mockResolvedValue([]);
-    });
-
-    it("rescopes the MCP server selector and drops stale MCP grants when the team is changed before saving", async () => {
-      const onSubmit = vi.fn().mockResolvedValue(undefined);
-      renderWithProviders(
-        <KeyEditView
-          keyData={{
-            ...MOCK_KEY_DATA,
-            organization_id: "org-1",
-            team_id: "group-maple",
-            object_permission: { mcp_servers: ["srv-a"], mcp_tool_permissions: { "srv-a": ["read"] } },
-          }}
-          onCancel={() => {}}
-          onSubmit={onSubmit}
-          accessToken=""
-          userID=""
-          userRole="Admin"
-          premiumUser={false}
-        />,
-      );
-
-      const selector = await screen.findByTestId("mcp-server-selector");
-      expect(selector).toHaveAttribute("data-team-id", "group-maple");
-      await waitFor(() => {
-        expect(screen.getAllByRole("button", { name: "Clear" })).toHaveLength(2);
-      });
-      await userEvent.click(screen.getAllByRole("button", { name: "Clear" })[1]);
-
-      await waitFor(() => {
-        expect(screen.getByTestId("mcp-server-selector")).toHaveAttribute("data-team-id", "");
-      });
-      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-      await waitFor(() => {
-        expect(onSubmit).toHaveBeenCalled();
-      });
-      expect(onSubmit.mock.calls[0][0]).toMatchObject({
-        mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: [] },
-        mcp_tool_permissions: {},
-      });
-    });
-
-    it("keeps the team change's cleared MCP grants when the same key refreshes before saving", async () => {
-      const onSubmit = vi.fn().mockResolvedValue(undefined);
-      const keyData = {
-        ...MOCK_KEY_DATA,
-        organization_id: "org-1",
-        team_id: "group-maple",
-        object_permission: { mcp_servers: ["srv-a"], mcp_tool_permissions: { "srv-a": ["read"] } },
-      };
-      const renderEditor = (data: KeyResponse) => (
-        <KeyEditView
-          keyData={data}
-          onCancel={() => {}}
-          onSubmit={onSubmit}
-          accessToken=""
-          userID=""
-          userRole="Admin"
-          premiumUser={false}
-        />
-      );
-      const view = renderWithProviders(renderEditor(keyData));
-
-      await waitFor(() => {
-        expect(screen.getAllByRole("button", { name: "Clear" })).toHaveLength(2);
-      });
-      await userEvent.click(screen.getAllByRole("button", { name: "Clear" })[1]);
-      await waitFor(() => {
-        expect(screen.getByTestId("mcp-server-selector")).toHaveAttribute("data-team-id", "");
-      });
-      view.rerender(renderEditor({ ...keyData, rpm_limit: 75 }));
-      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-      await waitFor(() => {
-        expect(onSubmit).toHaveBeenCalled();
-      });
-      expect(onSubmit.mock.calls[0][0]).toMatchObject({
-        mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: [] },
-        mcp_tool_permissions: {},
-      });
-    });
-
     it("clears the organization and its dependent team in the update payload", async () => {
       const onSubmit = vi.fn().mockResolvedValue(undefined);
       renderWithProviders(
@@ -2624,19 +2219,10 @@ describe("KeyEditView", () => {
     max_parallel_requests: 10,
     model_tpm_limit: undefined,
     model_rpm_limit: undefined,
-    guardrails: undefined,
-    disable_global_guardrails: false,
-    policies: undefined,
     tags: ["test-tag"],
     prompts: undefined,
-    access_group_ids: [],
     allowed_passthrough_routes: undefined,
     allowed_ips: [],
-    vector_stores: [],
-    mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: [] },
-    mcp_tool_permissions: {},
-    agents_and_groups: { agents: [], accessGroups: [] },
-    skills: [],
     organization_id: null,
     team_id: null,
     logging_settings: [],
@@ -2679,7 +2265,7 @@ describe("KeyEditView", () => {
       expect(onSubmitMock.mock.calls[0][0]).toStrictEqual(UNTOUCHED_SAVE_PAYLOAD);
     });
 
-    it("drops the policy and prompt keys entirely for a role that cannot see those fields", async () => {
+    it("drops the prompt key entirely for a role that cannot see that field", async () => {
       const onSubmitMock = vi.fn().mockResolvedValue(undefined);
       renderWithProviders(
         <KeyEditView
@@ -2700,9 +2286,8 @@ describe("KeyEditView", () => {
         expect(onSubmitMock).toHaveBeenCalled();
       });
       const payload = onSubmitMock.mock.calls[0][0];
-      expect(payload).not.toHaveProperty("policies");
       expect(payload).not.toHaveProperty("prompts");
-      expect(payload).toHaveProperty("guardrails");
+      expect(payload).toHaveProperty("tags");
     });
 
     it("routes the shared lifecycle and rate-limit-type controls into their own payload keys", async () => {
@@ -2816,7 +2401,6 @@ describe("KeyEditView", () => {
 
       await userEvent.click(screen.getByRole("switch", { name: /throttle on budget exceeded/i }));
       await userEvent.click(screen.getByRole("switch", { name: /enable prompt caching/i }));
-      await userEvent.click(screen.getByRole("switch", { name: /disable global guardrails/i }));
 
       await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
@@ -2826,7 +2410,6 @@ describe("KeyEditView", () => {
       expect(onSubmitMock.mock.calls[0][0]).toMatchObject({
         throttle_on_budget_exceeded: true,
         enable_prompt_caching: true,
-        disable_global_guardrails: true,
       });
     });
 
@@ -2877,37 +2460,6 @@ describe("KeyEditView", () => {
       await userEvent.keyboard("{Escape}");
     };
 
-    it("carries a picked guardrail into the payload", async () => {
-      const onSubmitMock = vi.fn().mockResolvedValue(undefined);
-      renderForPayload(onSubmitMock);
-      await screen.findByRole("button", { name: /save changes/i });
-
-      await pickFromCombobox("Select guardrails", "guardrail-1");
-      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-      await waitFor(() => {
-        expect(onSubmitMock).toHaveBeenCalled();
-      });
-      expect(onSubmitMock.mock.calls[0][0].guardrails).toEqual(["guardrail-1"]);
-    });
-
-    it("carries a picked policy into the payload", async () => {
-      vi.mocked(getPoliciesList).mockResolvedValueOnce({
-        policies: [{ policy_name: "policy-1", version_number: 1, version_status: "production" }],
-      });
-      const onSubmitMock = vi.fn().mockResolvedValue(undefined);
-      renderForPayload(onSubmitMock);
-      await screen.findByRole("button", { name: /save changes/i });
-
-      await pickFromCombobox(/Select policies/, /policy-1/);
-      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-      await waitFor(() => {
-        expect(onSubmitMock).toHaveBeenCalled();
-      });
-      expect(onSubmitMock.mock.calls[0][0].policies).toEqual(["policy-1"]);
-    });
-
     it("carries a typed prompt into the payload", async () => {
       const onSubmitMock = vi.fn().mockResolvedValue(undefined);
       renderForPayload(onSubmitMock);
@@ -2937,23 +2489,6 @@ describe("KeyEditView", () => {
       const payload = onSubmitMock.mock.calls[0][0];
       expect(payload.rpm_limit_type).toBe("guaranteed_throughput");
       expect(payload.tpm_limit_type).toBeNull();
-    });
-
-    it("carries a picked vector store into the payload", async () => {
-      vi.mocked(vectorStoreListCall).mockResolvedValueOnce({
-        data: [{ vector_store_id: "vs-1", vector_store_name: "VS One" }],
-      });
-      const onSubmitMock = vi.fn().mockResolvedValue(undefined);
-      renderForPayload(onSubmitMock);
-      await screen.findByRole("button", { name: /save changes/i });
-
-      await pickFromCombobox("Select vector stores", /VS One/);
-      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-      await waitFor(() => {
-        expect(onSubmitMock).toHaveBeenCalled();
-      });
-      expect(onSubmitMock.mock.calls[0][0].vector_stores).toEqual(["vs-1"]);
     });
 
     it("carries a picked pass through route into the payload", async () => {
@@ -3092,64 +2627,6 @@ describe("KeyEditView", () => {
       expect(screen.getByRole("combobox", { name: "Team" })).toHaveValue("Gamma");
     });
 
-    it("carries a picked MCP server into the payload", async () => {
-      const onSubmitMock = vi.fn().mockResolvedValue(undefined);
-      renderForPayload(onSubmitMock);
-      await screen.findByRole("button", { name: /save changes/i });
-
-      await userEvent.click(screen.getByRole("button", { name: "pick mcp server" }));
-      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-      await waitFor(() => {
-        expect(onSubmitMock).toHaveBeenCalled();
-      });
-      expect(onSubmitMock.mock.calls[0][0].mcp_servers_and_groups.servers).toEqual(["mcp-1"]);
-    });
-
-    it("carries a picked agent into the payload", async () => {
-      const onSubmitMock = vi.fn().mockResolvedValue(undefined);
-      renderForPayload(onSubmitMock);
-      await screen.findByRole("button", { name: /save changes/i });
-
-      await userEvent.click(screen.getByRole("button", { name: "pick agent" }));
-      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-      await waitFor(() => {
-        expect(onSubmitMock).toHaveBeenCalled();
-      });
-      expect(onSubmitMock.mock.calls[0][0].agents_and_groups.agents).toEqual(["agent-1"]);
-    });
-
-    it("carries a picked skill into the payload", async () => {
-      const onSubmitMock = vi.fn().mockResolvedValue(undefined);
-      renderForPayload(onSubmitMock);
-      await screen.findByRole("button", { name: /save changes/i });
-
-      await userEvent.click(screen.getByRole("button", { name: "pick skill" }));
-      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-      await waitFor(() => {
-        expect(onSubmitMock).toHaveBeenCalled();
-      });
-      expect(onSubmitMock.mock.calls[0][0].skills).toEqual(["private-skill"]);
-    });
-
-    it("preloads the stored skills into the payload when the selector is left untouched", async () => {
-      const onSubmitMock = vi.fn().mockResolvedValue(undefined);
-      renderForPayload(onSubmitMock, {
-        ...MOCK_KEY_DATA,
-        object_permission: { ...MOCK_KEY_DATA.object_permission, skills: ["stored-skill"] },
-      } as KeyResponse);
-      await screen.findByRole("button", { name: /save changes/i });
-
-      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
-
-      await waitFor(() => {
-        expect(onSubmitMock).toHaveBeenCalled();
-      });
-      expect(onSubmitMock.mock.calls[0][0].skills).toEqual(["stored-skill"]);
-    });
-
     it("carries an added logging integration into the payload", async () => {
       const onSubmitMock = vi.fn().mockResolvedValue(undefined);
       renderForPayload(onSubmitMock);
@@ -3262,33 +2739,5 @@ describe("KeyEditView", () => {
         expect(onSubmitMock.mock.calls[0][0]).toStrictEqual({ token: "test-token-123", rpm_limit: "25" });
       },
     );
-  });
-
-  describe("disable_global_guardrails toggle gating", () => {
-    const renderAs = (userRole: string) =>
-      renderWithProviders(
-        <KeyEditView
-          keyData={MOCK_KEY_DATA}
-          onCancel={() => {}}
-          onSubmit={async () => {}}
-          accessToken="test-token"
-          userID="test-user"
-          userRole={userRole}
-          premiumUser={true}
-        />,
-      );
-
-    it("hides the switch from a non-admin", async () => {
-      renderAs("Internal User");
-      await screen.findByRole("button", { name: /save changes/i });
-
-      expect(screen.queryByRole("switch", { name: /disable global guardrails/i })).not.toBeInTheDocument();
-    });
-
-    it("shows the switch to a proxy admin", async () => {
-      renderAs("Admin");
-
-      expect(await screen.findByRole("switch", { name: /disable global guardrails/i })).toBeInTheDocument();
-    });
   });
 });

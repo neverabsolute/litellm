@@ -30,16 +30,8 @@ vi.mock("@/app/(dashboard)/playground/components/compareUI/CompareUI", () => ({
   default: () => <div data-testid="compare-ui" />,
 }));
 
-vi.mock("@/app/(dashboard)/playground/components/complianceUI/ComplianceUI", () => ({
-  default: () => <div data-testid="compliance-ui" />,
-}));
-
 vi.mock("@/app/(dashboard)/playground/components/systemOneUI/SystemOneUI", () => ({
   default: () => <div data-testid="system-one-ui" />,
-}));
-
-vi.mock("@/app/(dashboard)/playground/components/chat_ui/AgentBuilderView", () => ({
-  default: () => <div data-testid="agent-builder" />,
 }));
 
 const lastUrlUpdate = (onUrlUpdate: ReturnType<typeof vi.fn<OnUrlUpdateFunction>>) =>
@@ -58,9 +50,7 @@ describe("PlaygroundPage role guard", () => {
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(screen.queryByTestId("chat-ui")).not.toBeInTheDocument();
     expect(screen.queryByTestId("compare-ui")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("compliance-ui")).not.toBeInTheDocument();
     expect(screen.queryByTestId("system-one-ui")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("agent-builder")).not.toBeInTheDocument();
   });
 
   it.each(["Admin", "Internal User", "Org Admin"])("renders the playground for %s", (role) => {
@@ -96,21 +86,24 @@ describe("PlaygroundPage ?tab= deep link", () => {
     expect(screen.getByTestId("system-one-ui")).toBeInTheDocument();
   });
 
-  it("falls back to Chat when ?tab= is not a playground tab", () => {
-    renderWithProviders(<PlaygroundPage />, { searchParams: { tab: "settings" } });
+  it.each(["settings", "compliance", "agent-builder"])(
+    "falls back to Chat when ?tab=%s is not a playground tab",
+    (tab) => {
+      renderWithProviders(<PlaygroundPage />, { searchParams: { tab } });
 
-    expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
-  });
+      expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
+    },
+  );
 
   it("clicking a tab writes ?tab= with history replace", async () => {
     const user = userEvent.setup();
     const onUrlUpdate = vi.fn<OnUrlUpdateFunction>();
     renderWithProviders(<PlaygroundPage />, { onUrlUpdate });
 
-    await user.click(screen.getByRole("tab", { name: "Compliance" }));
+    await user.click(screen.getByRole("tab", { name: "Compare" }));
 
-    expect(await screen.findByRole("tab", { name: "Compliance", selected: true })).toBeInTheDocument();
-    await waitFor(() => expect(lastUrlUpdate(onUrlUpdate)?.searchParams.get("tab")).toBe("compliance"));
+    expect(await screen.findByRole("tab", { name: "Compare", selected: true })).toBeInTheDocument();
+    await waitFor(() => expect(lastUrlUpdate(onUrlUpdate)?.searchParams.get("tab")).toBe("compare"));
     expect(lastUrlUpdate(onUrlUpdate)?.options.history).toBe("replace");
   });
 });

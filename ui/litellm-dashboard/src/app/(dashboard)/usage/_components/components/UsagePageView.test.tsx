@@ -1,4 +1,3 @@
-import { useAgents } from "@/app/(dashboard)/hooks/agents/useAgents";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import useIsOrgAdmin from "@/app/(dashboard)/hooks/useIsOrgAdmin";
 import { useCurrentUser } from "@/app/(dashboard)/hooks/users/useCurrentUser";
@@ -102,10 +101,6 @@ vi.mock("@/components/activity_metrics", () => ({
   processActivityData: vi.fn(),
 }));
 
-vi.mock("@/components/view_user_spend", () => ({
-  default: () => <div>View User Spend</div>,
-}));
-
 vi.mock("@/components/UsagePage/components/EntityUsage/TopKeyView", () => ({
   default: () => <div>Top Keys</div>,
 }));
@@ -186,7 +181,6 @@ vi.mock("./UsageViewSelect/UsageViewSelect", async (importOriginal) => {
       React.createElement("option", { value: "organization" }, "Organization Usage"),
       React.createElement("option", { value: "customer" }, "Customer Usage"),
       tagOption,
-      React.createElement("option", { value: "agent" }, "Agent Usage"),
       React.createElement("option", { value: "user" }, "User Usage"),
       React.createElement("option", { value: "user-agent-activity" }, "User Agent Activity"),
     );
@@ -256,10 +250,6 @@ vi.mock("@/components/liteadmin/LiteAdmin", () => ({
   AriaUsageComposer: () => <section aria-label="Ask Aria Agent">Shared Aria composer</section>,
 }));
 
-vi.mock("@/app/(dashboard)/hooks/agents/useAgents", () => ({
-  useAgents: vi.fn(),
-}));
-
 vi.mock("@/app/(dashboard)/hooks/useAuthorized", () => ({
   __esModule: true,
   default: vi.fn(),
@@ -292,7 +282,6 @@ describe("UsagePage", () => {
   const mockGatewayDailyActivityCall = vi.mocked(networking.gatewayDailyActivityCall);
   const mockRequestErrorActivityCall = vi.mocked(networking.requestErrorActivityCall);
   const mockSubscriptionUsageCall = vi.mocked(networking.subscriptionUsageCall);
-  const mockUseAgents = vi.mocked(useAgents);
   const mockUseAuthorized = vi.mocked(useAuthorized);
   const mockUseCurrentUser = vi.mocked(useCurrentUser);
   const mockUseInfiniteUsers = vi.mocked(useInfiniteUsers);
@@ -411,13 +400,6 @@ describe("UsagePage", () => {
       teams: null,
       users: null,
       members: null,
-    },
-  ];
-
-  const mockAgents = [
-    {
-      agent_id: "agent-123",
-      agent_name: "Test Agent",
     },
   ];
 
@@ -602,11 +584,6 @@ describe("UsagePage", () => {
       isLoading: false,
     } as any);
     mockTagListCall.mockResolvedValue({});
-    mockUseAgents.mockReturnValue({
-      data: { agents: [] },
-      isLoading: false,
-      error: null,
-    } as any);
   });
 
   it("hands the subscription usage to the fixed cost card for an admin and never fetches it otherwise", async () => {
@@ -1127,31 +1104,7 @@ describe("UsagePage", () => {
     expect(entityUsage).toHaveAttribute("data-entity-list", "null");
   });
 
-  it("should show agent usage view for admins", async () => {
-    mockUseAgents.mockReturnValue({
-      data: { agents: mockAgents },
-      isLoading: false,
-      error: null,
-    } as any);
-
-    renderWithProviders(<UsagePage {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(mockUserDailyActivityAggregatedCall).toHaveBeenCalled();
-    });
-
-    const usageSelect = screen.getByTestId("usage-view-select");
-    act(() => {
-      fireEvent.change(usageSelect, { target: { value: "agent" } });
-    });
-
-    await waitFor(() => {
-      const entityUsageElements = screen.getAllByText("Entity Usage");
-      expect(entityUsageElements.length).toBeGreaterThan(0);
-    });
-  });
-
-  it.each(["organization", "agent"])("should not render the %s usage view for an internal user", async (usageView) => {
+  it("should not render the organization usage view for an internal user", async () => {
     mockUseAuthorized.mockReturnValue(nonAdminSession);
     mockDailyActivityKeyPageCall.mockImplementation(() => new Promise(() => {}));
     renderWithProviders(<UsagePage {...defaultProps} organizations={mockOrganizations} />);
@@ -1167,7 +1120,7 @@ describe("UsagePage", () => {
     expect(screen.getAllByText("Entity Usage").length).toBeGreaterThan(0);
 
     act(() => {
-      fireEvent.change(usageSelect, { target: { value: usageView } });
+      fireEvent.change(usageSelect, { target: { value: "organization" } });
     });
 
     expect(screen.queryByText("Entity Usage")).not.toBeInTheDocument();
@@ -1630,32 +1583,6 @@ describe("UsagePage", () => {
       const usageSelect = screen.getByTestId("usage-view-select");
       act(() => {
         fireEvent.change(usageSelect, { target: { value: "customer" } });
-      });
-
-      await waitFor(() => {
-        const entityUsageElements = screen.getAllByText("Entity Usage");
-        expect(entityUsageElements.length).toBeGreaterThan(0);
-      });
-    });
-  });
-
-  describe("agent usage banner", () => {
-    it("should show agent usage banner with A2A info", async () => {
-      mockUseAgents.mockReturnValue({
-        data: { agents: mockAgents },
-        isLoading: false,
-        error: null,
-      } as any);
-
-      renderWithProviders(<UsagePage {...defaultProps} />);
-
-      await waitFor(() => {
-        expect(mockUserDailyActivityAggregatedCall).toHaveBeenCalled();
-      });
-
-      const usageSelect = screen.getByTestId("usage-view-select");
-      act(() => {
-        fireEvent.change(usageSelect, { target: { value: "agent" } });
       });
 
       await waitFor(() => {

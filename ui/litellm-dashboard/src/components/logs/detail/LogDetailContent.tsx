@@ -12,7 +12,6 @@ import { UiLoadingSpinner } from "@/components/ui/ui-loading-spinner";
 import { LogEntry } from "../types";
 import { formatNumberWithCommas } from "@/utils/dataUtils";
 import { PROMPT_CACHE_CREATION_TOOLTIP, PROMPT_CACHE_READ_TOOLTIP } from "@/utils/promptCacheUsage";
-import GuardrailViewer from "./sections/GuardrailViewer/GuardrailViewer";
 import EvalViewer from "./sections/EvalViewer/EvalViewer";
 import {
   getBatchIdFromRequestId,
@@ -23,21 +22,12 @@ import {
 } from "../batchLogUtils";
 import { CostBreakdownViewer } from "./sections/CostBreakdownViewer";
 import { ConfigInfoMessage } from "./sections/ConfigInfoMessage";
-import { VectorStoreViewer } from "./sections/VectorStoreViewer";
 import { CREDENTIAL_LABELS, KUBERNETES_POD_ROUTING_LABELS } from "../constants";
 import { TruncatedValue } from "./TruncatedValue";
 import { TokenFlow } from "./TokenFlow";
 import { JsonViewer } from "./JsonViewer";
 import { RoutingDecisionCard, type RoutingDecision } from "./RoutingDecisionCard";
-import {
-  formatData,
-  checkHasMessages,
-  checkHasResponse,
-  normalizeGuardrailEntries,
-  calculateTotalMaskedEntities,
-  getGuardrailLabel,
-  checkHasVectorStoreData,
-} from "./utils";
+import { formatData, checkHasMessages, checkHasResponse } from "./utils";
 import {
   DRAWER_CONTENT_PADDING,
   API_BASE_MAX_WIDTH,
@@ -64,7 +54,7 @@ export interface LogDetailContentProps {
 /**
  * The scrollable detail content for a single log entry.
  * Renders request details, metrics, cost breakdown, request/response,
- * guardrails, vector store data, and metadata.
+ * evals, and metadata.
  *
  * Designed to be placed inside LogDetailsDrawer's right panel so it can
  * be reused for both single-log and session-mode views.
@@ -91,19 +81,9 @@ export function LogDetailContent({
   // Don't show "missing data" warning while details are still loading
   const missingData = !hasMessages && !hasResponse && !hasError && !isLoadingDetails;
 
-  // Guardrail data
-  const guardrailInfo = metadata?.guardrail_information;
-  const guardrailEntries = normalizeGuardrailEntries(guardrailInfo);
-  const hasGuardrailData = guardrailEntries.length > 0;
-  const totalMaskedEntities = calculateTotalMaskedEntities(guardrailEntries);
-  const primaryGuardrailLabel = getGuardrailLabel(guardrailEntries);
-
   // LLM Judge data
   const evalInfo = metadata?.eval_information;
   const hasEvalData = evalInfo != null;
-
-  // Vector store data
-  const hasVectorStoreData = checkHasVectorStoreData(metadata);
 
   const getFormattedResponse = () => {
     if (hasError && errorInfo) {
@@ -179,11 +159,6 @@ export function LogDetailContent({
                   {CREDENTIAL_LABELS[String(logEntry.metadata.used_client_oauth_token)]}
                 </DescriptionItem>
               )}
-              {hasGuardrailData && (
-                <DescriptionItem label="Guardrail">
-                  <GuardrailLabel label={primaryGuardrailLabel} maskedCount={totalMaskedEntities} />
-                </DescriptionItem>
-              )}
             </DescriptionList>
           </CardContent>
         </Card>
@@ -242,28 +217,8 @@ export function LogDetailContent({
         />
       )}
 
-      {/* Guardrail Data */}
-      {hasGuardrailData && (
-        <div id="guardrail-section">
-          <GuardrailViewer
-            data={guardrailInfo}
-            accessToken={accessToken ?? null}
-            logEntry={{
-              request_id: logEntry.request_id,
-              user: logEntry.user,
-              model: logEntry.model,
-              startTime: logEntry.startTime,
-              metadata: logEntry.metadata,
-            }}
-          />
-        </div>
-      )}
-
       {/* LLM Judge Results */}
       {hasEvalData && <EvalViewer data={evalInfo} />}
-
-      {/* Vector Store Data */}
-      {hasVectorStoreData && <VectorStoreViewer data={metadata.vector_store_request_metadata} />}
 
       {/* Metadata */}
       {logEntry.metadata && Object.keys(logEntry.metadata).length > 0 && (
@@ -364,22 +319,6 @@ function UserIdentity({ userId, email }: { userId: string; email?: string }) {
     <span className="inline-flex items-center gap-2">
       <span>{email}</span>
       <TruncatedValue value={userId} />
-    </span>
-  );
-}
-
-function GuardrailLabel({ label, maskedCount }: { label: string; maskedCount: number }) {
-  const handleClick = () => {
-    const el = document.getElementById("guardrail-section");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
-
-  return (
-    <span className="inline-flex items-center gap-2">
-      <a onClick={handleClick} style={{ cursor: "pointer" }}>
-        {label}
-      </a>
-      {maskedCount > 0 && <Badge variant="secondary">{maskedCount} masked</Badge>}
     </span>
   );
 }
@@ -727,60 +666,6 @@ function RequestResponseSection({
           </CollapsibleContent>
         </Tabs>
       </Collapsible>
-    </div>
-  );
-}
-
-const GUARDRAIL_JUMP_LINK_STYLE = {
-  passed: { className: "border border-success/20 bg-success/10 text-success", glyph: "\u2713" },
-  flagged: { className: "border border-warning/20 bg-warning/10 text-warning", glyph: "\u26A0" },
-  failed: { className: "border border-destructive/20 bg-destructive/10 text-destructive", glyph: "\u2717" },
-  not_run: { className: "border border-border bg-muted text-muted-foreground", glyph: "\u2013" },
-} as const;
-
-const isPassedStatus = (status: unknown) => status === "pass" || status === "passed" || status === "success";
-const isFlaggedStatus = (status: unknown) => status === "flagged" || status === "guardrail_flagged";
-const isNotRunStatus = (status: unknown) => status === "not_run";
-
-const guardrailJumpLinkOutcome = (evaluated: unknown[]): keyof typeof GUARDRAIL_JUMP_LINK_STYLE => {
-  if (evaluated.length === 0) return "not_run";
-  if (evaluated.every(isPassedStatus)) return "passed";
-  if (evaluated.every((s) => isPassedStatus(s) || isFlaggedStatus(s))) return "flagged";
-  return "failed";
-};
-
-export function GuardrailJumpLink({ guardrailEntries }: { guardrailEntries: any[] }) {
-  const statuses = guardrailEntries.map((e) => e?.guardrail_status || e?.status);
-  const evaluated = statuses.filter((s) => !isNotRunStatus(s));
-  const notRunCount = statuses.length - evaluated.length;
-  const { className, glyph } = GUARDRAIL_JUMP_LINK_STYLE[guardrailJumpLinkOutcome(evaluated)];
-
-  const handleClick = () => {
-    const el = document.getElementById("guardrail-section");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
-
-  return (
-    <div style={{ textAlign: "left", marginBottom: 12 }}>
-      <div
-        onClick={handleClick}
-        className={className}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "4px 12px",
-          borderRadius: 16,
-          cursor: "pointer",
-          fontSize: 13,
-          fontWeight: 500,
-        }}
-      >
-        {glyph} {evaluated.length} guardrail
-        {evaluated.length !== 1 ? "s" : ""} evaluated
-        {notRunCount > 0 ? `, ${notRunCount} not run` : ""}
-        <span style={{ fontSize: 11, opacity: 0.7 }}>{"\u2193"}</span>
-      </div>
     </div>
   );
 }

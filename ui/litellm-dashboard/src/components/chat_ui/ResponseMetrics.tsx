@@ -9,7 +9,6 @@ import {
   Hash,
   History,
   Lightbulb,
-  Wrench,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROMPT_CACHE_CREATION_TOOLTIP, PROMPT_CACHE_READ_TOOLTIP } from "@/utils/promptCacheUsage";
@@ -32,7 +31,6 @@ interface ResponseMetricsProps {
   timeToFirstToken?: number;
   totalLatency?: number;
   usage?: TokenUsage;
-  toolName?: string;
 }
 
 interface MetricItemProps {
@@ -98,7 +96,7 @@ function PromptCacheChips({ usage }: { usage?: TokenUsage }) {
   );
 }
 
-const ResponseMetrics: React.FC<ResponseMetricsProps> = ({ timeToFirstToken, totalLatency, usage, toolName }) => {
+const ResponseMetrics: React.FC<ResponseMetricsProps> = ({ timeToFirstToken, totalLatency, usage }) => {
   if (!timeToFirstToken && !totalLatency && !usage) return null;
 
   return (
@@ -165,15 +163,6 @@ const ResponseMetrics: React.FC<ResponseMetricsProps> = ({ timeToFirstToken, tot
           tooltip="Cost"
           icon={<DollarSign className="size-3" aria-hidden="true" />}
           value={`$${usage.cost.toFixed(6)}`}
-        />
-      )}
-
-      {toolName && (
-        <MetricItem
-          label="Tool"
-          tooltip="Tool used"
-          icon={<Wrench className="size-3" aria-hidden="true" />}
-          value={toolName}
         />
       )}
     </div>

@@ -45,10 +45,6 @@ vi.mock("@/app/(dashboard)/hooks/teams/useTeams", () => ({
   }),
 }));
 
-vi.mock("@/app/(dashboard)/hooks/guardrails/useGuardrails", () => ({
-  useGuardrails: () => ({ data: { guardrails: [{ guardrail_name: "g-1" }] }, isLoading: false, error: null }),
-}));
-
 vi.mock("@/app/(dashboard)/hooks/tags/useTags", () => ({
   useTags: () => ({ data: {}, isLoading: false, error: null }),
 }));
@@ -93,10 +89,6 @@ vi.mock("@/app/(dashboard)/hooks/providers/useProviderFields", () => ({
   }),
 }));
 
-vi.mock("@/components/vector_store_management/VectorStoreSelector", () => ({
-  default: () => <div data-testid="vector-store-selector" />,
-}));
-
 type Catalog = Record<string, { litellm_provider: string }>;
 
 const createCatalogFeed = () => {
@@ -138,11 +130,9 @@ const alwaysMounted = {
 };
 
 const advancedOpenExtras = {
-  guardrails: undefined,
   kubernetes_pod_discovery: undefined,
   tags: undefined,
   use_in_pass_through: undefined,
-  vector_store_ids: undefined,
 };
 
 const baseModelInfo = { access_groups: undefined, mode: undefined };
@@ -307,7 +297,7 @@ describe("AddModelPanel submit payload contract", () => {
     });
   });
 
-  it("registers four more keys as undefined once Advanced Settings opens", async () => {
+  it("registers three more keys as undefined once Advanced Settings opens", async () => {
     const { openAdvanced, fillRequired, submit } = await setup();
     await fillRequired();
     await openAdvanced();

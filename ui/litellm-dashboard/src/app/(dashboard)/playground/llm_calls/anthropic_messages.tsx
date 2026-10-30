@@ -2,9 +2,7 @@ import { observeResponseHeaders, type ResponseHeadersListener } from "@/lib/http
 import Anthropic from "@anthropic-ai/sdk";
 import { MessageType } from "@/components/chat_ui/types";
 import { TokenUsage } from "@/components/chat_ui/ResponseMetrics";
-import { buildMcpToolBlocks } from "@/components/llm_calls/mcp_tool_blocks";
 import { buildPlaygroundHeaders, type CustomHeaders } from "@/components/llm_calls/request_headers";
-import { MCPServer, MCPToolset } from "@/components/mcp_tools/types";
 import { getGatewayBaseUrl } from "@/components/networking";
 import { toast } from "@/lib/toast";
 import { extractPromptCacheTokens } from "@/utils/promptCacheUsage";
@@ -27,14 +25,7 @@ export async function makeAnthropicMessagesRequest(
   onTimingData?: (timeToFirstToken: number) => void,
   onUsageData?: (usage: TokenUsage) => void,
   traceId?: string,
-  vector_store_ids?: string[],
-  guardrails?: string[],
-  policies?: string[],
-  selectedMCPServers?: string[],
   customBaseUrl?: string,
-  mcpServers?: MCPServer[],
-  mcpServerToolRestrictions?: Record<string, string[]>,
-  mcpToolsets?: MCPToolset[],
   streamingEnabled: boolean = true,
   customHeaders?: CustomHeaders,
   onResponseHeaders?: ResponseHeadersListener,
@@ -72,17 +63,6 @@ export async function makeAnthropicMessagesRequest(
       // @ts-ignore - litellm specific parameter
       litellm_trace_id: traceId,
     };
-
-    const tools = buildMcpToolBlocks({
-      selectedMCPServers,
-      mcpServers,
-      mcpToolsets,
-      mcpServerToolRestrictions,
-    });
-    if (tools.length > 0) requestBody.tools = tools;
-    if (vector_store_ids) requestBody.vector_store_ids = vector_store_ids;
-    if (guardrails) requestBody.guardrails = guardrails;
-    if (policies) requestBody.policies = policies;
 
     if (!streamingEnabled) {
       const message: Anthropic.Message = await client.messages.create({ ...requestBody, stream: false }, { signal });

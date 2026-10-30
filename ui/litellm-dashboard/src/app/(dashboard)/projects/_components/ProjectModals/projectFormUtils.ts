@@ -30,10 +30,6 @@ const buildProjectApiParams = (values: ProjectFormValues, sendEmpty: boolean) =>
   const metadata = buildMetadata(values.metadata);
   const keepLimits = sendEmpty && values.modelLimits !== undefined;
   const keep = (map: Record<string, number>) => keepLimits || Object.keys(map).length > 0;
-  const guardrailsParam =
-    values.guardrails !== undefined && (sendEmpty || values.guardrails.length > 0)
-      ? { guardrails: values.guardrails }
-      : {};
   const metadataParam = metadata !== undefined && (sendEmpty || Object.keys(metadata).length > 0) ? { metadata } : {};
 
   return {
@@ -42,7 +38,6 @@ const buildProjectApiParams = (values: ProjectFormValues, sendEmpty: boolean) =>
     models: values.models ?? [],
     max_budget: values.max_budget == null ? undefined : roundBudget(values.max_budget),
     blocked: values.isBlocked ?? false,
-    ...guardrailsParam,
     ...(keep(modelRpmLimit) && { model_rpm_limit: modelRpmLimit }),
     ...(keep(modelTpmLimit) && { model_tpm_limit: modelTpmLimit }),
     ...(keep(modelItpmLimit) && { model_itpm_limit: modelItpmLimit }),

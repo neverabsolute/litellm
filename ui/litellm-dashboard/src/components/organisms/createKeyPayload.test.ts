@@ -6,7 +6,6 @@ const baseInput: KeyCreateInput = {
   existingKeys: null,
   keyOwner: "you",
   userID: "test-user",
-  selectedAgentId: null,
   loggingSettings: [],
   disabledCallbacks: [],
   autoRotationEnabled: false,
@@ -32,15 +31,11 @@ const wireKeys = (payload: Record<string, unknown>): string[] =>
   Object.keys(JSON.parse(JSON.stringify(payload)) as Record<string, unknown>);
 
 const DROPPED_AT_SERIALISATION = [
-  "access_group_ids",
   "allowed_passthrough_routes",
-  "allowed_vector_store_ids",
   "budget_duration",
   "enable_prompt_caching",
-  "guardrails",
   "max_budget",
   "organization_id",
-  "policies",
   "prompts",
   "rpm_limit",
   "tags",
@@ -68,13 +63,8 @@ const OPTIONAL_SETTINGS_VALUES = {
   tpd_limit: undefined,
   throttle_on_budget_exceeded: undefined,
   enable_prompt_caching: undefined,
-  guardrails: undefined,
-  disable_global_guardrails: undefined,
-  policies: undefined,
   prompts: undefined,
-  access_group_ids: undefined,
   allowed_passthrough_routes: undefined,
-  allowed_vector_store_ids: undefined,
   tags: undefined,
 };
 
@@ -107,8 +97,8 @@ describe("always-present keys", () => {
   });
 
   it("keeps a mounted-but-untouched field as an undefined-valued key rather than dropping it", () => {
-    expect(payloadOf(build({ key_alias: "my-key", guardrails: undefined, tags: undefined }))).toStrictEqual(
-      aliasOnly({ guardrails: undefined, tags: undefined }),
+    expect(payloadOf(build({ key_alias: "my-key", prompts: undefined, tags: undefined }))).toStrictEqual(
+      aliasOnly({ prompts: undefined, tags: undefined }),
     );
   });
 });
@@ -143,19 +133,6 @@ describe("key ownership", () => {
     expect(
       payloadOf(build({ key_alias: "my-key", user_id: "someone-else" }, { keyOwner: "another_user" })),
     ).toStrictEqual(expected);
-  });
-
-  it("adds the selected agent id for an agent-owned key", () => {
-    const expected = { key_alias: "my-key", agent_id: "agent-1", duration: null, metadata: "{}" };
-    expect(payloadOf(build({ key_alias: "my-key" }, { keyOwner: "agent", selectedAgentId: "agent-1" }))).toStrictEqual(
-      expected,
-    );
-  });
-
-  it("reports agent_not_selected instead of building a payload when no agent is selected", () => {
-    expect(build({ key_alias: "my-key" }, { keyOwner: "agent", selectedAgentId: null })).toStrictEqual({
-      kind: "agent_not_selected",
-    });
   });
 
   it("stamps the alias into metadata as the service account id and sends no user_id", () => {
@@ -228,128 +205,7 @@ describe("metadata", () => {
   });
 });
 
-describe("object_permission", () => {
-  it("is absent when nothing contributes to it", () => {
-    expect(payloadOf(build({ key_alias: "my-key", allowed_vector_store_ids: [] }))).toStrictEqual(
-      aliasOnly({ allowed_vector_store_ids: [] }),
-    );
-  });
-
-  it("moves selected vector stores off the top level", () => {
-    expect(payloadOf(build({ key_alias: "my-key", allowed_vector_store_ids: ["vs-1"] }))).toStrictEqual(
-      aliasOnly({ object_permission: { vector_stores: ["vs-1"] } }),
-    );
-  });
-
-  it("splits an MCP selection into servers, access groups and toolsets", () => {
-    expect(
-      payloadOf(
-        build({
-          key_alias: "my-key",
-          allowed_mcp_servers_and_groups: { servers: ["s-1"], accessGroups: ["g-1"], toolsets: ["t-1"] },
-        }),
-      ),
-    ).toStrictEqual(
-      aliasOnly({
-        object_permission: { mcp_servers: ["s-1"], mcp_access_groups: ["g-1"], mcp_toolsets: ["t-1"] },
-      }),
-    );
-  });
-
-  it("omits the empty halves of an MCP selection", () => {
-    expect(
-      payloadOf(
-        build({
-          key_alias: "my-key",
-          allowed_mcp_servers_and_groups: { servers: ["s-1"], accessGroups: [], toolsets: [] },
-        }),
-      ),
-    ).toStrictEqual(aliasOnly({ object_permission: { mcp_servers: ["s-1"] } }));
-  });
-
-  it("leaves an all-empty MCP selection on the top level", () => {
-    expect(
-      payloadOf(
-        build({ key_alias: "my-key", allowed_mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: [] } }),
-      ),
-    ).toStrictEqual(aliasOnly({ allowed_mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: [] } }));
-  });
-
-  it("nests configured MCP tool permissions", () => {
-    expect(payloadOf(build({ key_alias: "my-key", mcp_tool_permissions: { "s-1": ["read"] } }))).toStrictEqual(
-      aliasOnly({ object_permission: { mcp_tool_permissions: { "s-1": ["read"] } } }),
-    );
-  });
-
-  it("always strips mcp_tool_permissions from the top level, even when empty", () => {
-    expect(payloadOf(build({ key_alias: "my-key", mcp_tool_permissions: {} }))).toStrictEqual(aliasOnly());
-  });
-
-  it("lets a standalone access group list win over the one from the MCP selection", () => {
-    expect(
-      payloadOf(
-        build({
-          key_alias: "my-key",
-          allowed_mcp_servers_and_groups: { servers: ["s-1"], accessGroups: ["from-selector"] },
-          allowed_mcp_access_groups: ["standalone"],
-        }),
-      ),
-    ).toStrictEqual(aliasOnly({ object_permission: { mcp_servers: ["s-1"], mcp_access_groups: ["standalone"] } }));
-  });
-
-  it("splits an agent selection into agents and agent access groups", () => {
-    expect(
-      payloadOf(build({ key_alias: "my-key", allowed_agents_and_groups: { agents: ["a-1"], accessGroups: ["ag-1"] } })),
-    ).toStrictEqual(aliasOnly({ object_permission: { agents: ["a-1"], agent_access_groups: ["ag-1"] } }));
-  });
-
-  it("moves the selected skills under object_permission and off the top level", () => {
-    expect(payloadOf(build({ key_alias: "my-key", allowed_skills: ["private-skill"] }))).toStrictEqual(
-      aliasOnly({ object_permission: { skills: ["private-skill"] } }),
-    );
-  });
-
-  it("sends no object_permission for an empty skill selection", () => {
-    expect(payloadOf(build({ key_alias: "my-key", allowed_skills: [] }))).toStrictEqual(aliasOnly());
-  });
-
-  it("merges every source into a single object_permission", () => {
-    const everySource = {
-      key_alias: "my-key",
-      allowed_vector_store_ids: ["vs-1"],
-      allowed_mcp_servers_and_groups: { servers: ["s-1"], accessGroups: ["g-1"], toolsets: ["t-1"] },
-      mcp_tool_permissions: { "s-1": ["read"] },
-      allowed_agents_and_groups: { agents: ["a-1"], accessGroups: ["ag-1"] },
-      allowed_skills: ["private-skill"],
-    };
-    expect(payloadOf(build(everySource))).toStrictEqual(
-      aliasOnly({
-        object_permission: {
-          vector_stores: ["vs-1"],
-          mcp_servers: ["s-1"],
-          mcp_access_groups: ["g-1"],
-          mcp_toolsets: ["t-1"],
-          mcp_tool_permissions: { "s-1": ["read"] },
-          agents: ["a-1"],
-          agent_access_groups: ["ag-1"],
-          skills: ["private-skill"],
-        },
-      }),
-    );
-  });
-});
-
-describe("premium and rotation flags", () => {
-  it("drops disable_global_guardrails when it is off", () => {
-    expect(payloadOf(build({ key_alias: "my-key", disable_global_guardrails: false }))).toStrictEqual(aliasOnly());
-  });
-
-  it("keeps disable_global_guardrails when it is on", () => {
-    expect(payloadOf(build({ key_alias: "my-key", disable_global_guardrails: true }))).toStrictEqual(
-      aliasOnly({ disable_global_guardrails: true }),
-    );
-  });
-
+describe("rotation flags", () => {
   it("adds the rotation fields only when auto rotation is enabled", () => {
     expect(
       payloadOf(build({ key_alias: "my-key" }, { autoRotationEnabled: true, rotationInterval: "7d" })),
@@ -474,9 +330,7 @@ describe("purity", () => {
   it("leaves the submitted form values untouched", () => {
     const values = {
       key_alias: "my-key",
-      mcp_tool_permissions: { "s-1": ["read"] },
-      allowed_vector_store_ids: ["vs-1"],
-      disable_global_guardrails: false,
+      metadata: '{"team":"core"}',
       duration: "",
     };
     const before = structuredClone(values);
@@ -513,9 +367,9 @@ describe("serialised wire shape", () => {
     expect(payloadOf(build({ ...CLOSED_SECTIONS_VALUES, team_id: "team-1" })).team_id).toBe("team-1");
   });
 
-  it("adds sixteen keys to the object and only the two limit types to the wire when Optional Settings opens", () => {
+  it("adds twelve keys to the object and only the two limit types to the wire when Optional Settings opens", () => {
     const payload = payloadOf(build(OPTIONAL_SETTINGS_VALUES));
-    expect(Object.keys(payload)).toHaveLength(24);
+    expect(Object.keys(payload)).toHaveLength(20);
     expect(wireKeys(payload)).toStrictEqual([
       "team_id",
       "key_alias",
@@ -559,15 +413,6 @@ describe("duplicate alias", () => {
       alias: "",
       teamId: null,
     });
-  });
-
-  it("checks the alias before the agent selection", () => {
-    expect(
-      build(
-        { key_alias: "taken" },
-        { existingKeys: [{ team_id: null, key_alias: "taken" }], keyOwner: "agent", selectedAgentId: null },
-      ).kind,
-    ).toBe("duplicate_alias");
   });
 });
 

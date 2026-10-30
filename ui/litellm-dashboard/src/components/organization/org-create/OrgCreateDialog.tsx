@@ -5,7 +5,6 @@ import * as React from "react";
 
 import { organizationKeys } from "@/app/(dashboard)/hooks/organizations/useOrganizations";
 import { ModelSelect } from "@/components/ModelSelect/ModelSelect";
-import MCPServerSelector from "@/components/mcp_server_management/MCPServerSelector";
 import { toast } from "@/lib/toast";
 import { FieldGroup } from "@/components/ui/field";
 import { FormField } from "@/components/shared/form/FormField";
@@ -14,7 +13,6 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import VectorStoreSelector from "@/components/vector_store_management/VectorStoreSelector";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { fetchClient } from "@/lib/http/api";
 
@@ -30,14 +28,12 @@ const defaultCreateOrganization = async (body: OrgCreateBody): Promise<unknown> 
 interface OrgCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  accessToken: string;
   createOrganization?: (body: OrgCreateBody) => Promise<unknown>;
 }
 
 export const OrgCreateDialog = ({
   open,
   onOpenChange,
-  accessToken,
   createOrganization = defaultCreateOrganization,
 }: OrgCreateDialogProps) => {
   const queryClient = useQueryClient();
@@ -127,38 +123,6 @@ export const OrgCreateDialog = ({
 
             <FormField control={form.control} name="rpm_limit" label="Requests per minute Limit (RPM)">
               {({ ref, ...field }) => <Input {...field} ref={ref} type="number" step={1} min={0} />}
-            </FormField>
-
-            <FormField
-              control={form.control}
-              name="vector_stores"
-              label="Allowed Vector Stores"
-              description="Select vector stores this organization can access. Leave empty for access to all vector stores"
-            >
-              {(field) => (
-                <VectorStoreSelector
-                  value={field.value}
-                  onChange={field.onChange}
-                  accessToken={accessToken}
-                  placeholder="Select vector stores (optional)"
-                />
-              )}
-            </FormField>
-
-            <FormField
-              control={form.control}
-              name="mcp"
-              label="Allowed MCP Servers"
-              description="Select MCP servers, access groups, and toolsets this organization can access. Leave empty for access to all"
-            >
-              {(field) => (
-                <MCPServerSelector
-                  value={field.value}
-                  onChange={field.onChange}
-                  accessToken={accessToken}
-                  placeholder="Select MCP servers and access groups (optional)"
-                />
-              )}
             </FormField>
 
             <FormField control={form.control} name="metadata" label="Metadata">

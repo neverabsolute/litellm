@@ -59,25 +59,10 @@ describe("ChatShell", () => {
       </ChatShell>,
     );
     expect(screen.getByRole("button", { name: "Chats" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "Models" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("button", { name: "Workspace" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Switch workspace, current: Chat" })).toBeInTheDocument();
     expect(screen.getByTestId("conversation-list")).toBeInTheDocument();
-  });
-
-  it("should mark Models active on its route and tolerate a trailing slash", () => {
-    mockUsePathname.mockReturnValue("/ui/chat/models/");
-    render(
-      <ChatShell>
-        <div />
-      </ChatShell>,
-    );
-
-    expect(screen.getByRole("button", { name: "Models" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "Chats" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("button", { name: "Workspace" })).not.toHaveAttribute("aria-current");
   });
 
   it("should mark API Keys active while still showing the conversation list", () => {
@@ -99,12 +84,7 @@ describe("ChatShell", () => {
         <div />
       </ChatShell>,
     );
-    await user.click(screen.getByRole("button", { name: "Integrations" }));
-    expect(mockPush).toHaveBeenCalledWith("/ui/chat/integrations");
-    await user.click(screen.getByRole("button", { name: "Models" }));
-    expect(mockPush).toHaveBeenCalledWith("/ui/chat/models");
     for (const [label, href] of [
-      ["Credentials", "/ui/chat/credentials"],
       ["API Keys", "/ui/chat/api-keys"],
       ["Usage", "/ui/chat/usage"],
       ["Logs", "/ui/chat/logs"],
@@ -145,7 +125,7 @@ describe("ChatShell", () => {
     expect(screen.getByRole("button", { name: "Close sidebar" })).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("should open mobile navigation and close it after selecting Models", async () => {
+  it("should open mobile navigation and close it after selecting Chats", async () => {
     mockUseMediaQuery.mockReturnValue(false);
     const user = userEvent.setup();
     render(
@@ -158,9 +138,9 @@ describe("ChatShell", () => {
     expect(screen.getByRole("button", { name: "Switch workspace, current: Chat" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open chat navigation" }));
     expect(await screen.findByRole("dialog", { name: "LiteLLM Chat" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Models" }));
+    await user.click(screen.getByRole("button", { name: "Chats" }));
 
-    expect(mockPush).toHaveBeenCalledWith("/ui/chat/models");
+    expect(mockPush).toHaveBeenCalledWith("/ui/chat");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByText("Conversation content")).toBeInTheDocument();
   });

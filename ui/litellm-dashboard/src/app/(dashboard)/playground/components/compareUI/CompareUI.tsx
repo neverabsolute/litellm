@@ -13,11 +13,9 @@ import { v4 as uuidv4 } from "uuid";
 import ChatImageUpload from "../chat_ui/ChatImageUpload";
 import { createChatDisplayMessage, createChatMultimodalMessage } from "../chat_ui/ChatImageUtils";
 import type { TokenUsage } from "@/components/chat_ui/ResponseMetrics";
-import type { MessageType, VectorStoreSearchResponse } from "@/components/chat_ui/types";
+import type { MessageType } from "@/components/chat_ui/types";
 import { makeOpenAIChatCompletionRequest } from "@/components/llm_calls/chat_completion";
 import { fetchAvailableModels } from "@/components/llm_calls/fetch_models";
-import { Agent, fetchAvailableAgents } from "../../llm_calls/fetch_agents";
-import { makeA2AStreamMessageRequest } from "../../llm_calls/a2a_send_message";
 import { ComparisonPanel } from "./components/ComparisonPanel";
 import { MessageInput } from "./components/MessageInput";
 import {
@@ -25,21 +23,15 @@ import {
   EndpointIdType,
   getAvailableEndpoints,
   getEndpointConfig,
-  isAgentEndpoint,
   hasValidSelection,
   modelOptionsToSelectorOptions,
-  agentOptionsToSelectorOptions,
 } from "./endpoint_config";
 export interface ComparisonInstance {
   id: string;
   model: string;
-  agent: string;
   messages: MessageType[];
   isLoading: boolean;
   tags: string[];
-  mcpTools: string[];
-  vectorStores: string[];
-  guardrails: string[];
   temperature: number;
   maxTokens: number;
   applyAcrossModels: boolean;
@@ -62,13 +54,9 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
     {
       id: "1",
       model: "",
-      agent: "",
       messages: [],
       isLoading: false,
       tags: [],
-      mcpTools: [],
-      vectorStores: [],
-      guardrails: [],
       temperature: 1,
       maxTokens: 2048,
       applyAcrossModels: false,
@@ -77,13 +65,9 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
     {
       id: "2",
       model: "",
-      agent: "",
       messages: [],
       isLoading: false,
       tags: [],
-      mcpTools: [],
-      vectorStores: [],
-      guardrails: [],
       temperature: 1,
       maxTokens: 2048,
       applyAcrossModels: false,
@@ -91,18 +75,12 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
     },
   ]);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
-  const [agentOptions, setAgentOptions] = useState<Agent[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const [isLoadingAgents, setIsLoadingAgents] = useState(false);
   const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointIdType>(DEFAULT_ENDPOINT);
 
   // Derived state from endpoint config
   const endpointConfig = getEndpointConfig(selectedEndpoint);
-  const isA2AMode = isAgentEndpoint(selectedEndpoint);
-  const selectorOptions = isA2AMode
-    ? agentOptionsToSelectorOptions(agentOptions)
-    : modelOptionsToSelectorOptions(modelOptions);
-  const isLoadingOptions = isA2AMode ? isLoadingAgents : isLoadingModels;
+  const selectorOptions = modelOptionsToSelectorOptions(modelOptions);
   const [inputValue, setInputValue] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedFilePreviewUrl, setUploadedFilePreviewUrl] = useState<string | null>(null);
@@ -161,36 +139,6 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
     };
   }, [effectiveApiKey]);
 
-  // Fetch agents when A2A mode is selected
-  useEffect(() => {
-    let active = true;
-    const loadAgents = async () => {
-      if (!effectiveApiKey || !isA2AMode) {
-        setAgentOptions([]);
-        return;
-      }
-      setIsLoadingAgents(true);
-      try {
-        const agents = await fetchAvailableAgents(effectiveApiKey, customProxyBaseUrl || undefined);
-        if (!active) return;
-        setAgentOptions(agents);
-      } catch (error) {
-        console.error("CompareUI: failed to fetch agents", error);
-        if (active) {
-          setAgentOptions([]);
-        }
-      } finally {
-        if (active) {
-          setIsLoadingAgents(false);
-        }
-      }
-    };
-    loadAgents();
-    return () => {
-      active = false;
-    };
-  }, [effectiveApiKey, isA2AMode]);
-
   useEffect(() => {
     if (modelOptions.length === 0) {
       return;
@@ -218,17 +166,12 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
       return;
     }
     const fallbackModel = modelOptions[comparisons.length % (modelOptions.length || 1)] ?? "";
-    const fallbackAgent = agentOptions[comparisons.length % (agentOptions.length || 1)]?.agent_name ?? "";
     const newComparison: ComparisonInstance = {
       id: Date.now().toString(),
       model: fallbackModel,
-      agent: fallbackAgent,
       messages: [],
       isLoading: false,
       tags: [],
-      mcpTools: [],
-      vectorStores: [],
-      guardrails: [],
       temperature: 1,
       maxTokens: 2048,
       applyAcrossModels: false,
@@ -428,7 +371,7 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
       }),
     );
   };
-  const updateUsageDataForComparison = (comparisonId: string, usage: TokenUsage, toolName?: string) => {
+  const updateUsageDataForComparison = (comparisonId: string, usage: TokenUsage) => {
     setComparisons((prev) =>
       prev.map((comparison) => {
         if (comparison.id !== comparisonId) {
@@ -440,31 +383,6 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
           messages[messages.length - 1] = {
             ...last,
             usage,
-            toolName,
-          };
-        }
-        return {
-          ...comparison,
-          messages,
-        };
-      }),
-    );
-  };
-  const updateSearchResultsForComparison = (comparisonId: string, searchResults: VectorStoreSearchResponse[]) => {
-    if (!searchResults) {
-      return;
-    }
-    setComparisons((prev) =>
-      prev.map((comparison) => {
-        if (comparison.id !== comparisonId) {
-          return comparison;
-        }
-        const messages = [...comparison.messages];
-        const last = messages[messages.length - 1];
-        if (last && last.role === "assistant") {
-          messages[messages.length - 1] = {
-            ...last,
-            searchResults,
           };
         }
         return {
@@ -490,7 +408,7 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
       return;
     }
     // Validate selection based on endpoint type
-    if (targetComparisons.some((comparison) => !hasValidSelection(comparison, selectedEndpoint))) {
+    if (targetComparisons.some((comparison) => !hasValidSelection(comparison))) {
       toast.fromError(endpointConfig.validationMessage);
       return;
     }
@@ -510,12 +428,8 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
       {
         id: string;
         model: string;
-        agent: string;
-        inputMessage: string;
         traceId: string;
         tags: string[];
-        vectorStores: string[];
-        guardrails: string[];
         temperature: number;
         maxTokens: number;
         displayMessages: MessageType[];
@@ -534,12 +448,8 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
       preparedTargets.set(comparison.id, {
         id: comparison.id,
         model: comparison.model,
-        agent: comparison.agent,
-        inputMessage: trimmed,
         traceId,
         tags: comparison.tags,
-        vectorStores: comparison.vectorStores,
-        guardrails: comparison.guardrails,
         temperature: comparison.temperature,
         maxTokens: comparison.maxTokens,
         displayMessages: [...comparison.messages, displayUserMessage],
@@ -568,61 +478,26 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
 
     preparedTargets.forEach((prepared) => {
       const tags = prepared.tags.length > 0 ? prepared.tags : undefined;
-      const vectorStoreIds = prepared.vectorStores.length > 0 ? prepared.vectorStores : undefined;
-      const guardrails = prepared.guardrails.length > 0 ? prepared.guardrails : undefined;
       const comparison = comparisons.find((c) => c.id === prepared.id);
       const useAdvancedParams = comparison?.useAdvancedParams ?? false;
 
-      // Use A2A or chat completion based on endpoint
-      const requestPromise = isA2AMode
-        ? makeA2AStreamMessageRequest(
-            prepared.agent,
-            prepared.inputMessage,
-            (text, model) => {
-              // A2A sends full accumulated text, so replace instead of append
-              setComparisons((prev) =>
-                prev.map((c) => {
-                  if (c.id !== prepared.id) return c;
-                  const messages = [...c.messages];
-                  const last = messages[messages.length - 1];
-                  if (last && last.role === "assistant") {
-                    messages[messages.length - 1] = { ...last, content: text, model: last.model ?? model };
-                  } else {
-                    messages.push({ role: "assistant", content: text, model });
-                  }
-                  return { ...c, messages };
-                }),
-              );
-            },
-            effectiveApiKey,
-            undefined,
-            (time) => updateTimingDataForComparison(prepared.id, time),
-            (latency) => updateTotalLatencyForComparison(prepared.id, latency),
-            undefined, // onA2AMetadata
-            customProxyBaseUrl || undefined,
-          )
-        : makeOpenAIChatCompletionRequest(
-            prepared.apiChatHistory,
-            (chunk, model) => appendAssistantChunk(prepared.id, chunk, model),
-            prepared.model,
-            effectiveApiKey,
-            tags,
-            undefined,
-            (content) => appendReasoningContent(prepared.id, content),
-            (time) => updateTimingDataForComparison(prepared.id, time),
-            (usage) => updateUsageDataForComparison(prepared.id, usage),
-            prepared.traceId,
-            vectorStoreIds,
-            guardrails,
-            undefined,
-            undefined,
-            undefined,
-            (searchResults) => updateSearchResultsForComparison(prepared.id, searchResults),
-            useAdvancedParams ? prepared.temperature : undefined,
-            useAdvancedParams ? prepared.maxTokens : undefined,
-            (latency) => updateTotalLatencyForComparison(prepared.id, latency),
-            customProxyBaseUrl || undefined,
-          );
+      const requestPromise = makeOpenAIChatCompletionRequest(
+        prepared.apiChatHistory,
+        (chunk, model) => appendAssistantChunk(prepared.id, chunk, model),
+        prepared.model,
+        effectiveApiKey,
+        tags,
+        undefined,
+        (content) => appendReasoningContent(prepared.id, content),
+        (time) => updateTimingDataForComparison(prepared.id, time),
+        (usage) => updateUsageDataForComparison(prepared.id, usage),
+        prepared.traceId,
+        undefined,
+        useAdvancedParams ? prepared.temperature : undefined,
+        useAdvancedParams ? prepared.maxTokens : undefined,
+        (latency) => updateTotalLatencyForComparison(prepared.id, latency),
+        customProxyBaseUrl || undefined,
+      );
 
       requestPromise
         .catch((error) => {
@@ -767,7 +642,7 @@ export default function CompareUI({ accessToken, disabledPersonalKeyCreation }: 
               onRemove={() => removeComparison(comparison.id)}
               canRemove={comparisons.length > 1}
               selectorOptions={selectorOptions}
-              isLoadingOptions={isLoadingOptions}
+              isLoadingOptions={isLoadingModels}
               endpointConfig={endpointConfig}
               apiKey={effectiveApiKey}
             />

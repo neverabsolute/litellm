@@ -7,13 +7,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { CircleHelp } from "lucide-react";
 import { FormField } from "@/components/shared/form/FormField";
 import { toast } from "@/lib/toast";
-import AgentSelector from "../agent_management/AgentSelector";
 import RateLimitTypeFormItem from "../common_components/RateLimitTypeFormItem";
 import NumericalInput from "../shared/numerical_input";
-import SkillSelector from "../skills/SkillSelector";
-import { TagsInput } from "@/app/(dashboard)/guardrails/_components/content_filter/TagsInput";
+import { TagsInput } from "@/components/common_components/TagsInput";
 import { moveTagsOutOfMetadataJson } from "./keyEditFieldNormalizers";
-import { AgentsAndGroups, KeyEditFormValues } from "./keyEditFormValues";
+import { KeyEditFormValues } from "./keyEditFormValues";
 
 export const labelWithHint = (label: React.ReactNode, hint: string): React.ReactNode => (
   <>
@@ -69,9 +67,6 @@ export const KeyTypeSelect = ({
   );
 };
 
-const SKILLS_HINT =
-  "Enabled skills are visible to every key. Grant disabled (private) Claude Code plugins to this key here.";
-
 const TPD_HINT =
   "Daily token budget for batch submissions (/v1/batches). When set, batch input files are charged against this 24h window instead of the key's TPM/RPM limits. Online requests keep using TPM/RPM.";
 
@@ -113,33 +108,6 @@ export const KeyRateLimitFields = ({ control }: { control: Control<KeyEditFormVa
 
     <FormField control={control} name="tpd_limit" label={labelWithHint("TPD Limit (batch)", TPD_HINT)}>
       {({ ref: _ref, ...field }) => <NumericalInput {...field} value={field.value ?? ""} min={0} />}
-    </FormField>
-  </>
-);
-
-export const KeyAgentAndSkillFields = ({
-  control,
-  accessToken,
-}: {
-  control: Control<KeyEditFormValues>;
-  accessToken: string;
-}) => (
-  <>
-    <FormField control={control} name="agents_and_groups" label="Agents / Access Groups">
-      {({ value, onChange }) => (
-        <AgentSelector
-          onChange={onChange}
-          value={value as AgentsAndGroups | undefined}
-          accessToken={accessToken}
-          placeholder="Select agents or access groups (optional)"
-        />
-      )}
-    </FormField>
-
-    <FormField control={control} name="skills" label={labelWithHint("Skills", SKILLS_HINT)}>
-      {({ value, onChange }) => (
-        <SkillSelector onChange={onChange} value={value as string[] | undefined} accessToken={accessToken} />
-      )}
     </FormField>
   </>
 );

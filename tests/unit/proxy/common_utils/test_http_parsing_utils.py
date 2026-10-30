@@ -3,12 +3,11 @@ import io
 import json
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Final, Literal, get_type_hints
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import orjson
 import pytest
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
 from starlette.datastructures import FormData
 from starlette.requests import Request
 
@@ -21,8 +20,6 @@ from litellm.proxy.common_utils.http_parsing_utils import (
     read_request_body,
     safe_get_request_headers,
     _safe_get_request_parsed_body,
-    safe_get_request_query_params,
-    safe_set_request_parsed_body,
     coerce_numeric_form_fields,
     get_form_data,
     get_request_body,
@@ -70,7 +67,7 @@ def _starlette_request(
     "body",
     [b"[]", b'[["model", "test"]]', b"null", b'"s"', b"1", b"true", b"false"],
 )
-@pytest.mark.parametrize("path", ["/v1/messages", "/vertex_ai/v1/messages", "/lens/datasets"])
+@pytest.mark.parametrize("path", ["/v1/messages", "/vertex_ai/v1/messages"])
 async def test_read_request_body_rejects_non_object_json(body: bytes, path: str) -> None:
     request: Final = _starlette_request(body, "application/json", path)
 
@@ -107,19 +104,16 @@ async def test_read_request_body_rejects_non_objects_from_json_fallback(body: by
         (b'{"value":"\\ud800"}', True),
     ],
 )
-@pytest.mark.parametrize("dispatch", ["custom", "provider", "lens"])
+@pytest.mark.parametrize("dispatch", ["custom", "provider"])
 async def test_pass_through_body_validation_preserves_bytes(dispatch: str, body: bytes, invalid_unicode: bool) -> None:
     from fastapi.routing import APIRoute
-    from litellm.proxy.lens.adapter import lens_request
-    from litellm.proxy.lens.buffering import LensRoute
     from litellm.proxy.pass_through_endpoints.llm_passthrough_endpoints import vertex_proxy_route
     from litellm.proxy.pass_through_endpoints.pass_through_endpoints import create_pass_through_route
 
-    path: Final = {"custom": "/v1/messages", "provider": "/vertex_ai/predict", "lens": "/lens/datasets"}[dispatch]
+    path: Final = {"custom": "/v1/messages", "provider": "/vertex_ai/predict"}[dispatch]
     route: Final = {
         "custom": APIRoute(path, create_pass_through_route(path, "https://upstream.test"), methods=["POST"]),
         "provider": APIRoute("/vertex_ai/{endpoint:path}", vertex_proxy_route, methods=["POST"]),
-        "lens": LensRoute("/lens/{path:path}", lens_request, methods=["POST"]),
     }[dispatch]
     incoming: Final = _starlette_request(body, "application/json", path)
     _, dispatched_scope = route.matches(incoming.scope)
@@ -140,10 +134,9 @@ async def test_pass_through_body_validation_preserves_bytes(dispatch: str, body:
 @pytest.mark.parametrize("body", [b"null", b" \nnull\t", b"[]", b'"value"'])
 async def test_null_body_respects_the_dispatched_body_requirement(optional: bool, body: bytes) -> None:
     from fastapi.routing import APIRoute
-    from litellm.proxy.management_endpoints.key_management_endpoints import generate_key_fn
-    from litellm.proxy.spend_tracking.spend_management_endpoints import global_spend_end_users
+    from litellm.proxy.management_endpoints.key_management_endpoints import generate_key_fn, regenerate_key_fn
 
-    endpoint: Final = global_spend_end_users if optional else generate_key_fn
+    endpoint: Final = regenerate_key_fn if optional else generate_key_fn
     route: Final = APIRoute("/audit", endpoint, methods=["POST"])
     incoming: Final = _starlette_request(body, "application/json", "/audit")
     _, dispatched_scope = route.matches(incoming.scope)

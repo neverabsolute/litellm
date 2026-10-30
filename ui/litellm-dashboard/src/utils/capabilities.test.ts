@@ -17,21 +17,13 @@ const NON_ADMIN_ROLES = [
 ];
 
 const ADMIN_ONLY_CAPABILITIES: Capability[] = [
-  "viewToolPolicies",
   "viewAuditLogs",
   "viewDeletedTeams",
-  "viewPolicies",
   "viewPrompts",
   "viewOrganizationUsage",
-  "viewAgentUsage",
 ];
 
-const PROXY_ADMIN_ONLY_PAGE_CAPABILITIES: Capability[] = [
-  "viewWorkflowRuns",
-  "viewMemory",
-  "viewGuardrailUsage",
-  "viewProxyWideCostData",
-];
+const PROXY_ADMIN_ONLY_PAGE_CAPABILITIES: Capability[] = ["viewProxyWideCostData"];
 
 describe("hasCapability", () => {
   describe.each(ADMIN_ONLY_CAPABILITIES)("%s", (capability) => {
@@ -50,8 +42,6 @@ const SESSION_ROLE_AN_ORG_ADMIN_ACTUALLY_CARRIES = "Internal User";
 const ORG_ADMIN_BACKEND_ACCESS: ReadonlyArray<readonly [Capability, string, boolean]> = [
   ["viewDeletedTeams", "GET /v2/team/list?status=deleted -> 200 (scoped to their orgs)", true],
   ["viewOrganizationUsage", "GET /organization/daily/activity -> 200 (scoped to orgs they administer)", true],
-  ["viewToolPolicies", "GET /v1/tool/list -> 401", false],
-  ["viewPolicies", "GET /policies/list -> 401", false],
   ["viewPrompts", "GET /prompts/list -> 401", false],
   ["viewAuditLogs", "GET /audit -> 401", false],
 ];
@@ -145,8 +135,8 @@ describe.each(PROXY_ADMIN_ONLY_PAGE_CAPABILITIES)("hasCapability - %s", (capabil
 
 describe("rolesWithCapability", () => {
   it("should return a copy so callers cannot mutate the capability map", () => {
-    const roles = rolesWithCapability("viewToolPolicies");
+    const roles = rolesWithCapability("viewAuditLogs");
     const removed = roles.pop();
-    expect(hasCapability(removed, "viewToolPolicies")).toBe(true);
+    expect(hasCapability(removed, "viewAuditLogs")).toBe(true);
   });
 });

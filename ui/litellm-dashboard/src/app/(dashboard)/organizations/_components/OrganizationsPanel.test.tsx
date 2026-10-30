@@ -19,14 +19,6 @@ vi.mock("@/app/(dashboard)/hooks/organizations/useOrganizations", async (importO
   };
 });
 
-vi.mock("@/components/vector_store_management/VectorStoreSelector", () => ({
-  __esModule: true,
-  default: () => null,
-}));
-vi.mock("@/components/mcp_server_management/MCPServerSelector", () => ({
-  __esModule: true,
-  default: () => null,
-}));
 vi.mock("@/app/(dashboard)/hooks/useAuthorized", () => ({
   default: () => ({
     accessToken: null,
@@ -59,11 +51,10 @@ import OrganizationsPanel from "./OrganizationsPanel";
 const onUrlUpdate = vi.fn<(event: UrlUpdateEvent) => void>();
 
 interface RenderPanelOptions {
-  premiumUser?: boolean;
   searchParams?: string;
 }
 
-const renderPanel = ({ premiumUser = true, searchParams = "" }: RenderPanelOptions = {}) => {
+const renderPanel = ({ searchParams = "" }: RenderPanelOptions = {}) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -75,7 +66,7 @@ const renderPanel = ({ premiumUser = true, searchParams = "" }: RenderPanelOptio
   const tree = (currentSearchParams: string) => (
     <NuqsTestingAdapter searchParams={currentSearchParams} onUrlUpdate={handleUrlUpdate} hasMemory>
       <QueryClientProvider client={queryClient}>
-        <OrganizationsPanel userRole="Admin" accessToken={null} premiumUser={premiumUser} />
+        <OrganizationsPanel userRole="Admin" accessToken={null} />
       </QueryClientProvider>
     </NuqsTestingAdapter>
   );
@@ -102,17 +93,12 @@ beforeEach(() => {
 });
 
 describe("OrganizationsPanel", () => {
-  it("gates non-premium users behind the enterprise notice", () => {
-    renderPanel({ premiumUser: false });
-
-    expect(screen.getByText(/LiteLLM Enterprise feature/i)).toBeInTheDocument();
-    expect(screen.queryByText("+ Create New Organization")).not.toBeInTheDocument();
-  });
-
-  it("shows the create button for a premium admin", () => {
+  it("shows the create button and organizations table to an admin without an enterprise license", () => {
     renderPanel();
 
     expect(screen.getByText("+ Create New Organization")).toBeInTheDocument();
+    expect(screen.getByTestId("organizations-table")).toBeInTheDocument();
+    expect(screen.queryByText(/LiteLLM Enterprise feature/i)).not.toBeInTheDocument();
   });
 
   it("resolves the loading skeleton to false when the query is disabled (no token)", () => {

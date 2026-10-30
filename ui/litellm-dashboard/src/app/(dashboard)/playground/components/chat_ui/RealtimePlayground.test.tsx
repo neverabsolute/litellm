@@ -126,15 +126,6 @@ describe("RealtimePlayground", () => {
     expect(latestSocket().url).toContain("wss://tenant.example.com/v1/realtime");
   });
 
-  it("appends the selected guardrails to the session url", async () => {
-    const user = userEvent.setup();
-    render(<RealtimePlayground {...props} selectedGuardrails={["pii", "toxicity"]} />);
-
-    await user.click(screen.getByRole("button", { name: /Connect/i }));
-
-    expect(latestSocket().url).toContain("guardrails=pii%2Ctoxicity");
-  });
-
   it("refuses to dial without a model and says why", async () => {
     const user = userEvent.setup();
     render(<RealtimePlayground {...props} selectedModel="" />);

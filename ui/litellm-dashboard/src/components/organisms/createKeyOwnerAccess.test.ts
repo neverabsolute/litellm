@@ -84,12 +84,9 @@ describe("effectiveKeyOwner", () => {
     expect(effectiveKeyOwner("another_user", "none")).toBe("you");
   });
 
-  it.each(["you", "service_account", "agent"])(
-    "leaves %s alone for a viewer who may not pick another user",
-    (owner) => {
-      expect(effectiveKeyOwner(owner, "none")).toBe(owner);
-    },
-  );
+  it.each(["you", "service_account"])("leaves %s alone for a viewer who may not pick another user", (owner) => {
+    expect(effectiveKeyOwner(owner, "none")).toBe(owner);
+  });
 });
 
 describe("administersTeam", () => {

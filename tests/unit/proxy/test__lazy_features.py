@@ -23,20 +23,6 @@ FLAG: Final = "LITELLM_DISABLE_LAZY_ROUTES"
 WARMUP_PATH: Final = "/lazy/warm/{name}"
 
 
-def test_cimd_metadata_is_available_before_any_oauth_request(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(FLAG, "false")
-    monkeypatch.setenv("PROXY_BASE_URL", "https://gateway.example.com")
-    app: Final = FastAPI()
-    attach_lazy_features(app)
-
-    with TestClient(app) as client:
-        response: Final = client.get("/oauth/client-metadata.json")
-
-    assert response.status_code == 200
-    assert response.json()["client_id"] == "https://gateway.example.com/oauth/client-metadata.json"
-    assert response.json()["redirect_uris"] == ["https://gateway.example.com/callback"]
-
-
 class _Operation(BaseModel):
     tags: tuple[str, ...]
 
@@ -416,24 +402,3 @@ def test_without_the_flag_the_warmup_route_registers_a_feature_and_returns_its_p
         assert loaded_lazy_modules(app) == {features[0].module_path}
         assert "/alpha/list" in _paths(app) and "/beta/list" not in _paths(app)
 
-
-def test_root_authorization_server_metadata_is_the_gateways_not_the_byok_connector_document(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Two features claim the root ``/.well-known/oauth-authorization-server``. The one a client
-    gets must be the gateway's own authorization server metadata, whose ``/token`` serves the
-    gateway's grants, not the BYOK connector form flow whose token endpoint is
-    ``/v1/mcp/oauth/token``; the connector keeps its path-appended document."""
-    monkeypatch.setenv(FLAG, "false")
-    app: Final = FastAPI()
-    attach_lazy_features(app)
-
-    with TestClient(app, base_url="https://gateway.example.com") as client:
-        root: Final = client.get("/.well-known/oauth-authorization-server")
-        connector: Final = client.get("/.well-known/oauth-authorization-server/v1/mcp/oauth")
-
-    assert root.status_code == 200
-    assert root.json()["issuer"] == "https://gateway.example.com"
-    assert root.json()["token_endpoint"] == "https://gateway.example.com/token"
-    assert connector.status_code == 200
-    assert connector.json()["token_endpoint"] == "https://gateway.example.com/v1/mcp/oauth/token"

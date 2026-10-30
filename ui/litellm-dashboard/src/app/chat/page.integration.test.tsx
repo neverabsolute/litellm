@@ -22,10 +22,6 @@ vi.mock("@/components/llm_calls/responses_api", () => ({
   makeOpenAIResponsesRequest: mockMakeOpenAIResponsesRequest,
 }));
 
-vi.mock("@/components/chat/MCPConnectPicker", () => ({
-  default: () => <div data-testid="mcp-connect-picker" />,
-}));
-
 vi.mock("react-markdown", () => ({
   default: ({ children }: { children: string }) => <div>{children}</div>,
 }));
@@ -47,8 +43,6 @@ vi.mock("@/contexts/ChatShellContext", () => ({
       userEmail: "tester@example.com",
       userRole: "Admin",
       premiumUser: false,
-      selectedMCPServers: [],
-      setSelectedMCPServers: vi.fn(),
       conversations: history.conversations,
       activeConversation: history.activeConversation,
       activeConversationId: history.currentActiveId,
@@ -64,10 +58,10 @@ vi.mock("@/contexts/ChatShellContext", () => ({
   },
 }));
 
-const ONE_TURN_ARG_COUNT = 25;
+const ONE_TURN_ARG_COUNT = 17;
 const ON_TIMING_DATA_INDEX = 7;
 const ON_USAGE_DATA_INDEX = 8;
-const ON_TOTAL_LATENCY_INDEX = 24;
+const ON_TOTAL_LATENCY_INDEX = 16;
 
 async function sendOneMessage(onUrlUpdate?: OnUrlUpdateFunction): Promise<void> {
   renderWithProviders(<ChatConversationPage />, { onUrlUpdate });

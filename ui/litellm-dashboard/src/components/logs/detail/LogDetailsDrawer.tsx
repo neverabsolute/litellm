@@ -11,11 +11,11 @@ import { ClassifyTag } from "./ClassifyTag";
 import { type DrawerBackTo, DrawerHeader } from "./DrawerHeader";
 import { SidebarToggle } from "./SidebarToggle";
 import { useKeyboardNavigation } from "./useKeyboardNavigation";
-import { LogDetailContent, GuardrailJumpLink } from "./LogDetailContent";
+import { LogDetailContent } from "./LogDetailContent";
 import { sessionSpendLogsCall } from "../../networking";
 import { useQuery } from "@tanstack/react-query";
 import { getSpendString } from "@/utils/dataUtils";
-import { normalizeGuardrailEntries, sortSessionLogs, SessionLogSortMode } from "./utils";
+import { sortSessionLogs, SessionLogSortMode } from "./utils";
 import { DRAWER_WIDTH } from "./constants";
 import { useLogDetails } from "@/app/(dashboard)/hooks/logDetails/useLogDetails";
 import { useUserLookup } from "@/app/(dashboard)/hooks/users/useUsers";
@@ -110,7 +110,7 @@ function TraceEventRow({ row, isSelected, onClick }: TraceEventRowProps) {
  * - Formatted and JSON view toggle for request/response
  * - Smart display of cache fields (hidden when zero)
  * - Error alerts for failed requests
- * - Collapsible sections for guardrails, vector store, metadata
+ * - Collapsible sections for metadata
  */
 export function LogDetailsDrawer({
   open,
@@ -405,11 +405,6 @@ export function LogDetailsDrawer({
               </div>
 
               <div className="flex-1 overflow-y-auto">
-                {normalizeGuardrailEntries(metadata?.guardrail_information).length > 0 && (
-                  <div className="px-3 pt-2">
-                    <GuardrailJumpLink guardrailEntries={normalizeGuardrailEntries(metadata?.guardrail_information)} />
-                  </div>
-                )}
                 {isSessionMode ? (
                   <div className="py-1">
                     {/* Child events — vertical tree line with horizontal connectors */}

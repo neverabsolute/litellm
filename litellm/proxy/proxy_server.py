@@ -73,7 +73,6 @@ from litellm.constants import (
     AUDIO_SPEECH_CHUNK_SIZE,
     AWS_ERROR_TYPE_HEADER,
     BACKGROUND_HEALTH_CHECK_DB_SAVE_JOB_NAME,
-    BASE_MCP_ROUTE,
     DAILY_TAG_SPEND_BATCH_MULTIPLIER,
     DEFAULT_MAX_RECURSE_DEPTH,
     DEFAULT_SHARED_HEALTH_CHECK_LOCK_TTL,
@@ -643,7 +642,6 @@ from litellm.proxy.db.request_error_tracking import (
 )
 from litellm.proxy.db.spend_counter_reseed import END_USER_COUNTER_PREFIX, SpendCounterReseed
 from litellm.proxy.discovery_endpoints import (
-    agent_skills_discovery_router,
     ui_discovery_endpoints_router,
 )
 from litellm.proxy.fine_tuning_endpoints.endpoints import router as fine_tuning_router
@@ -676,8 +674,6 @@ from litellm.proxy.hooks.proxy_track_cost_callback import (  # noqa: F401, RUF10
     run_spend_event,
 )
 from litellm.proxy.image_endpoints.endpoints import router as image_router
-from litellm.proxy.lens.adapter import router as lens_router
-from litellm.proxy.lens.internal import LensInternalMiddleware
 from litellm.proxy.list_api.common import (
     ManagementProblem,
     problem_response,
@@ -809,9 +805,6 @@ from litellm.proxy.management_endpoints.ui_sso import router as ui_sso_router
 from litellm.proxy.management_endpoints.user_agent_analytics_endpoints import (
     router as user_agent_analytics_router,
 )
-from litellm.proxy.management_endpoints.workflow_management_endpoints import (
-    router as workflow_management_router,
-)
 from litellm.proxy.management_helpers.audit_logs import (
     create_audit_log_for_update,
     create_object_audit_log,
@@ -822,9 +815,7 @@ from litellm.proxy.management_helpers.team_metadata_validation import (
     parse_team_metadata_schema,
 )
 from litellm.proxy.mcp_server.byok_credential_cache import byok_credential_cache
-from litellm.proxy.mcp_server.catalog import public_catalog_operation
 from litellm.proxy.mcp_server.stdio_gate import MCP_STDIO_ENABLED_ENV_VAR, is_mcp_stdio_flag_key
-from litellm.proxy.memory.memory_endpoints import router as memory_router
 from litellm.proxy.middleware.billable_request_metrics_middleware import (
     BillableRequestMetricsMiddleware,
     BillingRecorder,
@@ -908,7 +899,6 @@ from litellm.proxy.pass_through_endpoints.pass_through_endpoints import (
 )
 from litellm.proxy.prometheus_cleanup import mark_dead_workers, mark_worker_exit
 from litellm.proxy.public_endpoints import router as public_endpoints_router
-from litellm.proxy.public_endpoints.public_v1 import router as public_v1_router
 from litellm.proxy.rag_endpoints.endpoints import router as rag_router
 from litellm.proxy.rerank_endpoints.endpoints import router as rerank_router
 from litellm.proxy.response_api_endpoints.endpoints import router as response_router
@@ -2925,7 +2915,6 @@ app.add_middleware(
 )
 app.add_middleware(BudgetReservationReleaseMiddleware, release=release_unbound_budget_reservation)
 app.add_middleware(RedisRequestBatchMiddleware)
-app.add_middleware(LensInternalMiddleware)
 app.add_middleware(InFlightRequestsMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(GZipBufferedResponseMiddleware)
@@ -8830,35 +8819,11 @@ class ProxyConfig:
 
         ex. Vector Stores, Guardrails, MCP tools, etc.
         """
-        if self._should_load_db_object(object_type="guardrails"):
-            await self._init_guardrails_in_db(prisma_client=prisma_client)
-
-        if self._should_load_db_object(object_type="policies"):
-            await self._init_policies_in_db(prisma_client=prisma_client)
-
-        if self._should_load_db_object(object_type="vector_stores"):
-            await self._init_vector_stores_in_db(prisma_client=prisma_client)
-
-        if self._should_load_db_object(object_type="vector_store_indexes"):
-            await self._init_vector_store_indexes_in_db(prisma_client=prisma_client)
-
-        if self._should_load_db_object(object_type="mcp"):
-            await self._init_mcp_servers_in_db()
-
-        if self._should_load_db_object(object_type="agents"):
-            await self._init_agents_in_db(prisma_client=prisma_client)
-
         if self._should_load_db_object(object_type="pass_through_endpoints"):
             await self._init_pass_through_endpoints_in_db()
 
         if self._should_load_db_object(object_type="prompts"):
             await self._init_prompts_in_db(prisma_client=prisma_client)
-
-        if self._should_load_db_object(object_type="search_tools"):
-            await self._init_search_tools_in_db(prisma_client=prisma_client)
-
-        if self._should_load_db_object(object_type="tools"):
-            await self._init_tool_policy_in_db(prisma_client=prisma_client)
 
         if self._should_load_db_object(object_type="anthropic_beta_headers"):
             await self._check_and_reload_anthropic_beta_headers(prisma_client=prisma_client)
@@ -9389,289 +9354,6 @@ class ProxyConfig:
                     IN_MEMORY_PROMPT_REGISTRY.remove_prompt(registry_key=deleted_registry_key)
         except Exception as e:
             verbose_proxy_logger.debug("litellm.proxy.proxy_server.py::ProxyConfig:_init_prompts_in_db - %s", e)
-
-    async def _init_guardrails_in_db(self, prisma_client: PrismaClient):
-        from litellm.proxy.guardrails.guardrail_registry import (
-            GUARDRAIL_RECONCILE_LOCK,
-            IN_MEMORY_GUARDRAIL_HANDLER,
-            Guardrail,
-            GuardrailRegistry,
-        )
-
-        try:
-            async with GUARDRAIL_RECONCILE_LOCK:
-                guardrails_in_db: Final[list[Guardrail]] = await GuardrailRegistry.get_all_guardrails_from_db(
-                    prisma_client=prisma_client
-                )
-                verbose_proxy_logger.debug("guardrails from the DB %s", str(guardrails_in_db))
-                db_guardrail_ids: Final[set] = set()
-                for guardrail in guardrails_in_db:
-                    guardrail_id = guardrail.get("guardrail_id")
-                    if guardrail_id:
-                        db_guardrail_ids.add(guardrail_id)
-                    try:
-                        IN_MEMORY_GUARDRAIL_HANDLER.sync_guardrail_from_db(
-                            guardrail=cast(Guardrail, guardrail),
-                        )
-                    except Exception as e:  # noqa: BLE001  # one unloadable row must not stop the remaining guardrails
-                        verbose_proxy_logger.error(
-                            "litellm.proxy.proxy_server.py::ProxyConfig:_init_guardrails_in_db - "
-                            "skipping guardrail '%s' (ID: %s): %s: %s",
-                            guardrail.get("guardrail_name"),
-                            guardrail_id,
-                            type(e).__name__,
-                            e,
-                        )
-
-                # Drop in-memory DB-backed entries whose row was deleted on another
-                # pod. Config-loaded entries are never touched.
-                IN_MEMORY_GUARDRAIL_HANDLER.reconcile_db_guardrails(db_guardrail_ids=db_guardrail_ids)
-        except Exception as e:
-            verbose_proxy_logger.exception("litellm.proxy.proxy_server.py::ProxyConfig:_init_guardrails_in_db - %s", e)
-
-    async def _init_policies_in_db(self, prisma_client: PrismaClient):
-        """
-        Initialize policies and policy attachments from database into the in-memory registries.
-        """
-        from litellm.proxy.policy_engine.attachment_registry import (
-            get_attachment_registry,
-        )
-        from litellm.proxy.policy_engine.policy_registry import get_policy_registry
-
-        try:
-            # Get the global singleton instances
-            policy_registry: Final = get_policy_registry()
-            attachment_registry: Final = get_attachment_registry()
-
-            # Sync policies from DB to in-memory registry
-            await policy_registry.sync_policies_from_db(prisma_client=prisma_client)
-
-            # Sync attachments from DB to in-memory registry
-            await attachment_registry.sync_attachments_from_db(prisma_client=prisma_client)
-
-            verbose_proxy_logger.debug("Successfully synced policies and attachments from DB")
-        except Exception as e:
-            verbose_proxy_logger.exception("litellm.proxy.proxy_server.py::ProxyConfig:_init_policies_in_db - %s", e)
-
-    async def _init_tool_policy_in_db(self, prisma_client: PrismaClient):
-        """
-        Initialize tool policy from database into the in-memory registry.
-        Synced periodically by add_deployment -> _init_non_llm_objects_in_db.
-        """
-        from litellm.proxy.db.tool_registry_writer import get_tool_policy_registry
-
-        try:
-            registry: Final = get_tool_policy_registry()
-            await registry.sync_tool_policy_from_db(prisma_client=prisma_client)
-            verbose_proxy_logger.debug("Successfully synced tool policy from DB")
-        except Exception as e:
-            verbose_proxy_logger.exception("litellm.proxy.proxy_server.py::ProxyConfig:_init_tool_policy_in_db - %s", e)
-
-    async def _init_vector_stores_in_db(self, prisma_client: PrismaClient):
-        from litellm.vector_stores.vector_store_registry import VectorStoreRegistry
-
-        try:
-            # read vector stores from db table
-            vector_stores: Final = await VectorStoreRegistry.get_vector_stores_from_db(prisma_client=prisma_client)
-            if len(vector_stores) <= 0:
-                return
-
-            if litellm.vector_store_registry is None:
-                litellm.vector_store_registry = VectorStoreRegistry(vector_stores=vector_stores)
-            else:
-                for vector_store in vector_stores:
-                    litellm.vector_store_registry.add_vector_store_to_registry(vector_store=vector_store)
-        except Exception as e:
-            verbose_proxy_logger.exception(
-                "litellm.proxy.proxy_server.py::ProxyConfig:_init_vector_stores_in_db - %s", e
-            )
-
-    async def _init_vector_store_indexes_in_db(self, prisma_client: PrismaClient):
-        from litellm.vector_stores.vector_store_registry import VectorStoreIndexRegistry
-
-        try:
-            # read vector stores from db table
-            vector_store_indexes: Final = await VectorStoreIndexRegistry.get_vector_store_indexes_from_db(
-                prisma_client=prisma_client
-            )
-
-            if len(vector_store_indexes) <= 0:
-                return
-
-            if litellm.vector_store_index_registry is None:
-                litellm.vector_store_index_registry = VectorStoreIndexRegistry(
-                    vector_store_indexes=vector_store_indexes
-                )
-            else:
-                for vector_store_index in vector_store_indexes:
-                    litellm.vector_store_index_registry.upsert_vector_store_index(vector_store_index=vector_store_index)
-        except Exception as e:
-            verbose_proxy_logger.exception(
-                "litellm.proxy.proxy_server.py::ProxyConfig:_init_vector_stores_in_db - %s", e
-            )
-
-    async def _init_mcp_servers_in_db(self):
-        from litellm.proxy.mcp_server.utils import is_mcp_available
-
-        if not is_mcp_available():
-            verbose_proxy_logger.debug("MCP module not available, skipping MCP server initialization")
-            return
-
-        from litellm.proxy.mcp_server.mcp_server_manager import (
-            global_mcp_server_manager,
-        )
-        from litellm.proxy.mcp_server.oauth2_flow_backfill import (
-            backfill_null_oauth2_flows,
-        )
-        from litellm.proxy.mcp_server.oauth_issuer_stamp_backfill import (
-            backfill_discovery_stamped_issuers,
-        )
-
-        try:
-            if prisma_client is not None:
-                await backfill_null_oauth2_flows(prisma_client)
-        except Exception as e:  # noqa: BLE001
-            verbose_proxy_logger.exception(
-                "litellm.proxy.proxy_server.py::ProxyConfig:_init_mcp_servers_in_db backfill - %s", e
-            )
-
-        try:
-            if prisma_client is not None:
-                await backfill_discovery_stamped_issuers(prisma_client)
-        except Exception as e:  # noqa: BLE001
-            verbose_proxy_logger.exception(
-                "litellm.proxy.proxy_server.py::ProxyConfig:_init_mcp_servers_in_db issuer stamp backfill - %s", e
-            )
-
-        try:
-            await global_mcp_server_manager.reload_servers_from_database()
-        except Exception as e:
-            verbose_proxy_logger.exception("litellm.proxy.proxy_server.py::ProxyConfig:_init_mcp_servers_in_db - %s", e)
-
-    async def init_mcp_servers_from_db(self) -> None:
-        if self._should_load_db_object(object_type="mcp"):
-            await self._init_mcp_servers_in_db()
-
-    async def reload_mcp_servers_from_db(self) -> None:
-        """Registry refresh only, for the periodic job in store_model_in_db-off deployments.
-
-        Deliberately narrower than ``init_mcp_servers_from_db``: the oauth2_flow backfill is a write
-        path that only needs to run once at startup, so the cadence here is purely the read-side
-        reload whose fast-path exemption retries failed OAuth discovery. Gated the same way, so an
-        admin who excluded mcp from supported_db_objects opts out of this too.
-        """
-        if not self._should_load_db_object(object_type="mcp"):
-            return
-        from litellm.proxy.mcp_server.utils import is_mcp_available
-
-        if not is_mcp_available():
-            return
-        from litellm.proxy.mcp_server.mcp_server_manager import (
-            global_mcp_server_manager,
-        )
-
-        try:
-            await global_mcp_server_manager.reload_servers_from_database()
-        except Exception as e:  # noqa: BLE001  # scheduled job: a reload failure must not kill the recurring retry
-            verbose_proxy_logger.exception(
-                "litellm.proxy.proxy_server.py::ProxyConfig:reload_mcp_servers_from_db - %s", e
-            )
-
-    async def _init_agents_in_db(self, prisma_client: PrismaClient):
-        from litellm.proxy.agent_endpoints.agent_registry import (
-            AGENT_RECONCILE_LOCK,
-        )
-        from litellm.proxy.agent_endpoints.agent_registry import (
-            global_agent_registry as AGENT_REGISTRY,
-        )
-
-        try:
-            async with AGENT_RECONCILE_LOCK:
-                db_agents: Final = await AGENT_REGISTRY.get_all_agents_from_db(prisma_client=prisma_client)
-                AGENT_REGISTRY.load_agents_from_db_and_config(db_agents=db_agents)
-        except Exception as e:
-            verbose_proxy_logger.exception("litellm.proxy.proxy_server.py::ProxyConfig:_init_agents_in_db - %s", e)
-
-    async def _init_search_tools_in_db(self, prisma_client: PrismaClient):
-        """
-        Initialize search tools from database into the router on startup.
-        """
-        global llm_router
-
-        from litellm.proxy.search_endpoints.search_tool_registry import (
-            SearchToolRegistry,
-            keep_loaded_search_tools_that_do_not_decrypt,
-        )
-        from litellm.router_utils.search_api_router import SearchAPIRouter
-
-        try:
-            db_search_tools: Final = keep_loaded_search_tools_that_do_not_decrypt(
-                await SearchToolRegistry.get_all_search_tools_from_db(prisma_client=prisma_client),
-                loaded_search_tools=llm_router.settings().search_tools if llm_router is not None else (),
-            )
-
-            parsed_tools: Final = self.parse_search_tools(self.get_config_state())
-            config_search_tools: Final = parsed_tools or []
-
-            search_tools: Final = self._merge_config_and_db_search_tools(
-                config_search_tools=config_search_tools,
-                db_search_tools=[dict(tool) for tool in db_search_tools],
-            )
-
-            verbose_proxy_logger.info(
-                "Loading %s search tool(s) into router (%s from config, %s from database)",
-                len(search_tools),
-                len(config_search_tools),
-                len(db_search_tools),
-            )
-
-            if llm_router is not None:
-                await SearchAPIRouter.update_router_search_tools(router_instance=llm_router, search_tools=search_tools)
-                verbose_proxy_logger.info("Successfully loaded %s search tool(s) into router", len(search_tools))
-            else:
-                verbose_proxy_logger.debug(
-                    "Router not initialized yet, search tools will be added when router is created"
-                )
-
-        except Exception as e:
-            verbose_proxy_logger.exception(
-                "litellm.proxy.proxy_server.py::ProxyConfig:_init_search_tools_in_db - %s", e
-            )
-
-    async def reload_search_tools_from_db(self) -> None:
-        """Refresh this worker's router from the search tools table.
-
-        Driven by the management endpoints so the worker that served the write is correct
-        immediately, and by the periodic job in store_model_in_db-off deployments. Gated the same
-        way as startup, so an admin who excluded search_tools from supported_db_objects opts out.
-
-        Serialized by MODEL_RECONCILE_LOCK for the reason add_deployment documents: the body is a
-        read-modify-write of the shared ``llm_router`` global, so two of them interleaving lets the
-        older snapshot's wholesale assignment land last and restore a tool the newer one deleted.
-        The lock belongs here rather than in _init_search_tools_in_db, which _init_non_llm_objects_in_db
-        already calls while holding it.
-        """
-        if not self._should_load_db_object(object_type="search_tools"):
-            return
-        if prisma_client is None:
-            return
-        async with MODEL_RECONCILE_LOCK:
-            await self._init_search_tools_in_db(prisma_client=prisma_client)
-
-    @staticmethod
-    def _merge_config_and_db_search_tools(
-        config_search_tools: Sequence[SearchToolTypedDict],
-        db_search_tools: Sequence[dict[str, object]],
-    ) -> list[dict[str, object]]:
-        db_tool_names: Final = {tool.get("search_tool_name") for tool in db_search_tools}
-        return [
-            *[
-                dict(config_search_tool)
-                for config_search_tool in config_search_tools
-                if config_search_tool.get("search_tool_name") not in db_tool_names
-            ],
-            *db_search_tools,
-        ]
 
     async def _init_pass_through_endpoints_in_db(self):
         from litellm.proxy.pass_through_endpoints.pass_through_endpoints import (
@@ -11523,36 +11205,6 @@ class ProxyStartupEvent:
                 proxy_logging_obj=proxy_logging_obj,
                 redis_cache=redis_usage_cache,
             )
-
-        if store_model_in_db is not True:
-            await proxy_config.init_mcp_servers_from_db()
-            # Without this branch's own refresh, a UI-created search tool never reaches the router:
-            # the add_deployment job that carries it in store_model_in_db=True mode is not scheduled.
-            await proxy_config.reload_search_tools_from_db()
-            if prisma_client is not None:
-                scheduler.add_job(
-                    proxy_config.reload_search_tools_from_db,
-                    "interval",
-                    seconds=config_reload_interval_seconds,
-                    id="reload_search_tools_job",
-                    replace_existing=True,
-                    misfire_grace_time=APSCHEDULER_MISFIRE_GRACE_TIME,
-                )
-                # DB-backed MCP servers are live objects in every mode, so the registry refresh that
-                # store_model_in_db=True deployments get via the add_deployment job must run here
-                # too; without it, a server whose OAuth discovery failed at startup is rebuilt only
-                # by a management write, since the reload fast path is the retry's only driver.
-                mcp_reload_interval_seconds = proxy_config_reload_interval_seconds
-                if not isinstance(mcp_reload_interval_seconds, int) or mcp_reload_interval_seconds <= 0:
-                    mcp_reload_interval_seconds = 30
-                scheduler.add_job(
-                    proxy_config.reload_mcp_servers_from_db,
-                    "interval",
-                    seconds=mcp_reload_interval_seconds,
-                    id="reload_mcp_servers_job",
-                    replace_existing=True,
-                    misfire_grace_time=APSCHEDULER_MISFIRE_GRACE_TIME,
-                )
 
         heuristic_v1_tuning_baselines = await cls.enforce_heuristic_v1_tuning_baseline(
             prisma_client=prisma_client,
@@ -21766,7 +21418,6 @@ async def get_routes():
 app.include_router(router)
 app.include_router(response_router)
 app.include_router(public_endpoints_router)
-app.include_router(public_v1_router)
 app.include_router(rerank_router)
 app.include_router(ocr_router)
 app.include_router(rag_router)
@@ -21810,9 +21461,6 @@ app.include_router(model_management_router)
 app.include_router(model_access_group_management_router)
 app.include_router(auto_router_management_router)
 app.include_router(tag_management_router)
-app.include_router(workflow_management_router)
-app.include_router(memory_router)
-app.include_router(lens_router)
 app.include_router(plugin_router)
 app.include_router(cost_tracking_settings_router)
 app.include_router(subscription_accounts_router)
@@ -21828,7 +21476,6 @@ app.include_router(ip_analytics_router)
 app.include_router(telemetry_router)
 app.include_router(enterprise_router)
 app.include_router(ui_discovery_endpoints_router)
-app.include_router(agent_skills_discovery_router)
 # Eager: /models/{name}:method overlaps with the OpenAI /models endpoint.
 app.include_router(google_router)
 
@@ -21860,341 +21507,3 @@ if _server_root_paths:
             _server_root_paths,
         )
     app.add_middleware(PerRequestRootPathMiddleware, root_paths=_server_root_paths)
-
-
-async def _stream_mcp_asgi_response(handle_fn, scope: dict, receive) -> "StreamingResponse":
-    """
-    Call an ASGI MCP handler and return a StreamingResponse so SSE/streaming works.
-
-    asyncio.create_task copies the current context, so any ContextVar set before
-    this call (e.g. mcp_active_toolset_id) is visible inside the handler task.
-    """
-    from starlette.responses import StreamingResponse
-
-    headers_ready: Final[asyncio.Future] = asyncio.get_running_loop().create_future()
-    body_queue: Final[asyncio.Queue] = asyncio.Queue(maxsize=1024)
-
-    async def bridging_send(message):
-        if message["type"] == "http.response.start":
-            if not headers_ready.done():
-                headers_ready.set_result((message.get("status", 200), message.get("headers", [])))
-        elif message["type"] == "http.response.body":
-            chunk: Final = message.get("body", b"")
-            if chunk:
-                await body_queue.put(chunk)
-            if not message.get("more_body", False):
-                await body_queue.put(None)  # EOF sentinel
-
-    handler_task: Final = asyncio.create_task(handle_fn(scope, receive, bridging_send))
-
-    # If the handler task dies (exception or cancellation) without sending the EOF
-    # sentinel, body_iter() would block forever on body_queue.get().  The callback
-    # below guarantees the queue gets unblocked regardless of how the task ends.
-    # When this happens before response headers, propagate the original exception
-    # instead of waiting for the header timeout.
-    def _ensure_eof(task: asyncio.Task) -> None:
-        if task.cancelled():
-            body_queue.put_nowait(None)
-            return
-
-        task_exception: Final = task.exception()
-        if task_exception is not None:
-            if not headers_ready.done():
-                headers_ready.set_exception(task_exception)
-            body_queue.put_nowait(None)
-
-    handler_task.add_done_callback(_ensure_eof)
-
-    try:
-        status, raw_headers = await asyncio.wait_for(asyncio.shield(headers_ready), timeout=30.0)
-    except asyncio.TimeoutError:
-        handler_task.cancel()
-        raise HTTPException(status_code=504, detail="MCP handler did not respond in time")
-
-    headers_dict: Final = {k.decode("latin-1"): v.decode("latin-1") for k, v in raw_headers}
-
-    async def body_iter():
-        try:
-            while True:
-                chunk = await body_queue.get()
-                if chunk is None:
-                    break
-                yield chunk
-        finally:
-            if not handler_task.done():
-                handler_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await handler_task
-
-    return StreamingResponse(
-        body_iter(),
-        status_code=status,
-        headers=headers_dict,
-        media_type=headers_dict.get("content-type"),
-    )
-
-
-########################################################
-# MCP Server
-########################################################
-
-
-@app.api_route(
-    "/mcp/proxy",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
-)
-async def proxy_mcp_route(request: Request) -> Response:
-    """Serve the fixed three-tool MCP proxy surface."""
-    from litellm.proxy.mcp_server.mcp_context import (  # pyright: ignore[reportPrivateUsage]  # route-owned mode
-        _mcp_proxy_mode,  # pyright: ignore[reportPrivateUsage]  # route-owned mode
-    )
-    from litellm.proxy.mcp_server.server import handle_streamable_http_mcp
-    from litellm.proxy.mcp_server.utils import is_mcp_available
-
-    if not is_mcp_available():
-        raise HTTPException(status_code=404, detail="Not Found")
-
-    token: Final = _mcp_proxy_mode.set(True)
-    try:
-        scope: Final = dict(request.scope)
-        scope["_original_path"] = scope.get("path", "")
-        scope["path"] = BASE_MCP_ROUTE
-        return await _stream_mcp_asgi_response(handle_streamable_http_mcp, scope, request.receive)
-    finally:
-        _mcp_proxy_mode.reset(token)
-
-
-@app.api_route(
-    BASE_MCP_ROUTE,
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
-)
-async def aggregate_mcp_route(request: Request):
-    """Serve the aggregate MCP endpoint on the bare ``/mcp`` spelling: the
-    ``/mcp`` mount cannot match its bare prefix, and the resulting 307 breaks
-    MCP clients behind TLS-terminating proxies."""
-    from litellm.proxy.mcp_server.utils import is_mcp_available
-
-    if not is_mcp_available():
-        raise HTTPException(status_code=404, detail="Not Found")
-
-    from litellm.proxy.mcp_server.server import (
-        handle_streamable_http_mcp,
-    )
-
-    scope = dict(request.scope)
-    scope["_original_path"] = scope.get("path", "")
-    scope["path"] = BASE_MCP_ROUTE
-    return await _stream_mcp_asgi_response(handle_streamable_http_mcp, scope, request.receive)
-
-
-# Toolset-namespaced MCP routes - handle /toolset/{toolset_name}/mcp
-# Must be declared BEFORE /{mcp_server_name}/mcp to avoid being swallowed by the catchall.
-@app.api_route(
-    "/toolset/{toolset_name}/mcp",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
-)
-async def toolset_mcp_route(toolset_name: str, request: Request):
-    """
-    Namespace a toolset as its own MCP endpoint.
-
-    Connecting to /toolset/<name>/mcp exposes exactly the tools defined in
-    the toolset. Access is enforced: non-admin API keys must have the toolset
-    listed in their object_permission.mcp_toolsets grant list, or the request
-    will be rejected with a 403.
-    """
-    try:
-        from litellm.proxy.mcp_server.mcp_server_manager import (
-            global_mcp_server_manager,
-        )
-        from litellm.proxy.mcp_server.server import (
-            handle_streamable_http_mcp,
-            mcp_active_toolset_id,
-        )
-
-        if prisma_client is None:
-            raise HTTPException(status_code=503, detail="Database not available")
-
-        toolset: Final = await global_mcp_server_manager.get_toolset_by_name_cached(prisma_client, toolset_name)
-        if toolset is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Toolset '{toolset_name}' not found",
-            )
-
-        scope: Final = {**request.scope, "_original_path": request.scope.get("path", ""), "path": "/mcp"}
-
-        token: Final = mcp_active_toolset_id.set(toolset.toolset_id)
-        try:
-            return await _stream_mcp_asgi_response(handle_streamable_http_mcp, scope, request.receive)
-        finally:
-            mcp_active_toolset_id.reset(token)
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        verbose_proxy_logger.exception("Error handling toolset MCP route for %s: %s", toolset_name, str(e))
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-async def _mcp_forward_as_path(path_segment: str, request: Request):
-    """Rewrite path to /mcp/{path_segment} and stream the response."""
-    from litellm.proxy.mcp_server.server import (
-        handle_streamable_http_mcp,
-    )
-
-    scope: Final = dict(request.scope)
-    # Preserve the public request path for OAuth challenge URL selection.
-    scope["_original_path"] = scope.get("path", "")
-    scope["path"] = f"/mcp/{path_segment}"
-    return await _stream_mcp_asgi_response(handle_streamable_http_mcp, scope, request.receive)
-
-
-async def _resolve_mcp_csv_tokens(csv_segment: str, client_ip: str | None) -> list[str]:
-    """Validate a comma-separated ``/{name1,name2,...}/mcp`` segment.
-
-    For each token, check (in order) whether it is a registered MCP server
-    alias / name or an MCP access group tag (cached). Tokens are stripped,
-    deduped (exact-match, keeping first occurrence in original order), and
-    capped at ``DEFAULT_MCP_NAMESPACE_CSV_MAX_TOKENS`` to bound the
-    per-request DB / cache fan-out an authenticated caller can trigger by
-    stuffing the path with tokens. Dedup is case-sensitive on purpose:
-    downstream resolvers may treat names case-sensitively, so collapsing
-    ``MyGroup`` and ``mygroup`` would risk dropping a valid distinct token.
-
-    Toolset names are intentionally NOT resolved here — toolsets bind a single
-    toolset id into request scope and have no defined semantics inside a
-    comma-separated server list.
-
-    Returns the subset of resolved tokens in original order. An empty list
-    means the segment did not resolve to any known server / group; the caller
-    should treat that as a 404 instead of forwarding it downstream (where an
-    all-unmatched server filter falls back to the full ``allowed_mcp_servers``
-    list and silently broadens the request scope).
-    """
-    from litellm.proxy.mcp_server.catalog import global_manager
-
-    async with global_manager().catalog.operation():
-        from litellm.constants import DEFAULT_MCP_NAMESPACE_CSV_MAX_TOKENS
-        from litellm.proxy.mcp_server.mcp_server_manager import (
-            global_mcp_server_manager,
-        )
-
-        deduped: Final = tuple(
-            token for token in dict.fromkeys(raw.strip() for raw in csv_segment.split(",")) if token
-        )[:DEFAULT_MCP_NAMESPACE_CSV_MAX_TOKENS]
-
-        resolved: Final[list[str]] = []  # mutable-ok: sequential await per token cannot live in a comprehension
-        for token in deduped:
-            if global_mcp_server_manager.get_mcp_server_by_name(token, client_ip=client_ip):
-                resolved.append(token)
-                continue
-            if await _is_mcp_access_group_cached(token):
-                resolved.append(token)
-        return resolved
-
-
-async def _is_mcp_access_group_cached(name: str) -> bool:
-    """Return True if *name* is a known MCP access group tag.
-
-    Positive results are cached for the configured management-object TTL
-    (``get_management_object_ttl(user_api_key_cache)``). Negative results are
-    cached for a short
-    ``DEFAULT_MCP_ACCESS_GROUP_NEGATIVE_CACHE_TTL`` window so unauthenticated
-    callers cannot force a fresh DB lookup per request for unknown names, while
-    bounding staleness so a transient DB error (which surfaces as an empty
-    list) cannot hide a real group for long.
-    """
-    from litellm.constants import DEFAULT_MCP_ACCESS_GROUP_NEGATIVE_CACHE_TTL
-    from litellm.proxy.mcp_server.auth.user_api_key_auth_mcp import (
-        MCPRequestHandler,
-    )
-
-    cache_key: Final = f"mcp_access_group_exists:{name}"
-    cached: Final[object] = _UNTYPED_VALUE.validate_python(await user_api_key_cache.async_get_cache(key=cache_key))
-    if cached is not None:
-        return bool(cached)
-    result: Final = bool(await MCPRequestHandler.get_mcp_servers_from_access_groups([name]))
-    await user_api_key_cache.async_set_cache(
-        key=cache_key,
-        value=result,
-        ttl=(get_management_object_ttl(user_api_key_cache) if result else DEFAULT_MCP_ACCESS_GROUP_NEGATIVE_CACHE_TTL),
-    )
-    return result
-
-
-# Dynamic MCP server routes - handle /{mcp_server_name}/mcp
-@app.api_route(
-    "/{mcp_server_name}/mcp",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
-)
-@public_catalog_operation
-async def dynamic_mcp_route(mcp_server_name: str, request: Request):
-    """Handle /{name}/mcp for MCP server aliases, toolsets, MCP access group tags, and comma-separated lists.
-
-    Resolution order:
-    1. Registered MCP server alias / name
-    2. Comma-separated list
-    3. Toolset name (DB lookup, cached)
-    4. MCP access group tag (DB lookup, cached)
-    """
-    try:
-        from litellm.proxy.auth.ip_address_utils import IPAddressUtils
-        from litellm.proxy.mcp_server.mcp_server_manager import (
-            global_mcp_server_manager,
-        )
-
-        client_ip: Final = IPAddressUtils.get_mcp_client_ip(request)
-
-        # 1. Registered MCP server alias
-        async with global_mcp_server_manager.catalog.operation():
-            server: Final = global_mcp_server_manager.get_mcp_server_by_name(mcp_server_name, client_ip=client_ip)
-        if server is not None:
-            return await _mcp_forward_as_path(mcp_server_name, request)
-
-        # 2. Comma-separated list — validate every token resolves to a known
-        # server alias or access group before forwarding. Bounds DB / cache
-        # fan-out and prevents the downstream filter from silently falling back
-        # to the full allowed_mcp_servers list when no token matches.
-        if "," in mcp_server_name:
-            resolved_tokens: Final = await _resolve_mcp_csv_tokens(mcp_server_name, client_ip)
-            if not resolved_tokens:
-                raise HTTPException(
-                    status_code=404,
-                    detail=(
-                        f"No MCP server, toolset, or access group in '{mcp_server_name}' resolved to a known target"
-                    ),
-                )
-            return await _mcp_forward_as_path(",".join(resolved_tokens), request)
-
-        # 3. Toolset name (cached)
-        if prisma_client is not None:
-            from litellm.proxy.mcp_server.server import (
-                handle_streamable_http_mcp,
-                mcp_active_toolset_id,
-            )
-
-            toolset: Final = await global_mcp_server_manager.get_toolset_by_name_cached(prisma_client, mcp_server_name)
-            if toolset is not None:
-                scope: Final = dict(request.scope)
-                scope["_original_path"] = scope.get("path", "")
-                scope["path"] = "/mcp"
-                token: Final = mcp_active_toolset_id.set(toolset.toolset_id)
-                try:
-                    return await _stream_mcp_asgi_response(handle_streamable_http_mcp, scope, request.receive)
-                finally:
-                    mcp_active_toolset_id.reset(token)
-
-        # 4. MCP access group tag (cached)
-        if await _is_mcp_access_group_cached(mcp_server_name):
-            return await _mcp_forward_as_path(mcp_server_name, request)
-
-        raise HTTPException(
-            status_code=404,
-            detail=f"MCP server, toolset, or access group '{mcp_server_name}' not found",
-        )
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        verbose_proxy_logger.exception("Error handling dynamic MCP route for %s: %s", mcp_server_name, str(e))
-        raise HTTPException(status_code=500, detail="Internal server error")

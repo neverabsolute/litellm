@@ -22,14 +22,6 @@ vi.mock("@/components/tag_management/TagSelector", () => ({
   default: () => <div data-testid="tag-selector">TagSelector</div>,
 }));
 
-vi.mock("@/components/vector_store_management/VectorStoreSelector", () => ({
-  default: () => <div data-testid="vector-store-selector">VectorStoreSelector</div>,
-}));
-
-vi.mock("@/components/guardrails/GuardrailSelector", () => ({
-  default: () => <div data-testid="guardrail-selector">GuardrailSelector</div>,
-}));
-
 beforeEach(() => {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -49,13 +41,9 @@ beforeEach(() => {
 const mockComparison: ComparisonInstance = {
   id: "1",
   model: "gpt-4",
-  agent: "",
   messages: [],
   isLoading: false,
   tags: [],
-  mcpTools: [],
-  vectorStores: [],
-  guardrails: [],
   temperature: 1,
   maxTokens: 2048,
   applyAcrossModels: false,
@@ -124,8 +112,6 @@ describe("ComparisonPanel", () => {
     expect(screen.getByText("General Settings")).toBeInTheDocument();
     expect(screen.getByText("Advanced Settings")).toBeInTheDocument();
     expect(screen.getByTestId("tag-selector")).toBeInTheDocument();
-    expect(screen.getByTestId("vector-store-selector")).toBeInTheDocument();
-    expect(screen.getByTestId("guardrail-selector")).toBeInTheDocument();
   });
 
   it("shows the current temperature and token ceiling", async () => {

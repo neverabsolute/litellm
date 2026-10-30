@@ -17,7 +17,6 @@ const savedConversation: Conversation = {
   id: "conversation-1",
   title: "Design",
   model: "vision-model",
-  mcpServerNames: [],
   createdAt: 1,
   updatedAt: 1,
   messages: [

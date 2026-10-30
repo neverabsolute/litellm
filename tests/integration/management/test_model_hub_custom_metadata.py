@@ -105,24 +105,6 @@ def test_model_group_info_ignores_custom_metadata_values_that_are_not_scalars(ga
         assert group.get("custom_metadata") == {"owner": "platform"}, group
 
 
-@pytest.mark.parametrize("path", ["/public/model_hub", "/public/v1/model_hub"])
-def test_public_model_hub_serves_the_custom_tags_and_metadata_of_a_public_model_group(
-    gateway: Gateway, path: str
-) -> None:
-    with gateway.scenario() as scenario:
-        model: Final = scenario.model(
-            model_info={"custom_tags": ["deprecated", "ptu"], "custom_metadata": LIFECYCLE_METADATA}
-        )
-        gateway.post("/model_group/make_public", {"model_groups": [model]})
-        row: Final = eventually(
-            lambda: _public_row(gateway, path, model),
-            lambda found: found is not None,
-            seconds=2 * PROXY_CONFIG_RELOAD_INTERVAL_SECONDS,
-        )
-        assert row is not None
-        assert _custom_fields(row) == (["deprecated", "ptu"], LIFECYCLE_METADATA), row
-
-
 def test_patching_a_model_replaces_the_custom_tags_and_metadata_served_for_its_group(gateway: Gateway) -> None:
     with gateway.scenario() as scenario:
         model_name: Final = f"integration-{uuid.uuid4().hex}"

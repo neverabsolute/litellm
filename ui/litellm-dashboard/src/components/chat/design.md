@@ -34,9 +34,7 @@ Never hardcode hex values. Use these CSS variables via Tailwind classes — all 
 
 Glass progressively enhances solid fills inside `@supports`. Reduced transparency and forced colors disable filtering, sheen and decorative shadows. Reduced motion disables chrome transitions. Use the original static dot/grid backdrop and source home heading measurements. Do not add animated backgrounds or an outer rounded frame.
 
-The standalone `ChatModelPicker` exposes the account's chat and image-generation models from the composer action row. Its portalled popover carries `.chat-theme`; keep model names, capabilities and selection states readable in both themes. Attachment and MCP tools stay beside the composer.
-
-The **Models** sidebar destination opens `/ui/chat/models` inside the same shell. It reuses the existing Model Hub catalog, filters, pricing and details in a read-only `chat` variant. Admins see the authenticated catalog and other users see the published catalog, matching the dashboard's existing access rules. The page uses `.moyai-models-page` for scrolling and `.chat-model-hub-card` for the bordered Moyai surface. Portalled model details carry `.chat-theme`; catalog management and other hub tabs stay in the dashboard.
+The standalone `ChatModelPicker` exposes the account's chat and image-generation models from the composer action row. Its portalled popover carries `.chat-theme`; keep model names, capabilities and selection states readable in both themes. The attachment control stays beside the composer.
 
 Show available providers in a single-select dropdown beside model search. “All providers” clears the provider filter while keeping the other filters. The dropdown includes provider logos and uses the Chat theme in its portal. Provider logos reuse the existing asset mapping; white logo plates preserve the colors and contrast of the original assets in both themes. Unknown or failed logos fall back to a provider initial. The model list uses compact search and capability controls, quiet separators, and provider identities beside model names. Keep these styles scoped to Chat.
 
@@ -176,7 +174,7 @@ No dedicated shadcn `Sidebar` block is installed (see gaps). Build nav items fro
 </Button>
 ```
 
-The desktop sidebar follows Moyai: 240px wide, 230px below 1250px, and 52px when collapsed. Its top row uses the shared `ViewSwitcher`, search and collapse controls above a transparent 32px New Chat button and compact destinations. The switcher exposes AI Gateway, Moyai, Chat and registered plugins, with the active workspace marked. Chat uses the same rounded speech-bubble icon in the trigger and menu, including the dashboard entry point. The collapsed rail keeps the icon-only switcher above its expand button. Workspace keeps credentials, API keys, logs, usage and preview feedback reachable in one menu. Recent conversation rows show title, model and date at 48px height. The footer shows account identity, appearance, settings and sign out. The shared dashboard Navbar is absent from this standalone surface; only its product switcher is reused.
+The desktop sidebar follows Moyai: 240px wide, 230px below 1250px, and 52px when collapsed. Its top row uses the shared `ViewSwitcher`, search and collapse controls above a transparent 32px New Chat button and compact destinations. The switcher exposes AI Gateway, Moyai, Chat and registered plugins, with the active workspace marked. Chat uses the same rounded speech-bubble icon in the trigger and menu, including the dashboard entry point. The collapsed rail keeps the icon-only switcher above its expand button. Workspace keeps API keys, logs, usage and preview feedback reachable in one menu. Recent conversation rows show title, model and date at 48px height. The footer shows account identity, appearance and sign out. The shared dashboard Navbar is absent from this standalone surface; only its product switcher is reused.
 
 At 600px and below, a compact header keeps the workspace switcher beside the labelled menu button, visible even when the navigation Sheet is closed. The same navigation renders once inside the existing `Sheet`. Choosing a route or conversation closes the Sheet. Do not render two concurrent conversation lists: they each own a search shortcut listener. The collapsed desktop list remains mounted for keyboard search, but is visually hidden. The Chat layout owns an authenticated `PluginModeProvider` so returning to AI Gateway clears a previously selected plugin.
 
@@ -278,7 +276,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 </Dialog>;
 ```
 
-Use `AlertDialog` (not a manual confirm) for any destructive action — delete conversation, revoke credential.
+Use `AlertDialog` (not a manual confirm) for any destructive action — delete conversation, revoke key.
 
 ### Table
 
@@ -303,7 +301,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 
 ### Tabs
 
-Always pass `variant="line"` for section tabs (Apps: All/Connected). The default variant renders a boxed pill with a background/shadow meant for compact toggle groups, not section tabs, and combining it with hand-added `border-b-2` classes produces a broken double-border look.
+Always pass `variant="line"` for section tabs. The default variant renders a boxed pill with a background/shadow meant for compact toggle groups, not section tabs, and combining it with hand-added `border-b-2` classes produces a broken double-border look.
 
 ```tsx
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -354,7 +352,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 </div>
 ```
 
-### Routed panel (Integrations, Credentials, API Keys, Usage)
+### Routed panel (API Keys, Logs, Usage)
 
 ```tsx
 <div className="flex-1 min-h-0 overflow-auto w-full py-8 px-8">
@@ -400,16 +398,13 @@ src/components/chat/
   ChatShell.tsx          # Desktop navigation / mobile Sheet, shared across all /chat/* routes
   ConversationList.tsx   # Date-grouped chat list + Cmd+K search
   ChatMessages.tsx       # Shared list and single-message rendering (user, assistant, tool)
-  MCPAppsPanel.tsx       # Integrations grid + detail view
-  MCPConnectPicker.tsx   # MCP server toggle popover
-  MCPCredentialsTab.tsx  # OAuth credentials table
   KeysPanel.tsx          # API key viewing + rotation
   UsagePanel.tsx         # Spend/usage analytics
   types.ts               # Shared TypeScript types
   useChatHistory.ts      # Chat persistence hook
   design.md              # This file
   AGENTS.md              # When/how to apply this file
-../../contexts/ChatShellContext.tsx  # Cross-route state: MCP server selection, conversation history
+../../contexts/ChatShellContext.tsx  # Cross-route state: conversation history
 ../../app/chat/                      # Route tree: page.tsx (chats), layout.tsx (auth gate + shell),
-                                      # integrations/, credentials/, api-keys/, usage/
+                                      # api-keys/, logs/, usage/
 ```

@@ -37,7 +37,6 @@ import {
   credentialCreateCall,
   credentialGetCall,
   credentialListCall,
-  getGuardrailsList,
   modelDeleteCall,
   modelPatchUpdateCall,
   tagListCall,
@@ -88,7 +87,6 @@ export default function ModelInfoView({
   const [isAutoRouterTestModalOpen, setIsAutoRouterTestModalOpen] = useState(false);
   const [autoRouterTestId, setAutoRouterTestId] = useState(0);
   const [autoRouterTestTargets, setAutoRouterTestTargets] = useState<AutoRouterTestTarget[]>([]);
-  const [guardrailsList, setGuardrailsList] = useState<string[]>([]);
   const [tagsList, setTagsList] = useState<Record<string, Tag>>({});
   const [credentialsList, setCredentialsList] = useState<CredentialItem[]>([]);
 
@@ -191,23 +189,12 @@ export default function ModelInfoView({
     const getExistingCredential = async () => {
       if (!accessToken) return;
       if (usingExistingCredential) return;
-      let existingCredentialResponse = await credentialGetCall(accessToken, null, modelId);
+      const existingCredentialResponse = await credentialGetCall(accessToken, null, modelId);
       setExistingCredential({
         credential_name: existingCredentialResponse["credential_name"],
         credential_values: existingCredentialResponse["credential_values"],
         credential_info: existingCredentialResponse["credential_info"],
       });
-    };
-
-    const fetchGuardrails = async () => {
-      if (!accessToken) return;
-      try {
-        const response = await getGuardrailsList(accessToken);
-        const guardrailNames = response.guardrails.map((g: { guardrail_name: string }) => g.guardrail_name);
-        setGuardrailsList(guardrailNames);
-      } catch (error) {
-        console.error("Failed to fetch guardrails:", error);
-      }
     };
 
     const fetchTags = async () => {
@@ -231,14 +218,13 @@ export default function ModelInfoView({
     };
 
     getExistingCredential();
-    fetchGuardrails();
     fetchTags();
     fetchCredentials();
   }, [accessToken, modelId]);
 
   const handleReuseCredential = async (values: any) => {
     if (!accessToken) return;
-    let credentialItem = {
+    const credentialItem = {
       credential_name: values.credential_name,
       model_id: modelId,
       credential_info: {
@@ -246,7 +232,7 @@ export default function ModelInfoView({
       },
     };
     toast.info("Storing credential..");
-    let credentialResponse = await credentialCreateCall(accessToken, credentialItem);
+    const credentialResponse = await credentialCreateCall(accessToken, credentialItem);
     toast.success("Credential stored successfully");
   };
 
@@ -305,17 +291,6 @@ export default function ModelInfoView({
         updatedLitellmParams.litellm_credential_name = selectedCredentialName;
       } else {
         delete updatedLitellmParams.litellm_credential_name;
-      }
-      if (values.guardrails) {
-        updatedLitellmParams.guardrails = values.guardrails;
-      }
-      if ((values.vector_store_ids?.length ?? 0) > 0) {
-        updatedLitellmParams.vector_store_ids = values.vector_store_ids;
-      } else if (values.vector_store_ids !== undefined) {
-        // User explicitly cleared previously-set vector stores — send [] to clear on backend
-        updatedLitellmParams.vector_store_ids = [];
-      } else {
-        delete updatedLitellmParams.vector_store_ids;
       }
 
       // Handle cache control settings
@@ -717,7 +692,6 @@ export default function ModelInfoView({
                   onCancel={() => setIsEditing(false)}
                   onSubmit={handleModelUpdate}
                   modelAccessGroups={modelAccessGroups}
-                  guardrailsList={guardrailsList}
                   tagsList={tagsList}
                   credentialsList={credentialsList}
                   healthCheckModelOptions={healthCheckModelOptions}

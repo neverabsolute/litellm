@@ -23,7 +23,6 @@ import {
   organizationMemberDeleteCall,
   organizationMemberUpdateCall,
 } from "../networking";
-import ObjectPermissionsView from "../object_permissions_view";
 import MemberModal from "../team/EditMembership";
 import { OrgSettingsForm } from "./org-settings/OrgSettingsForm";
 import { ORGANIZATION_TAB_URL_KEY, ORGANIZATION_TABS, type OrganizationTab } from "./organizationTabs";
@@ -256,12 +255,6 @@ const OrganizationInfoView: React.FC<OrganizationInfoProps> = ({
                 </div>
               </CardContent>
             </Card>
-
-            <ObjectPermissionsView
-              objectPermission={orgData.object_permission}
-              variant="card"
-              accessToken={accessToken}
-            />
           </div>
         </TabsContent>
 
@@ -301,7 +294,6 @@ const OrganizationInfoView: React.FC<OrganizationInfoProps> = ({
                 <OrgSettingsForm
                   organizationId={organizationId}
                   org={orgData}
-                  accessToken={accessToken || ""}
                   onCancel={() => setIsEditing(false)}
                   onSaved={() => setIsEditing(false)}
                 />
@@ -342,13 +334,6 @@ const OrganizationInfoView: React.FC<OrganizationInfoProps> = ({
                     </div>
                     <div>Reset: {orgData.litellm_budget_table.budget_duration || "Never"}</div>
                   </div>
-
-                  <ObjectPermissionsView
-                    objectPermission={orgData.object_permission}
-                    variant="inline"
-                    className="border-t pt-4"
-                    accessToken={accessToken}
-                  />
                 </div>
               )}
             </CardContent>

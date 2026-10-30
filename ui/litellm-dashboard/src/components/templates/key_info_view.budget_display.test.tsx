@@ -37,7 +37,6 @@ vi.mock("../networking", () => ({
   serverRootPath: "",
   keyDeleteCall: vi.fn().mockResolvedValue({}),
   keyUpdateCall: vi.fn().mockResolvedValue({}),
-  getPolicyInfoWithGuardrails: vi.fn().mockResolvedValue({ resolved_guardrails: [] }),
 }));
 
 const MOCK_KEY_DATA = {

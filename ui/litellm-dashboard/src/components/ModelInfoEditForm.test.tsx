@@ -10,7 +10,6 @@ vi.mock("@/components/networking", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/components/networking")>();
   return {
     ...actual,
-    vectorStoreListCall: vi.fn().mockResolvedValue({ data: [] }),
   };
 });
 
@@ -47,7 +46,6 @@ const renderForm = ({
       onCancel={vi.fn()}
       onSubmit={onSubmit}
       modelAccessGroups={[]}
-      guardrailsList={[]}
       tagsList={{}}
       credentialsList={credentialsList}
       healthCheckModelOptions={[]}

@@ -10,22 +10,35 @@ describe("legacyPageRedirectHref", () => {
     expect(redirect("page=models")).toBe("/ui/models-and-endpoints");
     expect(redirect("page=llm-playground")).toBe("/ui/playground");
     expect(redirect("page=new_usage")).toBe("/ui/usage");
-    expect(redirect("page=usage")).toBe("/ui/old-usage");
+    expect(redirect("page=usage")).toBe("/ui/usage");
   });
 
   it("keeps the older aliases for renamed pages", () => {
     expect(redirect("page=api_ref")).toBe("/ui/api-reference");
     expect(redirect("page=api-reference")).toBe("/ui/api-reference");
-    expect(redirect("page=claude-code-plugins")).toBe("/ui/skills");
   });
 
-  it("forwards the remaining query params so the MCP env-var setup link still opens its form", () => {
-    expect(redirect("page=mcp-servers&fill_env_vars=srv-1")).toBe("/ui/mcp-servers?fill_env_vars=srv-1");
-    expect(redirect("fill_env_vars=srv-1&page=mcp-servers")).toBe("/ui/mcp-servers?fill_env_vars=srv-1");
+  it("forwards the remaining query params to the new route", () => {
+    expect(redirect("page=logs&request_id=req-1")).toBe("/ui/logs?request_id=req-1");
+    expect(redirect("request_id=req-1&page=logs")).toBe("/ui/logs?request_id=req-1");
   });
 
   it("keeps forwarded values encoded", () => {
-    expect(redirect("page=mcp-servers&fill_env_vars=a%26b%3Dc")).toBe("/ui/mcp-servers?fill_env_vars=a%26b%3Dc");
+    expect(redirect("page=logs&request_id=a%26b%3Dc")).toBe("/ui/logs?request_id=a%26b%3Dc");
+  });
+
+  it("returns null for pages that were removed from the dashboard", () => {
+    for (const page of [
+      "mcp-servers",
+      "guardrails",
+      "policies",
+      "agents",
+      "vector-stores",
+      "model-hub-table",
+      "lens",
+    ]) {
+      expect(redirect(`page=${page}`), page).toBeNull();
+    }
   });
 
   it("returns null when there is no page param or the id is unknown", () => {
@@ -36,10 +49,8 @@ describe("legacyPageRedirectHref", () => {
   });
 
   it("covers every sidebar page id with the route the sidebar itself links to", () => {
-    const leaves = menuGroups
-      .flatMap((group) => group.items.flatMap((item) => item.children ?? [item]))
-      .filter((item) => !item.external_url);
-    expect(leaves.length).toBeGreaterThan(30);
+    const leaves = menuGroups.flatMap((group) => group.items.flatMap((item) => item.children ?? [item]));
+    expect(leaves.length).toBeGreaterThan(20);
     for (const leaf of leaves) {
       expect(redirect(`page=${leaf.page}`), leaf.page).toBe(`/ui/${leaf.route ?? leaf.page}`);
     }

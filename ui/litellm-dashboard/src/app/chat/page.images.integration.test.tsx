@@ -16,18 +16,11 @@ let models: { model_group: string; mode: string; providers: string[] }[];
 let imageResponse: () => Response;
 let pendingGeneration: boolean;
 let generationSignal: AbortSignal | null;
-let includeMCPEvents: boolean;
 
 function responseStream() {
   return new Response(
     [
       { type: "response.output_text.delta", delta: "I can see " },
-      ...(includeMCPEvents
-        ? ["search_notes", "read_note"].map((name) => ({
-            type: "response.output_item.done",
-            item: { id: name, type: "mcp_call", name, server_label: "research-tools", output: "Found a note" },
-          }))
-        : []),
       { type: "response.output_text.delta", delta: "the uploaded image." },
       { type: "response.completed", response: { id: `response-${requests.length}`, output: [] } },
     ]
@@ -75,7 +68,6 @@ beforeEach(() => {
   imageResponse = () => Response.json({ created: 1, data: [{ b64_json: pixel }] });
   pendingGeneration = false;
   generationSignal = null;
-  includeMCPEvents = false;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -83,10 +75,6 @@ beforeEach(() => {
         input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init);
       const pathname = new URL(request.url).pathname;
       if (pathname.endsWith("/model_group/info")) return Response.json({ data: models });
-      if (pathname.endsWith("/v1/mcp/server")) {
-        return Response.json([{ server_id: "research-tools", server_name: "research-tools" }]);
-      }
-      if (pathname.endsWith("/mcp-rest/tools/list")) return Response.json({ tools: [] });
       if (pathname.endsWith("/responses") || pathname.endsWith("/images/generations")) {
         requests.push({ pathname, body: JSON.parse(await request.text()) });
         if (pathname.endsWith("/responses")) return responseStream();
@@ -366,30 +354,5 @@ describe("chat image workflows", () => {
       fireEvent.keyDown(screen.getByRole("textbox", { name: "Message", exact: true }), { key: "Enter" });
     });
     expect(requests).toHaveLength(0);
-  });
-
-  it("should count one query for a message that streams text and executes multiple MCP tools", async () => {
-    includeMCPEvents = true;
-    const user = userEvent.setup();
-    renderChat();
-    await screen.findByRole("button", { name: "research-chat" });
-    await user.click(screen.getByRole("button", { name: "Connect tools" }));
-    const serverSwitch = await screen.findByRole("switch");
-    await user.click(serverSwitch);
-    await waitFor(() => expect(screen.getByRole("switch")).toBeChecked());
-    await user.click(screen.getByRole("button", { name: "Connect tools" }));
-
-    act(() => {
-      fireEvent.change(screen.getByRole("textbox", { name: "Message", exact: true }), {
-        target: { value: "Search the research notes" },
-      });
-    });
-    await user.click(screen.getByRole("button", { name: "Send" }));
-    await screen.findByText("I can see the uploaded image.");
-
-    expect(requests).toHaveLength(1);
-    expect(requests[0].body).toMatchObject({
-      tools: [{ type: "mcp", server_label: "research-tools", require_approval: "never" }],
-    });
   });
 });

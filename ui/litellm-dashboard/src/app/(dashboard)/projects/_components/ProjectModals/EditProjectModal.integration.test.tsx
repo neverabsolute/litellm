@@ -25,11 +25,6 @@ vi.mock("@/components/organisms/create_key_button", () => ({
   fetchTeamModels: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock("@/components/networking", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/components/networking")>()),
-  getGuardrailsList: vi.fn().mockResolvedValue({ guardrails: [{ guardrail_name: "pii-guard" }] }),
-}));
-
 vi.mock("@/components/key_team_helpers/fetch_available_models_team_key", () => ({
   getModelDisplayName: (model: string) => model,
 }));
@@ -49,7 +44,6 @@ const project: ProjectResponse = {
   budget_id: null,
   metadata: {
     owner: "platform",
-    guardrails: ["pii-guard"],
     model_rpm_limit: { "gpt-4": 20 },
     model_tpm_limit: { "gpt-4": 100 },
     model_itpm_limit: { "gpt-4": 60 },
@@ -133,7 +127,6 @@ describe("EditProjectModal submit payload", () => {
       models: ["gpt-4"],
       max_budget: 50,
       blocked: false,
-      guardrails: ["pii-guard"],
       model_rpm_limit: { "gpt-4": 20 },
       model_tpm_limit: { "gpt-4": 100 },
       model_itpm_limit: { "gpt-4": 60 },
@@ -207,7 +200,7 @@ describe("EditProjectModal submit payload", () => {
     expect(variables().params.max_budget).toBeUndefined();
   });
 
-  it("omits guardrails, limits and metadata for a project with empty metadata", async () => {
+  it("omits limits and metadata for a project with empty metadata", async () => {
     const user = setup();
     renderModal({ ...project, metadata: null } as unknown as ProjectResponse);
     await screen.findByDisplayValue("My Project");
@@ -215,7 +208,6 @@ describe("EditProjectModal submit payload", () => {
     await save(user);
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
-    expect(variables().params).not.toHaveProperty("guardrails");
     expect(variables().params).not.toHaveProperty("model_rpm_limit");
     expect(variables().params).not.toHaveProperty("model_tpm_limit");
     expect(variables().params).not.toHaveProperty("model_itpm_limit");

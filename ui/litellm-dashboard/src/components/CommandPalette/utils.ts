@@ -27,7 +27,6 @@ export const flattenNavItems = (groups: readonly MenuGroup[], term: Term = keepT
   groups.flatMap((group) => {
     const flattenItems = (items: MenuGroup["items"]): PaletteNavItem[] =>
       items.flatMap((item) => {
-        if (item.external_url) return [];
         if (item.children) return flattenItems(item.children);
         return [
           {

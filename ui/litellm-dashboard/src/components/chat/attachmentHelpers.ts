@@ -73,23 +73,12 @@ export async function readChatAttachment(file: File): Promise<ChatAttachment> {
 }
 
 export function toResponsesMessages(
-  messages: Pick<
-    ChatMessage,
-    "role" | "content" | "attachments" | "generatedImages" | "imageGeneration" | "mcpEvents"
-  >[],
+  messages: Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages" | "imageGeneration">[],
 ): ResponsesMessage[] {
   return messages.flatMap((message): ResponsesMessage[] => {
     if (message.role === "tool") return [];
     if (message.role === "assistant") {
-      return message.content.trim() || message.mcpEvents?.length
-        ? [
-            {
-              role: "assistant",
-              content: message.content,
-              ...(message.mcpEvents?.length ? { mcpEvents: message.mcpEvents } : {}),
-            },
-          ]
-        : [];
+      return message.content.trim() ? [{ role: "assistant", content: message.content }] : [];
     }
     if (!message.attachments?.length) return [{ role: "user", content: message.content }];
     const content: MultimodalContent[] = [];

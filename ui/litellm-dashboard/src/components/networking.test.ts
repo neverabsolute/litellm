@@ -248,94 +248,6 @@ describe("UI config and public endpoints", () => {
     expect(calledUrl).toBe("https://example.com/api/v1/public/providers/fields");
   });
 
-  it("should use proxyBaseURL and server_root_path for /public/model_hub/info when server_root_path is defined", async () => {
-    const uiConfig = {
-      server_root_path: "/api/v1",
-      proxy_base_url: "https://example.com",
-    };
-
-    const mockFetch = setupMockFetch([
-      { url: "/litellm/.well-known/litellm-ui-config", data: uiConfig },
-      { url: "/public/model_hub/info", data: {} },
-    ]);
-
-    await Networking.getUiConfig();
-    await Networking.getPublicModelHubInfo();
-
-    expect(mockFetch).toHaveBeenCalledTimes(3);
-    const publicEndpointCall = mockFetch.mock.calls.find((call) =>
-      (call[0] as string).includes("/public/model_hub/info"),
-    );
-    expect(publicEndpointCall).toBeDefined();
-    const calledUrl = publicEndpointCall![0] as string;
-    expect(calledUrl).toBe("https://example.com/api/v1/public/model_hub/info");
-  });
-
-  it("should use proxyBaseURL and server_root_path for /public/model_hub when server_root_path is defined", async () => {
-    const uiConfig = {
-      server_root_path: "/api/v1",
-      proxy_base_url: "https://example.com",
-    };
-
-    const mockFetch = setupMockFetch([
-      { url: "/litellm/.well-known/litellm-ui-config", data: uiConfig },
-      { url: "/public/model_hub", data: [] },
-    ]);
-
-    await Networking.getUiConfig();
-    await Networking.modelHubPublicModelsCall();
-
-    expect(mockFetch).toHaveBeenCalledTimes(3);
-    const publicEndpointCall = mockFetch.mock.calls.find(
-      (call) => (call[0] as string).includes("/public/model_hub") && !(call[0] as string).includes("/info"),
-    );
-    expect(publicEndpointCall).toBeDefined();
-    const calledUrl = publicEndpointCall![0] as string;
-    expect(calledUrl).toBe("https://example.com/api/v1/public/model_hub");
-  });
-
-  it("should use proxyBaseURL and server_root_path for /public/agent_hub when server_root_path is defined", async () => {
-    const uiConfig = {
-      server_root_path: "/api/v1",
-      proxy_base_url: "https://example.com",
-    };
-
-    const mockFetch = setupMockFetch([
-      { url: "/litellm/.well-known/litellm-ui-config", data: uiConfig },
-      { url: "/public/agent_hub", data: [] },
-    ]);
-
-    await Networking.getUiConfig();
-    await Networking.agentHubPublicModelsCall();
-
-    expect(mockFetch).toHaveBeenCalledTimes(3);
-    const publicEndpointCall = mockFetch.mock.calls.find((call) => (call[0] as string).includes("/public/agent_hub"));
-    expect(publicEndpointCall).toBeDefined();
-    const calledUrl = publicEndpointCall![0] as string;
-    expect(calledUrl).toBe("https://example.com/api/v1/public/agent_hub");
-  });
-
-  it("should use proxyBaseURL and server_root_path for /public/mcp_hub when server_root_path is defined", async () => {
-    const uiConfig = {
-      server_root_path: "/api/v1",
-      proxy_base_url: "https://example.com",
-    };
-
-    const mockFetch = setupMockFetch([
-      { url: "/litellm/.well-known/litellm-ui-config", data: uiConfig },
-      { url: "/public/mcp_hub", data: [] },
-    ]);
-
-    await Networking.getUiConfig();
-    await Networking.mcpHubPublicServersCall();
-
-    expect(mockFetch).toHaveBeenCalledTimes(3);
-    const publicEndpointCall = mockFetch.mock.calls.find((call) => (call[0] as string).includes("/public/mcp_hub"));
-    expect(publicEndpointCall).toBeDefined();
-    const calledUrl = publicEndpointCall![0] as string;
-    expect(calledUrl).toBe("https://example.com/api/v1/public/mcp_hub");
-  });
-
   it("should not include server_root_path when it is root path", async () => {
     const uiConfig = {
       server_root_path: "/",
@@ -695,94 +607,6 @@ describe("buildModelGroupTestRequest", () => {
   });
 });
 
-describe("testMCPToolsListRequest auth headers", () => {
-  const originalFetch = global.fetch;
-
-  const captureFetch = () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: { get: () => "application/json" },
-      json: vi.fn().mockResolvedValue({ tools: [] }),
-    } as any);
-    global.fetch = mockFetch as any;
-    return mockFetch;
-  };
-
-  const sentHeaders = (mockFetch: ReturnType<typeof vi.fn>): Record<string, string> =>
-    (mockFetch.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
-
-  afterEach(() => {
-    Networking.setGlobalLitellmHeaderName("Authorization");
-    global.fetch = originalFetch;
-  });
-
-  it("sends the litellm key under a custom litellm_key_header_name even when an upstream OAuth token uses Authorization", async () => {
-    Networking.setGlobalLitellmHeaderName("x-litellm-key");
-    const mockFetch = captureFetch();
-
-    await Networking.testMCPToolsListRequest("sk-key", {}, "upstream-oauth-token");
-
-    const headers = sentHeaders(mockFetch);
-    expect(headers["x-litellm-key"]).toBe("Bearer sk-key");
-    expect(headers["Authorization"]).toBe("Bearer upstream-oauth-token");
-  });
-
-  it("Bearer-prefixes x-litellm-api-key when it is the configured key header (raw values fail _get_bearer_token)", async () => {
-    Networking.setGlobalLitellmHeaderName("x-litellm-api-key");
-    const mockFetch = captureFetch();
-
-    await Networking.testMCPToolsListRequest("sk-key", {}, "upstream-oauth-token");
-
-    const headers = sentHeaders(mockFetch);
-    expect(headers["x-litellm-api-key"]).toBe("Bearer sk-key");
-    expect(headers["Authorization"]).toBe("Bearer upstream-oauth-token");
-  });
-
-  it("never clobbers the upstream OAuth token on default deployments", async () => {
-    const mockFetch = captureFetch();
-
-    await Networking.testMCPToolsListRequest("sk-key", {}, "upstream-oauth-token");
-
-    const headers = sentHeaders(mockFetch);
-    expect(headers["Authorization"]).toBe("Bearer upstream-oauth-token");
-    expect(headers["x-litellm-api-key"]).toBe("sk-key");
-  });
-
-  it("sends the litellm key as the bearer on default deployments without an OAuth token", async () => {
-    const mockFetch = captureFetch();
-
-    await Networking.testMCPToolsListRequest("sk-key", {});
-
-    const headers = sentHeaders(mockFetch);
-    expect(headers["Authorization"]).toBe("Bearer sk-key");
-  });
-});
-
-describe("fetchMCPServerHealth", () => {
-  const originalFetch = global.fetch;
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-  });
-
-  it.each([{ serverIds: undefined }, { serverIds: [] }, { serverIds: ["server one", "server&two"] }])(
-    "opts into reachability while preserving requested servers: $serverIds",
-    async ({ serverIds }) => {
-      const mockFetch = vi.fn<typeof fetch>().mockResolvedValue(new Response("[]", { status: 200 }));
-      global.fetch = mockFetch;
-
-      await Networking.fetchMCPServerHealth("test-token", serverIds);
-
-      expect(mockFetch).toHaveBeenCalledOnce();
-      const url = new URL(String(mockFetch.mock.calls[0][0]), "http://localhost");
-      expect(url.pathname).toMatch(/\/v1\/mcp\/server\/health$/);
-      expect(url.searchParams.get("include_reachability")).toBe("true");
-      expect(url.searchParams.getAll("server_ids")).toEqual(serverIds ?? []);
-    },
-  );
-});
-
 describe("getAutoRouterClassifierDefaultPromptCall", () => {
   const originalFetch = global.fetch;
 
@@ -866,51 +690,6 @@ describe("userListCall search serialization", () => {
   });
 });
 
-describe("fetchMemoryList search serialization", () => {
-  const originalFetch = global.fetch;
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-  });
-
-  const mockOkFetch = () => {
-    const emptyPage = { memories: [], total: 0 };
-    const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(emptyPage) } as any);
-    global.fetch = mockFetch as any;
-    return mockFetch;
-  };
-
-  const lastParams = (mockFetch: ReturnType<typeof vi.fn>) => {
-    const [url] = mockFetch.mock.calls.at(-1) ?? [];
-    return new URL(url as string, "http://example.com").searchParams;
-  };
-
-  it("sends the search box value as search and omits key_prefix and key", async () => {
-    const mockFetch = mockOkFetch();
-
-    await Networking.fetchMemoryList("token", { search: "mem-abc123", page: 1, pageSize: 50 });
-
-    const params = lastParams(mockFetch);
-    expect(params.get("search")).toBe("mem-abc123");
-    expect(params.has("key_prefix")).toBe(false);
-    expect(params.has("key")).toBe(false);
-    expect(params.get("page")).toBe("1");
-    expect(params.get("page_size")).toBe("50");
-  });
-
-  it("keeps key_prefix and key working when no search is given", async () => {
-    const mockFetch = mockOkFetch();
-
-    await Networking.fetchMemoryList("token", { keyPrefix: "user:" });
-    expect(lastParams(mockFetch).get("key_prefix")).toBe("user:");
-    expect(lastParams(mockFetch).has("search")).toBe(false);
-
-    await Networking.fetchMemoryList("token", { key: "user:profile" });
-    expect(lastParams(mockFetch).get("key")).toBe("user:profile");
-    expect(lastParams(mockFetch).has("search")).toBe(false);
-  });
-});
-
 describe("userFilterUICall", () => {
   let currentFetch: typeof global.fetch;
 
@@ -937,39 +716,6 @@ describe("userFilterUICall", () => {
 describe("schema-bound dashboard responses", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("keeps null plugin metadata and source maps from the API", async () => {
-    const plugin = {
-      id: "plugin-1",
-      name: "test-skill",
-      enabled: true,
-      version: null,
-      description: null,
-      created_at: null,
-      updated_at: null,
-      keywords: null,
-      author: null,
-      source: { source: "github", repo: "org/repo" },
-    };
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ plugins: [plugin], count: 1 }))));
-    const result = await Networking.getClaudeCodePluginsList("explicit-token");
-    expect(result.plugins[0]).toEqual(plugin);
-  });
-
-  it("validates agent metadata at the HTTP boundary", async () => {
-    const agent = {
-      agent_id: "agent-1",
-      agent_name: "agent",
-      enabled: true,
-      execution_mode: "autonomous",
-      identity_managed: false,
-      jwt_auth_configured: false,
-      agent_card_params: {},
-      litellm_params: { model: 42 },
-    };
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([agent]))));
-    await expect(Networking.getAgentsList("explicit-token")).rejects.toThrow();
-  });
-
   it("keeps nullable user fields without asserting they are strings", async () => {
     const user = { user_id: "user-1", user_email: null, user_role: null, created_at: null };
     const page = { users: [user], total: 1, page: 1, page_size: 25, total_pages: 1 };
@@ -993,30 +739,6 @@ describe("modelCostMap", () => {
 
     expect(mockFetch.mock.calls[0][0]).toMatch(/\/public\/litellm_model_cost_map\?catalog_only=true$/);
     expect(mockFetch.mock.calls[1][0]).toMatch(/\/public\/litellm_model_cost_map$/);
-  });
-});
-
-describe("ragIngestCall", () => {
-  let currentFetch: typeof global.fetch;
-
-  beforeEach(() => {
-    currentFetch = global.fetch;
-  });
-
-  afterEach(() => {
-    global.fetch = currentFetch;
-  });
-
-  it("rejects with the proxy's error text when the detail is an object", async () => {
-    const reason = "Error code: 404 - No vector store found with id 'vs_missing'";
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => ({ detail: { error: reason } }),
-    } as any) as any;
-
-    await expect(
-      Networking.ragIngestCall("sk-test", new File(["text"], "doc.txt"), "openai", "vs_missing"),
-    ).rejects.toThrow(reason);
   });
 });
 
@@ -1153,75 +875,5 @@ describe("getUiConfig runtime backend discovery", () => {
     const fallbackRequestUrl = new URL(String(fallback.mockFetch.mock.calls.at(-1)?.[0]));
     expect(fallbackRequestUrl.origin).toBe("https://backend.example.com");
     expect(fallbackRequestUrl.pathname).toBe("/models");
-  });
-
-  it("posts decision tests to the gateway", async () => {
-    const { networking, mockFetch } = await loadNetworkingWithGateway("https://gateway.example.com");
-    await networking.decisionsTestCall("token", {
-      model: "test-model",
-      input: "test input",
-      questions: [{ type: "predicate", name: "valid", instructions: "The input is valid" }],
-    });
-
-    const requestUrl = new URL(String(mockFetch.mock.calls.at(-1)?.[0]));
-    expect(requestUrl.origin).toBe("https://gateway.example.com");
-    expect(requestUrl.pathname).toBe("/v1/decisions");
-  });
-
-  it("ingests RAG documents through the gateway", async () => {
-    const { networking, mockFetch } = await loadNetworkingWithGateway("https://gateway.example.com");
-    await networking.ragIngestCall("token", new File(["document"], "document.txt"), "openai");
-
-    const requestUrl = new URL(String(mockFetch.mock.calls.at(-1)?.[0]));
-    expect(requestUrl.origin).toBe("https://gateway.example.com");
-    expect(requestUrl.pathname).toBe("/rag/ingest");
-  });
-
-  it("lists indexes from the gateway", async () => {
-    const { networking, mockFetch } = await loadNetworkingWithGateway("https://gateway.example.com");
-    await networking.indexesListCall("token");
-
-    expect(String(mockFetch.mock.calls.at(-1)?.[0])).toBe("https://gateway.example.com/v1/indexes");
-  });
-
-  it("discovers agent cards through the gateway with the default discovery mode", async () => {
-    const { networking, mockFetch } = await loadNetworkingWithGateway("https://gateway.example.com");
-    await networking.discoverAgentCardCall("token", "https://agent.example.com");
-
-    const [requestUrl, requestInit] = mockFetch.mock.calls.at(-1) ?? [];
-    expect(requestUrl instanceof Request ? requestUrl.url : String(requestUrl)).toBe(
-      "https://gateway.example.com/v1/a2a/discover",
-    );
-    expect(new Headers(requestInit?.headers).get(networking.getGlobalLitellmHeaderName())).toBe("Bearer token");
-    expect(JSON.parse(String(requestInit?.body))).toEqual({
-      url: "https://agent.example.com",
-      discovery_mode: "well_known_fallback",
-    });
-  });
-});
-
-describe("searchToolQueryCall", () => {
-  const originalFetch = global.fetch;
-
-  afterEach(() => {
-    global.fetch = originalFetch;
-  });
-
-  it("rejects with the backend error message for a denied search", async () => {
-    const errorMessage = "User not allowed to access search tool: exa-search-2";
-    global.fetch = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          error: {
-            message: errorMessage,
-            type: "user_search_tool_access_denied",
-            code: "403",
-          },
-        }),
-        { status: 403 },
-      ),
-    );
-
-    await expect(Networking.searchToolQueryCall("token", "exa-search-2", "litellm")).rejects.toThrow(errorMessage);
   });
 });

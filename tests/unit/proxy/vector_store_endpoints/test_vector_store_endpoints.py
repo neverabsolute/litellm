@@ -1337,7 +1337,6 @@ class TestIsAllowedToCallVectorStoreEndpoint:
         assert exc_info.value.status_code == 403
 
     def test_azure_ai_permission_allowed(self):
-        from datetime import datetime, timezone
         from unittest.mock import MagicMock
 
         from fastapi import HTTPException
@@ -1632,61 +1631,6 @@ class TestIsAllowedToCallVectorStoreFilesEndpoint:
         assert result is None
 
 
-class TestVectorStoreManagementEndpointsExist:
-    def test_vector_store_management_endpoints_exist_on_proxy_startup(self):
-        """
-        Test that all vector store management endpoints are registered on proxy app startup.
-
-        Verifies the following endpoints exist in the proxy_server app:
-        - POST /vector_store/new
-        - GET /vector_store/list
-        - POST /vector_store/delete
-        - POST /vector_store/info
-        - POST /vector_store/update
-        """
-        import importlib
-
-        from litellm.proxy._lazy_features import LAZY_FEATURES
-        from litellm.proxy.proxy_server import app
-
-        # Force-register the lazy vector_store_management routes so the
-        # assertions can find them.
-        already_registered = any(
-            getattr(r, "path", None) == "/vector_store/new" for r in app.routes
-        )
-        if not already_registered:
-            for feat in LAZY_FEATURES:
-                if feat.name == "vector_store_management":
-                    module = importlib.import_module(feat.module_path)
-                    feat.register_fn(app, module)
-                    break
-
-        # Define expected endpoints
-        expected_endpoints = [
-            ("POST", "/vector_store/new"),
-            ("GET", "/vector_store/list"),
-            ("POST", "/vector_store/delete"),
-            ("POST", "/vector_store/info"),
-            ("POST", "/vector_store/update"),
-        ]
-
-        # Get all routes from the app
-        app_routes = []
-        for route in app.routes:
-            methods = getattr(route, "methods", None)
-            path = getattr(route, "path", None)
-            if methods is not None and path is not None:
-                for method in methods:
-                    app_routes.append((method, path))
-
-        # Verify each expected endpoint exists
-        for method, path in expected_endpoints:
-            assert (method, path) in app_routes, (
-                f"Expected endpoint {method} {path} not found in registered routes. "
-                f"Available routes: {app_routes}"
-            )
-
-
 @pytest.mark.asyncio
 async def test_vector_store_synchronization_across_instances():
     """
@@ -1703,7 +1647,6 @@ async def test_vector_store_synchronization_across_instances():
 
     from litellm.types.vector_stores import (
         LiteLLM_ManagedVectorStore,
-        VectorStoreDeleteRequest,
     )
     from litellm.vector_stores.vector_store_registry import VectorStoreRegistry
 

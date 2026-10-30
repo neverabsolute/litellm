@@ -1,5 +1,5 @@
 import { useTerminology } from "@/contexts/TerminologyContext";
-import { BarChart3, Bot, Building2, Globe, LineChart, ShoppingCart, Tags, User, Users } from "lucide-react";
+import { BarChart3, Building2, Globe, LineChart, ShoppingCart, Tags, User, Users } from "lucide-react";
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,7 +12,6 @@ export type UsageOption =
   | "team"
   | "customer"
   | "tag"
-  | "agent"
   | "user"
   | "user-agent-activity";
 export interface UsageViewSelectProps {
@@ -82,13 +81,6 @@ const OPTIONS: OptionConfig[] = [
     description: "View usage grouped by tags",
     icon: <Tags className="size-4" />,
     adminOnly: true,
-  },
-  {
-    value: "agent",
-    label: "Agent Usage (A2A)",
-    description: "View usage by AI agents",
-    icon: <Bot className="size-4" />,
-    capability: "viewAgentUsage",
   },
   {
     value: "user",

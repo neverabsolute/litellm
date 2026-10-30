@@ -6,15 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseSelectOption, renderWithProviders, testQueryClient } from "../../../tests/test-utils";
 import { toast } from "@/lib/toast";
 import type { Member } from "@/components/networking";
-import type { EffectiveMcpServer } from "../mcp_server_management/effectiveMcpServers";
-import type { MCPServer } from "../mcp_tools/types";
-import TeamInfoView, {
-  grantedMcpServerIds,
-  type McpGrantInput,
-  retainedMcpToolPermissions,
-  standingToolPermissionServerIds,
-  type TeamData,
-} from "./TeamInfo";
+import TeamInfoView, { type TeamData } from "./TeamInfo";
 
 const authState = vi.hoisted(() => ({ userRole: "Admin", isViewOnly: false }));
 
@@ -41,20 +33,10 @@ vi.mock("@/components/networking", () => ({
   teamMemberAddCall: vi.fn(),
   teamMemberUpdateCall: vi.fn(),
   teamUpdateCall: vi.fn(),
-  getGuardrailsList: vi.fn(),
-  getPoliciesList: vi.fn(),
-  getPolicyInfoWithGuardrails: vi.fn(),
-  fetchMCPAccessGroups: vi.fn(),
   getTeamPermissionsCall: vi.fn(),
   organizationInfoCall: vi.fn(),
   getRouterSettingsCall: vi.fn().mockResolvedValue({ fields: [] }),
   getPassThroughEndpointsCall: vi.fn().mockResolvedValue({ endpoints: [] }),
-  fetchMCPServers: vi.fn().mockResolvedValue([]),
-  fetchMCPToolsets: vi.fn().mockResolvedValue([]),
-  listMCPTools: vi.fn().mockResolvedValue({ tools: [] }),
-  vectorStoreListCall: vi.fn().mockResolvedValue({ data: [] }),
-  getAgentsList: vi.fn().mockResolvedValue({ agents: [] }),
-  getClaudeCodePluginsList: vi.fn().mockResolvedValue({ plugins: [], count: 0 }),
 }));
 
 const { bulkUpdatePOST } = vi.hoisted(() => ({ bulkUpdatePOST: vi.fn() }));
@@ -62,11 +44,6 @@ vi.mock("@/lib/http/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/http/api")>();
   return { ...actual, fetchClient: { ...actual.fetchClient, POST: bulkUpdatePOST } };
 });
-
-const can = vi.fn();
-vi.mock("@/app/(dashboard)/hooks/useCan", () => ({
-  default: (...args: unknown[]) => can(...args),
-}));
 
 vi.mock("@/components/utils/dataUtils", () => ({
   copyToClipboard: vi.fn().mockResolvedValue(true),
@@ -99,38 +76,6 @@ vi.mock("@/app/(dashboard)/hooks/organizations/useOrganizations", () => ({
 
 vi.mock("@/app/(dashboard)/hooks/users/useCurrentUser", () => ({
   useCurrentUser: vi.fn(),
-}));
-
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPServers", () => ({
-  useMCPServers: vi.fn(),
-}));
-
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPToolsets", () => ({
-  useMCPToolsets: vi.fn(),
-}));
-
-vi.mock("@/components/mcp_server_management/MCPServerSelector", () => ({
-  default: ({
-    value,
-    onChange,
-  }: {
-    value?: { servers: string[]; accessGroups: string[]; toolsets?: string[] };
-    onChange: (next: { servers: string[]; accessGroups: string[]; toolsets: string[] }) => void;
-  }) => (
-    <>
-      <button
-        type="button"
-        onClick={() =>
-          onChange({ servers: [], accessGroups: value?.accessGroups ?? [], toolsets: value?.toolsets ?? [] })
-        }
-      >
-        deselect all mcp servers
-      </button>
-      <button type="button" onClick={() => onChange({ servers: value?.servers ?? [], accessGroups: [], toolsets: [] })}>
-        remove all access groups
-      </button>
-    </>
-  ),
 }));
 
 vi.mock("@/components/team/TeamMemberTab", () => ({
@@ -214,25 +159,6 @@ vi.mock("@/components/common_components/ModelAliasManager", () => ({
   )),
 }));
 
-vi.mock("@/app/(dashboard)/hooks/accessGroups/useAccessGroups", () => ({
-  useAccessGroups: vi.fn().mockReturnValue({
-    data: [
-      { access_group_id: "ag-1", access_group_name: "Group 1", access_mcp_server_ids: [] },
-      { access_group_id: "ag-2", access_group_name: "Group 2", access_mcp_server_ids: [] },
-    ],
-    isLoading: false,
-    isError: false,
-  }),
-}));
-
-vi.mock("@/components/common_components/AccessGroupSelector", () => ({
-  default: ({ value, onChange }: { value?: string[]; onChange?: (next: string[]) => void }) => (
-    <button type="button" onClick={() => onChange?.((value ?? []).slice(1))}>
-      remove first unified access group
-    </button>
-  ),
-}));
-
 vi.mock("@/app/(dashboard)/hooks/keys/useKeys", () => ({
   useKeys: vi.fn().mockReturnValue({
     data: { keys: [], total_count: 0, current_page: 1, total_pages: 1 },
@@ -257,9 +183,6 @@ import { useKeys } from "@/app/(dashboard)/hooks/keys/useKeys";
 import { useOrganization } from "@/app/(dashboard)/hooks/organizations/useOrganizations";
 import { teamKeys, teamsTableKeys, useTeam } from "@/app/(dashboard)/hooks/teams/useTeams";
 import { useCurrentUser } from "@/app/(dashboard)/hooks/users/useCurrentUser";
-import { useMCPServers } from "@/app/(dashboard)/hooks/mcpServers/useMCPServers";
-import { useMCPToolsets } from "@/app/(dashboard)/hooks/mcpServers/useMCPToolsets";
-import { useAccessGroups } from "@/app/(dashboard)/hooks/accessGroups/useAccessGroups";
 import { useUISettings } from "@/app/(dashboard)/hooks/uiSettings/useUISettings";
 
 const mockUseAllProxyModels = vi.mocked(useAllProxyModels);
@@ -268,9 +191,6 @@ const mockUseKeys = vi.mocked(useKeys);
 const mockUseTeam = vi.mocked(useTeam);
 const mockUseOrganization = vi.mocked(useOrganization);
 const mockUseCurrentUser = vi.mocked(useCurrentUser);
-const mockUseMCPServers = vi.mocked(useMCPServers);
-const mockUseMCPToolsets = vi.mocked(useMCPToolsets);
-const mockUseAccessGroups = vi.mocked(useAccessGroups);
 const mockUseUISettings = vi.mocked(useUISettings);
 
 const createMockTeamData = (overrides = {}) => ({
@@ -304,9 +224,6 @@ const createMockTeamData = (overrides = {}) => ({
     litellm_model_table: null,
     created_at: "2024-01-01T00:00:00Z",
     team_member_budget_table: null,
-    guardrails: [],
-    policies: [],
-    object_permission: null,
     ...overrides,
   },
   keys: [],
@@ -331,16 +248,6 @@ const seedDefaultMocks = () => {
     data: { models: [] },
     isLoading: false,
   } as any);
-  mockUseMCPServers.mockReturnValue({ data: [], isLoading: false, isError: false } as any);
-  mockUseMCPToolsets.mockReturnValue({ data: [], isLoading: false, isError: false } as any);
-  mockUseAccessGroups.mockReturnValue({
-    data: [
-      { access_group_id: "ag-1", access_group_name: "Group 1", access_mcp_server_ids: [] },
-      { access_group_id: "ag-2", access_group_name: "Group 2", access_mcp_server_ids: [] },
-    ],
-    isLoading: false,
-    isError: false,
-  } as any);
   mockUseUISettings.mockReturnValue({
     data: { values: {} },
     isLoading: false,
@@ -353,10 +260,6 @@ const seedDefaultMocks = () => {
   } as any);
   vi.mocked(useTeamMetadataSchema).mockReturnValue({ data: [], isLoading: false } as any);
 
-  can.mockReturnValue(true);
-  vi.mocked(networking.getGuardrailsList).mockResolvedValue({ guardrails: [] });
-  vi.mocked(networking.getPoliciesList).mockResolvedValue({ policies: [] });
-  vi.mocked(networking.fetchMCPAccessGroups).mockResolvedValue([]);
   vi.mocked(networking.getTeamPermissionsCall).mockResolvedValue({
     all_available_permissions: [],
     team_member_permissions: [],
@@ -446,47 +349,6 @@ describe("TeamInfoView", () => {
       );
     });
 
-    it("shows MCP servers and agents inherited from access groups in the Object Permissions card, naming the group on hover", async () => {
-      const user = userEvent.setup();
-      vi.mocked(networking.fetchMCPServers).mockResolvedValue([
-        { server_id: "mcp-github-1234", server_name: "github", alias: "github" },
-      ]);
-      vi.mocked(networking.getAgentsList).mockResolvedValue({
-        agents: [{ agent_id: "agent-support-5678", agent_name: "support_agent" }],
-      });
-      const platformToolsGroup = {
-        access_group_id: "ag-1",
-        access_group_name: "platform-tools",
-        models: [],
-        mcp_server_ids: ["mcp-github-1234"],
-        agent_ids: ["agent-support-5678"],
-      };
-      const inheritedGrants = {
-        object_permission: null,
-        access_group_ids: ["ag-1"],
-        access_group_mcp_server_ids: ["mcp-github-1234"],
-        access_group_agent_ids: ["agent-support-5678"],
-        access_group_details: [platformToolsGroup],
-      };
-      vi.mocked(networking.teamInfoCall).mockResolvedValue(createMockTeamData(inheritedGrants));
-
-      renderWithProviders(<TeamInfoView {...defaultProps} />);
-
-      const serverRow = await screen.findByText(/github \(mcp\.\.\.1234\)/);
-      const agentRow = await screen.findByText(/support_agent \(age\.\.\.5678\)/);
-      expect(screen.queryByText("No MCP servers, access groups, or toolsets configured")).not.toBeInTheDocument();
-      expect(screen.queryByText("No agents or access groups configured")).not.toBeInTheDocument();
-
-      await user.hover(serverRow);
-      expect(
-        await screen.findByText("Granted via access group platform-tools. Full ID: mcp-github-1234"),
-      ).toBeInTheDocument();
-      await user.hover(agentRow);
-      expect(
-        await screen.findByText("Granted via access group platform-tools. Full ID: agent-support-5678"),
-      ).toBeInTheDocument();
-    });
-
     it("keeps the all-proxy-models badge non-clickable", async () => {
       vi.mocked(networking.teamInfoCall).mockResolvedValue(createMockTeamData({ models: ["all-proxy-models"] }));
 
@@ -565,39 +427,6 @@ describe("TeamInfoView", () => {
       expect(screen.queryByText("RPM Limit: No Limit")).not.toBeInTheDocument();
     });
 
-    it("should display guardrails in overview when present", async () => {
-      vi.mocked(networking.teamInfoCall).mockResolvedValue(
-        createMockTeamData({
-          metadata: { guardrails: ["guardrail1", "guardrail2"] },
-        }),
-      );
-
-      renderWithProviders(<TeamInfoView {...defaultProps} />);
-
-      await waitFor(() => {
-        expect(screen.getByText("Guardrails Settings")).toBeInTheDocument();
-      });
-      expect(screen.getByText("guardrail1")).toBeInTheDocument();
-      expect(screen.getByText("guardrail2")).toBeInTheDocument();
-    });
-
-    it("should display policies in overview when present", async () => {
-      vi.mocked(networking.teamInfoCall).mockResolvedValue(
-        createMockTeamData({
-          policies: ["policy1"],
-        }),
-      );
-      vi.mocked(networking.getPolicyInfoWithGuardrails).mockResolvedValue({
-        resolved_guardrails: ["guardrail1"],
-      });
-
-      renderWithProviders(<TeamInfoView {...defaultProps} />);
-
-      await waitFor(() => {
-        expect(screen.getByText("Policies")).toBeInTheDocument();
-      });
-    });
-
     it("should display team member budget information when present", async () => {
       vi.mocked(networking.teamInfoCall).mockResolvedValue(
         createMockTeamData({
@@ -628,25 +457,6 @@ describe("TeamInfoView", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("tab", { name: "Virtual Keys" })).toBeInTheDocument();
-      });
-    });
-
-    it("should display object permissions when present", async () => {
-      vi.mocked(networking.teamInfoCall).mockResolvedValue(
-        createMockTeamData({
-          object_permission: {
-            object_permission_id: "perm-1",
-            mcp_servers: ["server1"],
-            vector_stores: ["store1"],
-          },
-        }),
-      );
-
-      renderWithProviders(<TeamInfoView {...defaultProps} />);
-
-      await waitFor(() => {
-        const teamNameElements = screen.queryAllByText("Test Team");
-        expect(teamNameElements.length).toBeGreaterThan(0);
       });
     });
 
@@ -896,43 +706,6 @@ describe("TeamInfoView", () => {
   });
 
   describe("settings and editing", () => {
-    const policiesFormFieldLabel = () => screen.queryByText("Policies", { selector: "label" });
-
-    it("should offer the policies field and load it for a caller with the viewPolicies capability", async () => {
-      const user = userEvent.setup({ delay: null });
-      vi.mocked(networking.teamInfoCall).mockResolvedValue(createMockTeamData());
-
-      renderWithProviders(<TeamInfoView {...defaultProps} />);
-
-      await waitFor(() => {
-        expect(networking.getPoliciesList).toHaveBeenCalled();
-      });
-      expect(can).toHaveBeenCalledWith("viewPolicies");
-
-      await user.click(screen.getByRole("tab", { name: "Settings" }));
-      await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-
-      await waitFor(() => {
-        expect(policiesFormFieldLabel()).toBeInTheDocument();
-      });
-    });
-
-    it("should omit the policies field and skip the admin-only list without the capability", async () => {
-      can.mockReturnValue(false);
-      const user = userEvent.setup({ delay: null });
-      vi.mocked(networking.teamInfoCall).mockResolvedValue(createMockTeamData());
-
-      renderWithProviders(<TeamInfoView {...defaultProps} />);
-
-      await user.click(await screen.findByRole("tab", { name: "Settings" }));
-      await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-
-      expect(await screen.findByLabelText("Team Name")).toBeInTheDocument();
-
-      expect(networking.getPoliciesList).not.toHaveBeenCalled();
-      expect(policiesFormFieldLabel()).not.toBeInTheDocument();
-    });
-
     it("should open edit mode when edit button is clicked", async () => {
       const user = userEvent.setup({ delay: null });
       vi.mocked(networking.teamInfoCall).mockResolvedValue(createMockTeamData());
@@ -1179,52 +952,6 @@ describe("TeamInfoView", () => {
       });
     });
 
-    it("should pass access_group_ids to teamUpdateCall when saving team settings", async () => {
-      const user = userEvent.setup({ delay: null });
-      const accessGroupIds = ["ag-1", "ag-2"];
-      vi.mocked(networking.teamInfoCall).mockResolvedValue(
-        createMockTeamData({
-          access_group_ids: accessGroupIds,
-          models: ["gpt-4"],
-        }),
-      );
-      vi.mocked(networking.teamUpdateCall).mockResolvedValue({ data: {}, team_id: "123" } as any);
-
-      renderWithProviders(<TeamInfoView {...defaultProps} />);
-
-      await waitFor(() => {
-        const teamNameElements = screen.queryAllByText("Test Team");
-        expect(teamNameElements.length).toBeGreaterThan(0);
-      });
-
-      const settingsTab = screen.getByRole("tab", { name: "Settings" });
-      await user.click(settingsTab);
-
-      await waitFor(() => {
-        expect(screen.getByRole("button", { name: /edit settings/i })).toBeInTheDocument();
-      });
-
-      const editButton = screen.getByRole("button", { name: /edit settings/i });
-      await user.click(editButton);
-
-      await waitFor(() => {
-        expect(screen.getByLabelText("Team Name")).toBeInTheDocument();
-      });
-
-      const saveButton = screen.getByRole("button", { name: /save changes/i });
-      await user.click(saveButton);
-
-      await waitFor(() => {
-        expect(networking.teamUpdateCall).toHaveBeenCalledWith(
-          "test-token",
-          expect.objectContaining({
-            access_group_ids: accessGroupIds,
-            team_id: "123",
-          }),
-        );
-      });
-    });
-
     it("invalidates the cached team list and team detail queries after saving team settings", async () => {
       const user = userEvent.setup({ delay: null });
       vi.mocked(networking.teamInfoCall).mockResolvedValue(createMockTeamData({ models: ["gpt-4"] }));
@@ -1350,8 +1077,6 @@ describe("TeamInfoView", () => {
             beta: true,
             config: { region: "us" },
             logging: [{ callback_name: "langfuse", callback_type: "success", callback_vars: {} }],
-            guardrails: ["g1"],
-            disable_global_guardrails: false,
             model_tpm_limit: { "gpt-4": 100 },
           },
           models: ["gpt-4"],
@@ -1838,91 +1563,6 @@ describe("TeamInfoView", () => {
     });
   });
 
-  describe("guardrails dropdown grouping", () => {
-    const guardrail = (name: string, defaultOn: boolean) => ({
-      guardrail_name: name,
-      litellm_params: { default_on: defaultOn },
-    });
-
-    const openGuardrailsDropdown = async (user: ReturnType<typeof userEvent.setup>) => {
-      renderWithProviders(<TeamInfoView {...defaultProps} />);
-
-      await waitFor(() => {
-        const teamNameElements = screen.queryAllByText("Test Team");
-        expect(teamNameElements.length).toBeGreaterThan(0);
-      });
-
-      await user.click(screen.getByRole("tab", { name: "Settings" }));
-
-      await waitFor(() => {
-        expect(screen.getByRole("button", { name: /edit settings/i })).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole("button", { name: /edit settings/i }));
-
-      await waitFor(() => {
-        expect(screen.getByLabelText(/^Guardrails/)).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByLabelText(/^Guardrails/));
-
-      const listbox = await screen.findByRole("listbox", {}, { timeout: 5000 });
-      return listbox.closest('[data-slot="combobox-content"]') as HTMLElement;
-    };
-
-    beforeEach(() => {
-      testQueryClient.clear();
-      vi.mocked(networking.teamInfoCall).mockResolvedValue(createMockTeamData());
-    });
-
-    it("should not render the Global or Other group headers when no global guardrails exist", async () => {
-      const user = userEvent.setup({ delay: null });
-      vi.mocked(networking.getGuardrailsList).mockResolvedValue({
-        guardrails: [guardrail("dwacxzcz", false), guardrail("dwadsa", false)],
-      });
-
-      const dropdown = await openGuardrailsDropdown(user);
-
-      await waitFor(() => {
-        expect(within(dropdown).getByTitle("dwacxzcz")).toBeInTheDocument();
-      });
-      expect(within(dropdown).getByTitle("dwadsa")).toBeInTheDocument();
-      expect(within(dropdown).queryByText("Global")).not.toBeInTheDocument();
-      expect(within(dropdown).queryByText("Other")).not.toBeInTheDocument();
-    });
-
-    it("should not render the Global or Other group headers when every guardrail is global", async () => {
-      const user = userEvent.setup({ delay: null });
-      vi.mocked(networking.getGuardrailsList).mockResolvedValue({
-        guardrails: [guardrail("always-on", true)],
-      });
-
-      const dropdown = await openGuardrailsDropdown(user);
-
-      await waitFor(() => {
-        expect(within(dropdown).getByTitle("always-on")).toBeInTheDocument();
-      });
-      expect(within(dropdown).queryByText("Global")).not.toBeInTheDocument();
-      expect(within(dropdown).queryByText("Other")).not.toBeInTheDocument();
-    });
-
-    it("should render both group headers when global and non-global guardrails exist", async () => {
-      const user = userEvent.setup({ delay: null });
-      vi.mocked(networking.getGuardrailsList).mockResolvedValue({
-        guardrails: [guardrail("always-on", true), guardrail("opt-in", false)],
-      });
-
-      const dropdown = await openGuardrailsDropdown(user);
-
-      await waitFor(() => {
-        expect(within(dropdown).getByText("Global")).toBeInTheDocument();
-      });
-      expect(within(dropdown).getByText("Other")).toBeInTheDocument();
-      expect(within(dropdown).getByTitle("always-on")).toBeInTheDocument();
-      expect(within(dropdown).getByTitle("opt-in")).toBeInTheDocument();
-    });
-  });
-
   describe("allowed pass through routes", () => {
     beforeEach(() => {
       testQueryClient.clear();
@@ -2341,26 +1981,6 @@ describe("TeamInfoView - which team member fields reach the update payload depen
 
     expect(payload.team_member_budget).toBe(12.5);
   });
-
-  it("omits object_permission.search_tools while Search Tool Settings is closed", async () => {
-    const user = userEvent.setup({ delay: null });
-    await openEditor(user);
-
-    const payload = await save(user);
-
-    expect(payload.object_permission).not.toHaveProperty("search_tools");
-  });
-
-  it("includes object_permission.search_tools once Search Tool Settings is opened", async () => {
-    const user = userEvent.setup({ delay: null });
-    await openEditor(user);
-
-    await user.click(screen.getByText("Search Tool Settings"));
-    await screen.findByPlaceholderText("Select search tools (optional, empty = all allowed)");
-    const payload = await save(user);
-
-    expect(payload.object_permission).toHaveProperty("search_tools");
-  });
 });
 
 describe("TeamInfoView - the exact bytes the update call sends", () => {
@@ -2392,7 +2012,6 @@ describe("TeamInfoView - the exact bytes the update call sends", () => {
       rpm_limit: 1000,
       team_member_budget_table: { max_budget: 42, budget_duration: "30d", tpm_limit: 11, rpm_limit: 22 },
       default_team_member_models: ["gpt-4"],
-      object_permission: { search_tools: ["tool-a"], vector_stores: ["vs-1"] },
       metadata: requireTraceId ? { require_trace_id: true } : {},
     });
 
@@ -2432,23 +2051,8 @@ describe("TeamInfoView - the exact bytes the update call sends", () => {
     budget_duration: "1d",
     metadata: {
       allowed_passthrough_routes: [],
-      guardrails: [],
-      opted_out_global_guardrails: [],
-      disable_global_guardrails: false,
       soft_budget_alerting_emails: [],
     },
-    access_group_ids: [],
-  };
-
-  const mcpPermissions = {
-    mcp_servers: [],
-    mcp_access_groups: [],
-    mcp_tool_permissions: {},
-    mcp_toolsets: [],
-    agents: [],
-    agent_access_groups: [],
-    vector_stores: ["vs-1"],
-    skills: [],
   };
 
   it("leaves every team member key out of the request body for an untouched save with both sections closed", async () => {
@@ -2461,12 +2065,8 @@ describe("TeamInfoView - the exact bytes the update call sends", () => {
     expect(payload).toStrictEqual({
       ...alwaysSent,
       team_member_budget_duration: undefined,
-      object_permission: mcpPermissions,
     });
-    expect(wireBody(payload)).toStrictEqual({
-      ...alwaysSent,
-      object_permission: mcpPermissions,
-    });
+    expect(wireBody(payload)).toStrictEqual(alwaysSent);
   });
 
   it("sends require_trace_id when a proxy admin enables it", async () => {
@@ -2490,111 +2090,12 @@ describe("TeamInfoView - the exact bytes the update call sends", () => {
     expect(payload.metadata).toMatchObject({ require_trace_id: true });
   });
 
-  const openEditorWithAgents = async (user: ReturnType<typeof userEvent.setup>) => {
-    vi.mocked(networking.teamInfoCall).mockResolvedValue(
-      createMockTeamData({
-        models: ["gpt-4"],
-        object_permission: { agents: ["agent-1"], agent_access_groups: ["group-a"] },
-      }),
-    );
-    vi.mocked(networking.teamUpdateCall).mockResolvedValue({ data: {}, team_id: "123" } as any);
-
-    renderWithProviders(<TeamInfoView {...props} />);
-    await waitFor(() => expect(screen.queryAllByText("Test Team").length).toBeGreaterThan(0));
-    await user.click(screen.getByRole("tab", { name: "Settings" }));
-    await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-    await screen.findByLabelText("Team Name");
-  };
-
-  it("resends the stored agents and agent_access_groups when the selector is left untouched", async () => {
-    const user = userEvent.setup({ delay: null });
-    await openEditorWithAgents(user);
-
-    const payload = await save(user);
-
-    const objectPermission = wireBody(payload).object_permission as Record<string, unknown>;
-    expect(objectPermission.agents).toStrictEqual(["agent-1"]);
-    expect(objectPermission.agent_access_groups).toStrictEqual(["group-a"]);
-  });
-
-  it("sends empty agents and agent_access_groups arrays after the last agent chip is removed", async () => {
-    const user = userEvent.setup({ delay: null });
-    await openEditorWithAgents(user);
-
-    await user.click(within(screen.getByLabelText("agent-1")).getByRole("button"));
-    await user.click(within(screen.getByLabelText("group:group-a")).getByRole("button"));
-    expect(screen.queryByLabelText("agent-1")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("group:group-a")).not.toBeInTheDocument();
-
-    const payload = await save(user);
-
-    const objectPermission = wireBody(payload).object_permission as Record<string, unknown>;
-    expect(objectPermission.agents).toStrictEqual([]);
-    expect(objectPermission.agent_access_groups).toStrictEqual([]);
-  });
-
-  it("resends the stored skills when the selector is left untouched", async () => {
-    const user = userEvent.setup({ delay: null });
-    vi.mocked(networking.teamInfoCall).mockResolvedValue(
-      createMockTeamData({ models: ["gpt-4"], object_permission: { skills: ["private-skill"] } }),
-    );
-    vi.mocked(networking.teamUpdateCall).mockResolvedValue({ data: {}, team_id: "123" } as any);
-
-    renderWithProviders(<TeamInfoView {...props} />);
-    await waitFor(() => expect(screen.queryAllByText("Test Team").length).toBeGreaterThan(0));
-    await user.click(screen.getByRole("tab", { name: "Settings" }));
-    await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-    await screen.findByLabelText("Team Name");
-
-    const payload = await save(user);
-
-    const objectPermission = wireBody(payload).object_permission as Record<string, unknown>;
-    expect(objectPermission.skills).toStrictEqual(["private-skill"]);
-  });
-
-  it("sends an empty skills array after the last skill chip is removed", async () => {
-    const user = userEvent.setup({ delay: null });
-    vi.mocked(networking.teamInfoCall).mockResolvedValue(
-      createMockTeamData({ models: ["gpt-4"], object_permission: { skills: ["private-skill"] } }),
-    );
-    vi.mocked(networking.teamUpdateCall).mockResolvedValue({ data: {}, team_id: "123" } as any);
-
-    renderWithProviders(<TeamInfoView {...props} />);
-    await waitFor(() => expect(screen.queryAllByText("Test Team").length).toBeGreaterThan(0));
-    await user.click(screen.getByRole("tab", { name: "Settings" }));
-    await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-    await screen.findByLabelText("Team Name");
-
-    await user.click(within(screen.getByLabelText("private-skill")).getByRole("button"));
-    expect(screen.queryByLabelText("private-skill")).not.toBeInTheDocument();
-
-    const payload = await save(user);
-
-    const objectPermission = wireBody(payload).object_permission as Record<string, unknown>;
-    expect(objectPermission.skills).toStrictEqual([]);
-  });
-
-  it("sends an empty vector_stores array after the last vector store chip is removed", async () => {
-    const user = userEvent.setup({ delay: null });
-    await openEditor(user);
-
-    await user.click(within(screen.getByLabelText("vs-1")).getByRole("button"));
-    expect(screen.queryByLabelText("vs-1")).not.toBeInTheDocument();
-
-    const payload = await save(user);
-
-    const objectPermission = wireBody(payload).object_permission as Record<string, unknown>;
-    expect(objectPermission.vector_stores).toStrictEqual([]);
-  });
-
-  it("resends every stored value once both sections are opened", async () => {
+  it("resends every stored value once Team Member Settings is opened", async () => {
     const user = userEvent.setup({ delay: null });
     await openEditor(user);
 
     await user.click(screen.getByText("Team Member Settings"));
     await screen.findByLabelText("Default Budget (USD)");
-    await user.click(screen.getByText("Search Tool Settings"));
-    await screen.findByPlaceholderText("Select search tools (optional, empty = all allowed)");
 
     const payload = await save(user);
 
@@ -2605,7 +2106,6 @@ describe("TeamInfoView - the exact bytes the update call sends", () => {
       team_member_tpm_limit: 11,
       team_member_rpm_limit: 22,
       default_team_member_models: ["gpt-4"],
-      object_permission: { ...mcpPermissions, search_tools: ["tool-a"] },
     };
     expect(payload).toStrictEqual(expected);
     expect(wireBody(payload)).toStrictEqual(expected);
@@ -2748,7 +2248,6 @@ describe("TeamInfoView - the exact bytes the update call sends", () => {
         budget_duration: "1d",
         tpm_limit: 1000,
         rpm_limit: 1000,
-        object_permission: { vector_stores: ["vs-1"] },
         metadata: { model_tpm_limit: { "gpt-4": 30 }, model_rpm_limit: { "gpt-4": 40 } },
       }),
     );
@@ -2803,46 +2302,6 @@ describe("TeamInfoView - the exact bytes the update call sends", () => {
     expect(wireBody(payload)).not.toHaveProperty("default_team_member_models");
   });
 
-  it("puts the global guardrails back on the team when the kill switch is turned off again", async () => {
-    const user = userEvent.setup({ delay: null });
-    testQueryClient.clear();
-    vi.mocked(networking.getGuardrailsList).mockResolvedValue({
-      guardrails: [
-        { guardrail_name: "always-on", litellm_params: { default_on: true } },
-        { guardrail_name: "opt-in", litellm_params: { default_on: false } },
-      ],
-    });
-    vi.mocked(networking.teamInfoCall).mockResolvedValue(
-      createMockTeamData({
-        models: ["gpt-4"],
-        metadata: { guardrails: ["opt-in"], disable_global_guardrails: true },
-      }),
-    );
-    vi.mocked(networking.teamUpdateCall).mockResolvedValue({ data: {}, team_id: "123" } as any);
-
-    renderWithProviders(<TeamInfoView {...props} premiumUser={true} />);
-    await waitFor(() => expect(screen.queryAllByText("Test Team").length).toBeGreaterThan(0));
-    await user.click(screen.getByRole("tab", { name: "Settings" }));
-    await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-    await screen.findByLabelText("Team Name");
-
-    expect(screen.queryAllByLabelText("always-on")).toHaveLength(0);
-
-    await user.click(screen.getByRole("switch", { name: /Disable all global guardrails/ }));
-
-    expect(await screen.findAllByLabelText("always-on")).toHaveLength(1);
-
-    const payload = await save(user);
-
-    expect(payload.metadata).toStrictEqual(
-      expect.objectContaining({
-        guardrails: ["opt-in"],
-        opted_out_global_guardrails: [],
-        disable_global_guardrails: false,
-      }),
-    );
-  });
-
   it("sends a typed model rate limit as a number", async () => {
     const user = userEvent.setup({ delay: null });
     vi.mocked(networking.teamInfoCall).mockResolvedValue(
@@ -2866,24 +2325,6 @@ describe("TeamInfoView - the exact bytes the update call sends", () => {
     expect(payload.model_tpm_limit).toStrictEqual({ "gpt-4": 30 });
   });
 
-  it("leaves stored policies out of the update body for a caller without the viewPolicies capability", async () => {
-    const user = userEvent.setup({ delay: null });
-    can.mockReturnValue(false);
-    vi.mocked(networking.teamInfoCall).mockResolvedValue(createMockTeamData({ models: ["gpt-4"], policies: ["pci"] }));
-    vi.mocked(networking.teamUpdateCall).mockResolvedValue({ data: {}, team_id: "123" } as any);
-
-    renderWithProviders(<TeamInfoView {...props} />);
-    await waitFor(() => expect(screen.queryAllByText("Test Team").length).toBeGreaterThan(0));
-    await user.click(screen.getByRole("tab", { name: "Settings" }));
-    await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-    await screen.findByLabelText("Team Name");
-
-    const payload = await save(user);
-
-    expect(payload).toHaveProperty("team_alias");
-    expect(wireBody(payload)).not.toHaveProperty("policies");
-  });
-
   it("blocks the save on an empty team name and names the rule", async () => {
     const user = userEvent.setup({ delay: null });
     await openEditor(user);
@@ -2896,446 +2337,7 @@ describe("TeamInfoView - the exact bytes the update call sends", () => {
   });
 });
 
-describe("TeamInfo MCP permission retention", () => {
-  beforeEach(seedDefaultMocks);
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  const server = (serverId: string, serverName: string, alias?: string): MCPServer =>
-    ({
-      server_id: serverId,
-      server_name: serverName,
-      alias,
-      mcp_access_groups: [],
-      created_at: "",
-      created_by: "",
-      updated_at: "",
-      updated_by: "",
-    }) as MCPServer;
-
-  const effective = (serverId: string, kind: EffectiveMcpServer["source"]["kind"]): EffectiveMcpServer =>
-    ({
-      server: server(serverId, serverId),
-      permissionKey: serverId,
-      supersededKeys: [],
-      ambiguousKeys: [],
-      keyedTools: undefined,
-      toolsetTools: undefined,
-      allowedTools: undefined,
-      source: kind === "accessGroup" ? { kind, name: "ops_readonly" } : { kind },
-    }) as EffectiveMcpServer;
-
-  const UNIFIED_SERVER = server("unified-server", "wiki");
-  const UNIFIED_GROUPS = [
-    { access_group_id: "ag-1", access_group_name: "Group 1", access_mcp_server_ids: ["unified-server"] },
-    { access_group_id: "ag-2", access_group_name: "Group 2", access_mcp_server_ids: [] },
-  ];
-
-  const unifiedTeam = (toolPermissions: Record<string, string[]>, serverIds: string[] = []) => {
-    const teamData = {
-      models: ["gpt-4"],
-      access_group_ids: ["ag-1", "ag-2"],
-      access_group_mcp_server_ids: serverIds,
-      object_permission: {
-        mcp_servers: [],
-        mcp_access_groups: [],
-        mcp_toolsets: [],
-        mcp_tool_permissions: toolPermissions,
-      },
-    };
-    return createMockTeamData(teamData);
-  };
-
-  const renderMcpEditor = async (
-    user: ReturnType<typeof userEvent.setup>,
-    {
-      initialTeam = unifiedTeam({ wiki: ["read_page"] }, ["unified-server"]),
-      freshTeam = initialTeam,
-      accessGroups = [],
-    }: {
-      initialTeam?: ReturnType<typeof createMockTeamData>;
-      freshTeam?: ReturnType<typeof createMockTeamData>;
-      accessGroups?: typeof UNIFIED_GROUPS;
-    } = {},
-  ) => {
-    mockUseMCPServers.mockReturnValue({ data: [UNIFIED_SERVER], isLoading: false, isError: false } as any);
-    mockUseMCPToolsets.mockReturnValue({ data: [], isLoading: false, isError: false } as any);
-    mockUseAccessGroups.mockReturnValue({ data: accessGroups, isLoading: false, isError: false } as any);
-    vi.mocked(networking.teamInfoCall).mockResolvedValueOnce(initialTeam).mockResolvedValue(freshTeam);
-    vi.mocked(networking.teamUpdateCall).mockResolvedValue({ data: {}, team_id: "123" } as any);
-
-    renderWithProviders(
-      <TeamInfoView
-        teamId="123"
-        onUpdate={vi.fn()}
-        onClose={vi.fn()}
-        accessToken="test-token"
-        is_team_admin
-        is_proxy_admin
-        userModels={["gpt-4"]}
-        editTeam={false}
-      />,
-    );
-    await waitFor(() => expect(screen.queryAllByText("Test Team").length).toBeGreaterThan(0));
-    await user.click(screen.getByRole("tab", { name: "Settings" }));
-    await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-    await screen.findByLabelText("Team Name");
-  };
-
-  const saveMcpEditor = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(screen.getByRole("button", { name: /save changes/i }));
-    await waitFor(() => expect(networking.teamUpdateCall).toHaveBeenCalled());
-    const calls = vi.mocked(networking.teamUpdateCall).mock.calls;
-    const [, payload] = calls[calls.length - 1];
-    return payload.object_permission.mcp_tool_permissions;
-  };
-
-  const refuseMcpSave = async (user: ReturnType<typeof userEvent.setup>, reason: RegExp) => {
-    const errorToast = vi.spyOn(toast, "fromError").mockImplementation(() => {});
-    await user.click(screen.getByRole("button", { name: /save changes/i }));
-    await waitFor(() => expect(errorToast).toHaveBeenCalledWith(expect.stringMatching(reason)));
-    expect(networking.teamUpdateCall).not.toHaveBeenCalled();
-    errorToast.mockRestore();
-  };
-
-  const resolveGrants = (overrides: Partial<McpGrantInput>) => {
-    const input: McpGrantInput = {
-      effectiveServers: [effective("server-1", "direct")],
-      selectedAccessGroupIds: ["ag-1"],
-      accessGroups: [],
-      standingServerIds: new Set(),
-      loadTeamGroups: vi.fn(),
-      ...overrides,
-    };
-    return grantedMcpServerIds(input);
-  };
-
-  it("retains permissions for directly and indirectly granted servers", async () => {
-    const resolution = await resolveGrants({
-      effectiveServers: [effective("direct", "direct"), effective("inherited", "toolPermission")],
-      accessGroups: [{ access_group_id: "ag-1", access_mcp_server_ids: ["inherited"] }],
-    });
-    expect(resolution.kind).toBe("resolved");
-    if (resolution.kind !== "resolved") return;
-
-    expect(
-      retainedMcpToolPermissions(
-        { direct: ["create_issue"], inherited: ["list_issues"], removed: ["delete_repo"] },
-        resolution.serverIds,
-        [server("direct", "deploy_tracker"), server("inherited", "issue_tracker"), server("removed", "old_tracker")],
-      ),
-    ).toEqual({
-      direct: ["create_issue"],
-      inherited: ["list_issues"],
-    });
-  });
-
-  it("matches name and alias permission keys to granted server ids", () => {
-    const catalog = [server("server-1", "issue_tracker", "issues")];
-
-    expect(
-      retainedMcpToolPermissions(
-        { issue_tracker: ["list_issues"], issues: ["create_issue"] },
-        new Set(["server-1"]),
-        catalog,
-      ),
-    ).toEqual({
-      issue_tracker: ["list_issues"],
-      issues: ["create_issue"],
-    });
-  });
-
-  it("does not reload the team when the access group list covers the selection", async () => {
-    const loadTeamGroups = vi.fn();
-    await expect(
-      resolveGrants({
-        accessGroups: [{ access_group_id: "ag-1", access_mcp_server_ids: ["group-server"] }],
-        loadTeamGroups,
-      }),
-    ).resolves.toEqual({
-      kind: "resolved",
-      serverIds: new Set(["server-1", "group-server"]),
-    });
-    expect(loadTeamGroups).not.toHaveBeenCalled();
-  });
-
-  it("falls back to the team's loaded access group servers when the list is unavailable and the selection is unchanged", async () => {
-    expect(
-      await resolveGrants({
-        loadTeamGroups: vi.fn().mockResolvedValue({ ids: ["ag-1"], serverIds: ["group-server"] }),
-      }),
-    ).toEqual({
-      kind: "resolved",
-      serverIds: new Set(["server-1", "group-server"]),
-    });
-  });
-
-  it("adds standing tool-permission grants to the reloaded team grants", async () => {
-    expect(
-      await resolveGrants({
-        effectiveServers: [effective("server-1", "direct"), effective("standing", "toolPermission")],
-        standingServerIds: new Set(["standing"]),
-        loadTeamGroups: vi.fn().mockResolvedValue({ ids: ["ag-1"], serverIds: ["group-server"] }),
-      }),
-    ).toEqual({
-      kind: "resolved",
-      serverIds: new Set(["server-1", "group-server", "standing"]),
-    });
-  });
-
-  it("is unresolvable when the list is unavailable and the selection changed", async () => {
-    expect(
-      await resolveGrants({
-        loadTeamGroups: vi.fn().mockResolvedValue({ ids: ["ag-1", "ag-2"], serverIds: ["group-server"] }),
-      }),
-    ).toEqual({
-      kind: "unresolvable",
-      reason: expect.stringMatching(/access groups could not be loaded/),
-    });
-  });
-
-  it("is unresolvable when the team reload fails", async () => {
-    expect(await resolveGrants({ loadTeamGroups: vi.fn().mockRejectedValue(new Error("boom")) })).toEqual({
-      kind: "unresolvable",
-      reason: expect.stringMatching(/access groups could not be reloaded/),
-    });
-  });
-
-  it("refuses an unresolved selected access group", async () => {
-    expect(
-      await resolveGrants({
-        selectedAccessGroupIds: ["missing"],
-        loadTeamGroups: vi.fn().mockResolvedValue({ ids: [], serverIds: [] }),
-      }),
-    ).toEqual({
-      kind: "unresolvable",
-      reason: expect.stringMatching(/access groups could not be loaded/),
-    });
-  });
-
-  it("retains an unknown permission key so an inventory refresh cannot erase it", () => {
-    expect(retainedMcpToolPermissions({ "not-yet-loaded": ["read"] }, new Set(), [])).toEqual({
-      "not-yet-loaded": ["read"],
-    });
-  });
-
-  it("splits an ambiguous permission across the matching granted server", () => {
-    const catalog = [server("server-1", "shared"), server("server-2", "shared")];
-
-    expect(
-      retainedMcpToolPermissions({ shared: ["read"], "server-1": ["write"] }, new Set(["server-1"]), catalog),
-    ).toEqual({
-      "server-1": ["write", "read"],
-    });
-  });
-
-  it("keeps an ambiguous permission when all matching servers remain granted", () => {
-    const catalog = [server("server-1", "shared"), server("server-2", "shared")];
-
-    expect(retainedMcpToolPermissions({ shared: ["read"] }, new Set(["server-1", "server-2"]), catalog)).toEqual({
-      shared: ["read"],
-    });
-  });
-
-  it("keeps the group server allowlist when the access group list is unavailable and the selection is unchanged", async () => {
-    const user = userEvent.setup({ delay: null });
-    await renderMcpEditor(user);
-
-    await user.clear(screen.getByLabelText("Team Name"));
-    await user.type(screen.getByLabelText("Team Name"), "Renamed Team");
-
-    expect(await saveMcpEditor(user)).toEqual({ wiki: ["read_page"] });
-  });
-
-  it("refuses a save when the access group list is unavailable and the selection changed", async () => {
-    const user = userEvent.setup({ delay: null });
-    await renderMcpEditor(user);
-
-    await user.click(screen.getByRole("button", { name: "remove first unified access group" }));
-    await refuseMcpSave(user, /access groups could not be loaded/);
-  });
-
-  it("keeps the group server allowlist when a selected access group is missing from the list", async () => {
-    const user = userEvent.setup({ delay: null });
-    await renderMcpEditor(user, {
-      accessGroups: [UNIFIED_GROUPS[1]],
-      initialTeam: unifiedTeam({ wiki: ["read_page"] }, ["unified-server"]),
-    });
-
-    expect(await saveMcpEditor(user)).toEqual({ wiki: ["read_page"] });
-  });
-
-  it("uses current group grants when a server was revoked after the page loaded", async () => {
-    const user = userEvent.setup({ delay: null });
-    await renderMcpEditor(user, {
-      initialTeam: unifiedTeam({ wiki: ["read_page"] }, ["unified-server"]),
-      freshTeam: unifiedTeam({ wiki: ["read_page"] }),
-    });
-
-    expect(await saveMcpEditor(user)).toEqual({});
-  });
-
-  it("uses current group grants when a server was granted after the page loaded", async () => {
-    const user = userEvent.setup({ delay: null });
-    await renderMcpEditor(user, {
-      initialTeam: unifiedTeam({ wiki: ["read_page"] }),
-      freshTeam: unifiedTeam({ wiki: ["read_page"] }, ["unified-server"]),
-    });
-
-    expect(await saveMcpEditor(user)).toEqual({ wiki: ["read_page"] });
-  });
-
-  it("keeps a standing allowlist that no group grant covers at load or at save", async () => {
-    const user = userEvent.setup({ delay: null });
-    await renderMcpEditor(user, {
-      initialTeam: unifiedTeam({ wiki: ["read_page"] }),
-      freshTeam: unifiedTeam({ wiki: ["read_page"] }),
-    });
-
-    expect(await saveMcpEditor(user)).toEqual({ wiki: ["read_page"] });
-  });
-
-  it("refuses a save when the access group list is unavailable and the team reload fails", async () => {
-    const user = userEvent.setup({ delay: null });
-    await renderMcpEditor(user);
-    vi.mocked(networking.teamInfoCall).mockRejectedValueOnce(new Error("boom"));
-
-    await refuseMcpSave(user, /access groups could not be reloaded/);
-  });
-
-  it("identifies standing tool-permission grants not covered by loaded access groups", () => {
-    expect(
-      standingToolPermissionServerIds(
-        [effective("a", "toolPermission"), effective("b", "toolPermission"), effective("c", "direct")],
-        ["ag-1"],
-        [{ access_group_id: "ag-1", access_mcp_server_ids: ["b"] }],
-        [],
-      ),
-    ).toEqual(new Set(["a"]));
-  });
-
-  it("does not treat a server granted by the team's loaded access groups as standing", () => {
-    expect(
-      standingToolPermissionServerIds(
-        [effective("a", "toolPermission"), effective("b", "toolPermission")],
-        ["ag-1"],
-        [],
-        ["b"],
-      ),
-    ).toEqual(new Set(["a"]));
-  });
-
-  it("includes standing tool-permission grants in the resolved server ids", async () => {
-    const standingOnly = { effectiveServers: [effective("x", "toolPermission")], selectedAccessGroupIds: [] };
-    expect(await resolveGrants({ ...standingOnly, standingServerIds: new Set(["x"]) })).toEqual({
-      kind: "resolved",
-      serverIds: new Set(["x"]),
-    });
-    expect(await resolveGrants(standingOnly)).toEqual({
-      kind: "resolved",
-      serverIds: new Set(),
-    });
-  });
-
-  it("retains an indirectly granted server on an unrelated team save", async () => {
-    const user = userEvent.setup({ delay: null });
-    const catalog = [server("direct-server", "deploy_tracker"), server("perm-only-server", "issue_tracker")];
-    mockUseMCPServers.mockReturnValue({ data: catalog, isLoading: false, isError: false } as any);
-    mockUseMCPToolsets.mockReturnValue({ data: [], isLoading: false, isError: false } as any);
-    mockUseAccessGroups.mockReturnValue({
-      data: [],
-      isLoading: false,
-      isError: false,
-    } as any);
-    vi.mocked(networking.teamInfoCall).mockResolvedValue(
-      createMockTeamData({
-        models: ["gpt-4"],
-        access_group_ids: [],
-        object_permission: {
-          mcp_servers: ["direct-server"],
-          mcp_access_groups: [],
-          mcp_toolsets: [],
-          mcp_tool_permissions: {
-            "direct-server": ["create_issue"],
-            "perm-only-server": ["list_issues"],
-          },
-        },
-      }),
-    );
-    vi.mocked(networking.teamUpdateCall).mockResolvedValue({ data: {}, team_id: "123" } as any);
-
-    renderWithProviders(
-      <TeamInfoView
-        teamId="123"
-        onUpdate={vi.fn()}
-        onClose={vi.fn()}
-        accessToken="test-token"
-        is_team_admin
-        is_proxy_admin
-        userModels={["gpt-4"]}
-        editTeam={false}
-      />,
-    );
-    await waitFor(() => expect(screen.queryAllByText("Test Team").length).toBeGreaterThan(0));
-    await user.click(screen.getByRole("tab", { name: "Settings" }));
-    await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-    await user.clear(screen.getByLabelText("Team Name"));
-    await user.type(screen.getByLabelText("Team Name"), "Renamed Team");
-    await user.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(networking.teamUpdateCall).toHaveBeenCalled());
-    const [, payload] = vi.mocked(networking.teamUpdateCall).mock.calls[0];
-    expect(payload.object_permission.mcp_tool_permissions).toEqual({
-      "direct-server": ["create_issue"],
-      "perm-only-server": ["list_issues"],
-    });
-  });
-
-  it("refuses a save with MCP permissions while the server inventory is unavailable", async () => {
-    const user = userEvent.setup({ delay: null });
-    mockUseMCPServers.mockReturnValue({ data: [], isLoading: false, isError: true } as any);
-    vi.mocked(networking.teamInfoCall).mockResolvedValue(
-      createMockTeamData({
-        models: ["gpt-4"],
-        object_permission: {
-          mcp_servers: ["direct-server"],
-          mcp_access_groups: [],
-          mcp_toolsets: [],
-          mcp_tool_permissions: { "direct-server": ["create_issue"] },
-        },
-      }),
-    );
-    vi.mocked(networking.teamUpdateCall).mockResolvedValue({ data: {}, team_id: "123" } as any);
-    const errorToast = vi.spyOn(toast, "fromError").mockImplementation(() => {});
-
-    renderWithProviders(
-      <TeamInfoView
-        teamId="123"
-        onUpdate={vi.fn()}
-        onClose={vi.fn()}
-        accessToken="test-token"
-        is_team_admin
-        is_proxy_admin
-        userModels={["gpt-4"]}
-        editTeam={false}
-      />,
-    );
-    await waitFor(() => expect(screen.queryAllByText("Test Team").length).toBeGreaterThan(0));
-    await user.click(screen.getByRole("tab", { name: "Settings" }));
-    await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-    await user.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() =>
-      expect(errorToast).toHaveBeenCalledWith(expect.stringMatching(/server list could not be loaded/)),
-    );
-    expect(networking.teamUpdateCall).not.toHaveBeenCalled();
-    errorToast.mockRestore();
-  });
-});
-
-describe("TeamInfoView - disable_global_guardrails switch gating", () => {
+describe("TeamInfoView - require_trace_id switch gating", () => {
   beforeEach(() => {
     seedDefaultMocks();
     vi.mocked(networking.teamInfoCall).mockResolvedValue(createMockTeamData());
@@ -3366,21 +2368,12 @@ describe("TeamInfoView - disable_global_guardrails switch gating", () => {
     await screen.findByLabelText("Team Name");
   };
 
-  it("hides the Disable all global guardrails switch from a non-admin", async () => {
+  it("hides the Require Trace ID switch from a non-admin", async () => {
     authState.userRole = "Internal User";
     renderWithProviders(<TeamInfoView {...props} is_proxy_admin={false} />);
     await openEditForm();
 
-    expect(screen.queryByRole("switch", { name: /Disable all global guardrails/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: /Require Trace ID/i })).not.toBeInTheDocument();
-  });
-
-  it("shows the Disable all global guardrails switch to a proxy admin", async () => {
-    renderWithProviders(<TeamInfoView {...props} />);
-    await openEditForm();
-
-    expect(await screen.findByRole("switch", { name: /Disable all global guardrails/i })).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: /Require Trace ID/i })).toBeInTheDocument();
   });
 
   it("shows the stored trace requirement to a non-admin on the team overview", async () => {

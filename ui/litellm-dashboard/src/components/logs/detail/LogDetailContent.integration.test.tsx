@@ -1,13 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { GuardrailJumpLink, LogDetailContent } from "./LogDetailContent";
+import { LogDetailContent } from "./LogDetailContent";
 import type { LogEntry } from "../types";
 import { toast } from "@/lib/toast";
-
-vi.mock("./sections/GuardrailViewer/GuardrailViewer", () => ({
-  default: ({ data }: { data: unknown }) => <div data-testid="guardrail-viewer">{JSON.stringify(data)}</div>,
-}));
 
 const createLogEntry = (overrides: Partial<LogEntry> = {}): LogEntry =>
   ({
@@ -503,25 +499,6 @@ describe("LogDetailContent", () => {
     expect(screen.queryByText("Pod")).not.toBeInTheDocument();
   });
 
-  it("should display guardrail label when guardrail data exists", () => {
-    render(
-      <LogDetailContent
-        logEntry={createLogEntry({
-          metadata: {
-            status: "success",
-            guardrail_information: {
-              guardrail_name: "PII Filter",
-              masked_entity_count: { PERSON: 2 },
-            },
-          },
-        })}
-      />,
-    );
-
-    expect(screen.getByText("PII Filter")).toBeInTheDocument();
-    expect(screen.getByText("2 masked")).toBeInTheDocument();
-  });
-
   it("should display a Response Cache 'Hit' tag when the response cache served the request", () => {
     render(<LogDetailContent logEntry={createLogEntry({ cache_hit: "True" })} />);
 
@@ -711,30 +688,6 @@ describe("LogDetailContent", () => {
     expect(dateElements.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("should display Vector Store Requests when vector store data exists", () => {
-    render(
-      <LogDetailContent
-        logEntry={createLogEntry({
-          metadata: {
-            status: "success",
-            vector_store_request_metadata: [
-              {
-                query: "test query",
-                vector_store_id: "vs-123",
-                custom_llm_provider: "openai",
-                start_time: 1700000000,
-                end_time: 1700000001,
-                vector_store_search_response: { data: [], search_query: "test" },
-              },
-            ],
-          },
-        })}
-      />,
-    );
-
-    expect(screen.getByText("Vector Store Requests")).toBeInTheDocument();
-  });
-
   it("should display provider as dash when custom_llm_provider is absent", () => {
     render(
       <LogDetailContent
@@ -747,38 +700,5 @@ describe("LogDetailContent", () => {
     const descriptions = screen.getByText("Provider").parentElement as HTMLElement;
     expect(descriptions).toBeInTheDocument();
     expect(within(descriptions).getByText("-")).toBeInTheDocument();
-  });
-});
-
-describe("GuardrailJumpLink", () => {
-  it.each([
-    [["success", "success"], "text-success", "\u2713"],
-    [["success", "guardrail_flagged"], "text-warning", "\u26A0"],
-    [["guardrail_flagged", "guardrail_intervened"], "text-destructive", "\u2717"],
-  ])("styles %j as %s", (statuses, expectedClass, glyph) => {
-    render(<GuardrailJumpLink guardrailEntries={statuses.map((s) => ({ guardrail_status: s }))} />);
-
-    const pill = screen.getByText(/2 guardrails evaluated/);
-    expect(pill).toHaveClass(expectedClass);
-    expect(pill).toHaveTextContent(glyph);
-  });
-
-  it.each([
-    [["success", "not_run"], "text-success", "\u2713"],
-    [["guardrail_intervened", "not_run"], "text-destructive", "\u2717"],
-  ])("ignores not_run when styling %j as %s", (statuses, expectedClass, glyph) => {
-    render(<GuardrailJumpLink guardrailEntries={statuses.map((s) => ({ guardrail_status: s }))} />);
-
-    const pill = screen.getByText(/1 guardrail evaluated, 1 not run/);
-    expect(pill).toHaveClass(expectedClass);
-    expect(pill).toHaveTextContent(glyph);
-  });
-
-  it("renders an all not_run request as neutral rather than passed", () => {
-    render(<GuardrailJumpLink guardrailEntries={[{ guardrail_status: "not_run" }]} />);
-
-    const pill = screen.getByText(/0 guardrails evaluated, 1 not run/);
-    expect(pill).toHaveClass("text-muted-foreground");
-    expect(pill).not.toHaveTextContent("\u2713");
   });
 });

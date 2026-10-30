@@ -22,8 +22,6 @@ describe("textHistory", () => {
       user("question that was cancelled"),
       user("draw a cat"),
       assistant("data:image/png;base64,AAA", { isImage: true }),
-      { role: "user", content: "", mcpToolCall: { tool: "search", arguments: {} } },
-      assistant("tool output"),
       user("think hard"),
       assistant(""),
       user("think again"),

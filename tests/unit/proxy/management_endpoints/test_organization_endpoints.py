@@ -1487,26 +1487,13 @@ def _organization_test_client() -> TestClient:
 
 
 @pytest.mark.parametrize(("method", "path"), _organization_route_targets())
-def test_organization_routes_are_blocked_without_enterprise_license(monkeypatch, method, path):
-    """Every /organization route is enterprise-only, even for a proxy admin sending a valid request."""
-    import litellm.proxy.proxy_server as proxy_server
-
-    monkeypatch.setattr(proxy_server, "premium_user", False, raising=False)
-    monkeypatch.setattr(proxy_server, "prisma_client", None, raising=False)
-
-    response = _organization_test_client().request(method, path, **_organization_request(method, path))
-
-    assert response.status_code == 403
-    assert "Organizations" in response.json()["detail"]["error"]
-
-
-@pytest.mark.parametrize(("method", "path"), _organization_route_targets())
-def test_organization_routes_reach_their_handler_with_enterprise_license(monkeypatch, method, path):
-    """The same request a license refuses above now reaches the handler, which is the code reporting the missing database."""
+def test_organization_routes_reach_their_handler_without_enterprise_license(monkeypatch, method, path):
+    """Organizations are not license-gated in this fork, so a proxy admin's request reaches the handler,
+    which is the code reporting the missing database."""
     import litellm.proxy.proxy_server as proxy_server
     from litellm.proxy._types import CommonProxyErrors
 
-    monkeypatch.setattr(proxy_server, "premium_user", True, raising=False)
+    monkeypatch.setattr(proxy_server, "premium_user", False, raising=False)
     monkeypatch.setattr(proxy_server, "prisma_client", None, raising=False)
 
     response = _organization_test_client().request(method, path, **_organization_request(method, path))

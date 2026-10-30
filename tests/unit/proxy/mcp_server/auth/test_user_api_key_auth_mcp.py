@@ -3685,56 +3685,6 @@ class TestMCPDelegateAuthToUpstream:
 
         assert "tp-server" in result
 
-    def test_extract_target_server_names_matches_routing_parser(self):
-        """
-        Regression: extract_target_server_names_from_path must match the
-        downstream regex parser in server.py::_get_mcp_servers_in_path.
-
-        Previously, a request to ``/mcp/<delegated>/garbage`` was parsed as
-        targeting ``<delegated>`` by the auth gate (bypassing LiteLLM auth)
-        while the routing layer parsed it as ``<delegated>/garbage`` — when
-        that name did not resolve, the request fell back to the anonymous
-        allow-list which can include ``allow_all_keys`` servers that normally
-        require a LiteLLM key.
-        """
-        from litellm.proxy.mcp_server.server import (
-            _get_mcp_servers_in_path,
-        )
-
-        cases = [
-            ("/mcp/sse", []),
-            ("/mcp/sse/", []),
-            ("/mcp/sse/messages", []),
-            ("/mcp/sse/messages/", []),
-            ("/sse/mcp", ["sse"]),
-            # Single server, single segment.
-            ("/mcp/foo", ["foo"]),
-            # Server name with one embedded slash (two segments).
-            ("/mcp/foo/bar", ["foo/bar"]),
-            # Server name with embedded slash + extra path → name stays at two segments.
-            ("/mcp/foo/bar/tools", ["foo/bar"]),
-            # Comma-separated servers, no trailing path.
-            ("/mcp/foo,bar", ["foo", "bar"]),
-            # Comma-separated servers with trailing path.
-            ("/mcp/foo,bar/tools", ["foo", "bar"]),
-            # Alternative form ``/<server>/mcp`` is also parsed (both auth
-            # parser and routing parser handle it for defense-in-depth — some
-            # entry points may not be rewritten by ``dynamic_mcp_route``).
-            ("/foo/mcp", ["foo"]),
-            ("/foo/mcp/tools", ["foo"]),
-            # Non-MCP paths → empty (fail closed).
-            ("/.well-known/oauth-authorization-server", []),
-            ("/v1/keys", []),
-            ("/", []),
-        ]
-        for path_input, expected in cases:
-            assert MCPRequestHandler.extract_target_server_names_from_path(path_input) == expected, (
-                f"path={path_input!r} → expected {expected!r}"
-            )
-            assert (_get_mcp_servers_in_path(path_input) or []) == expected, (
-                f"path={path_input!r} → routing expected {expected!r}"
-            )
-
     async def test_delegate_does_not_bypass_on_extra_path_segment(self):
         """
         Regression: ``/mcp/<delegated>/<garbage>`` must NOT bypass auth.
@@ -8741,37 +8691,6 @@ class TestGatewaySessionAdmission:
         # the request carried "Authorization: Bearer <session>"; both egress contexts must be scrubbed
         assert oauth2_headers is None
         assert not any(k.lower() == "authorization" for k in (raw_headers or {}))
-
-    @pytest.mark.parametrize(
-        "path, original_path, extra_headers",
-        [
-            ("/mcp/github", None, ()),
-            ("/mcp/github", "/github/mcp", ()),
-            ("/mcp", None, ((b"x-mcp-servers", b"github"),)),
-        ],
-    )
-    async def test_arm_admits_session_bearer_on_per_server_scopes(self, path, original_path, extra_headers):
-        """A valid session bearer admits the live user on per-server paths (the standard
-        spelling and the legacy /{server}/mcp spelling as dynamic_mcp_route rewrites it) and
-        x-mcp-servers scoped requests, never touching user_api_key_auth; downstream grant
-        resolution then intersects the named servers against the admitted subject's grants,
-        so the narrower scope can never broaden access (LIT-4864)."""
-        token = self._access_token(user_id="sso-user-42")
-        scope = self._scope(token, path=path, extra_headers=extra_headers)
-        if original_path is not None:
-            scope["_original_path"] = original_path
-        with (
-            patch("litellm.proxy.proxy_server.master_key", self._MASTER_KEY),
-            patch(
-                "litellm.proxy.mcp_server.auth.user_api_key_auth_mcp.user_api_key_auth",
-                new_callable=AsyncMock,
-            ) as mock_auth,
-            self._patch_user_reload(user_id="sso-user-42"),
-        ):
-            auth_result, *_rest = await MCPRequestHandler.process_mcp_request(scope)
-        assert auth_result.user_id == "sso-user-42"
-        assert auth_result.mcp_admitted_user_subject is True
-        mock_auth.assert_not_called()
 
     async def test_expired_session_bearer_on_per_server_path_gets_per_server_challenge(self):
         """An expired session bearer on a per-server path targeting a gateway-managed oauth2

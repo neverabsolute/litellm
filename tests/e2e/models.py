@@ -1144,8 +1144,7 @@ class TagSpend(BaseModel):
 
 
 class SpendTagsResponse(RootModel[list[TagSpend]]):
-    """GET /spend/tags answers with a bare array of per-tag aggregates, not an
-    object wrapping them (that's /global/spend/tags). Read the rows off .root."""
+    """GET /spend/tags answers with a bare array of per-tag aggregates. Read the rows off .root."""
 
 
 # ---------- route probing ----------

@@ -102,12 +102,7 @@ describe("chat_completion", () => {
       undefined, // onTimingData
       undefined, // onUsageData
       undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      undefined, // selectedMCPServers
       undefined, // onImageGenerated
-      undefined, // onSearchResults
       0.7, // temperature
       100, // max_tokens
     );
@@ -126,80 +121,6 @@ describe("chat_completion", () => {
     });
   });
 
-  it("should configure MCP tools per server with restrictions", async () => {
-    const selectedMCPServers = ["server-1", "server-2"];
-    const mcpServers = [
-      {
-        server_id: "server-1",
-        alias: "alpha",
-        server_name: "Alpha",
-        url: "http://example.com",
-        created_at: "2024-01-01",
-        created_by: "test",
-        updated_at: "2024-01-01",
-        updated_by: "test",
-      },
-      {
-        server_id: "server-2",
-        server_name: "Beta",
-        url: "http://example.com",
-        created_at: "2024-01-01",
-        created_by: "test",
-        updated_at: "2024-01-01",
-        updated_by: "test",
-      },
-    ];
-    const mcpServerToolRestrictions = {
-      "server-1": ["toolA", "toolB"],
-      "server-2": ["toolC"],
-    } as Record<string, string[]>;
-
-    await makeOpenAIChatCompletionRequest(
-      mockChatHistory,
-      mockUpdateUI,
-      "gpt-4",
-      "test-token",
-      undefined, // tags
-      undefined, // signal
-      undefined, // onReasoningContent
-      undefined, // onTimingData
-      undefined, // onUsageData
-      undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      selectedMCPServers,
-      undefined, // onImageGenerated
-      undefined, // onSearchResults
-      undefined, // temperature
-      undefined, // max_tokens
-      undefined, // onTotalLatency
-      undefined, // customBaseUrl
-      mcpServers,
-      mcpServerToolRestrictions,
-    );
-
-    const callArgs = mockCreate.mock.calls[0][0];
-    expect(callArgs.tool_choice).toBe("auto");
-    expect(callArgs.tools).toHaveLength(2);
-
-    // Check first tool
-    const firstTool = callArgs.tools[0];
-    expect(firstTool.type).toBe("mcp");
-    expect(firstTool.server_label).toBe("litellm");
-    expect(firstTool.server_url).toBe("litellm_proxy/mcp/alpha");
-    expect(firstTool.require_approval).toBe("never");
-    expect(firstTool.allowed_tools).toEqual(["toolA", "toolB"]);
-
-    // Check second tool
-    const secondTool = callArgs.tools[1];
-    expect(secondTool.type).toBe("mcp");
-    expect(secondTool.server_label).toBe("litellm");
-    expect(secondTool.server_url).toBe("litellm_proxy/mcp/Beta");
-    expect(secondTool.require_approval).toBe("never");
-    expect(secondTool.allowed_tools).toEqual(["toolC"]);
-  });
-
   it("should include mock_testing_fallbacks in request body when mockTestFallbacks is true", async () => {
     await makeOpenAIChatCompletionRequest(
       mockChatHistory,
@@ -212,19 +133,11 @@ describe("chat_completion", () => {
       undefined, // onTimingData
       undefined, // onUsageData
       undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      undefined, // selectedMCPServers
       undefined, // onImageGenerated
-      undefined, // onSearchResults
       undefined, // temperature
       undefined, // max_tokens
       undefined, // onTotalLatency
       undefined, // customBaseUrl
-      undefined, // mcpServers
-      undefined, // mcpServerToolRestrictions
-      undefined, // onMCPEvent
       true, // mockTestFallbacks
     );
 
@@ -271,21 +184,12 @@ describe("chat_completion", () => {
       onTimingData,
       onUsageData,
       undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      undefined, // selectedMCPServers
       undefined, // onImageGenerated
-      undefined, // onSearchResults
       undefined, // temperature
       undefined, // max_tokens
       onTotalLatency,
       undefined, // customBaseUrl
-      undefined, // mcpServers
-      undefined, // mcpServerToolRestrictions
-      undefined, // onMCPEvent
       undefined, // mockTestFallbacks
-      undefined, // mcpToolsets
       false, // streamingEnabled
     );
 
@@ -307,7 +211,7 @@ describe("chat_completion", () => {
     expect(onTotalLatency).toHaveBeenCalledWith(expect.any(Number));
   });
 
-  it("should surface reasoning content and MCP metadata from a non-streaming response", async () => {
+  it("should surface reasoning content from a non-streaming response", async () => {
     mockCreate.mockReturnValueOnce(
       nonStreamingResponse({
         model: "gpt-4",
@@ -319,10 +223,6 @@ describe("chat_completion", () => {
               role: "assistant",
               content: "done",
               reasoning_content: "thinking",
-              provider_specific_fields: {
-                mcp_tool_calls: [{ id: "call_1", function: { name: "search_docs", arguments: "{}" } }],
-                mcp_call_results: [{ tool_call_id: "call_1", result: "found it" }],
-              },
             },
           },
         ],
@@ -330,7 +230,6 @@ describe("chat_completion", () => {
     );
 
     const onReasoningContent = vi.fn();
-    const onMCPEvent = vi.fn();
 
     await makeOpenAIChatCompletionRequest(
       mockChatHistory,
@@ -343,35 +242,17 @@ describe("chat_completion", () => {
       undefined, // onTimingData
       undefined, // onUsageData
       undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      undefined, // selectedMCPServers
       undefined, // onImageGenerated
-      undefined, // onSearchResults
       undefined, // temperature
       undefined, // max_tokens
       undefined, // onTotalLatency
       undefined, // customBaseUrl
-      undefined, // mcpServers
-      undefined, // mcpServerToolRestrictions
-      onMCPEvent,
       undefined, // mockTestFallbacks
-      undefined, // mcpToolsets
       false, // streamingEnabled
     );
 
     expect(onReasoningContent).toHaveBeenCalledWith("thinking");
-    expect(onMCPEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "response.output_item.done",
-        item: expect.objectContaining({
-          type: "mcp_call",
-          name: "search_docs",
-          output: "found it",
-        }),
-      }),
-    );
+    expect(mockUpdateUI).toHaveBeenCalledWith("done", "gpt-4");
   });
 
   it("should not include mock_testing_fallbacks in request body when mockTestFallbacks is false or undefined", async () => {
@@ -386,19 +267,11 @@ describe("chat_completion", () => {
       undefined, // onTimingData
       undefined, // onUsageData
       undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      undefined, // selectedMCPServers
       undefined, // onImageGenerated
-      undefined, // onSearchResults
       undefined, // temperature
       undefined, // max_tokens
       undefined, // onTotalLatency
       undefined, // customBaseUrl
-      undefined, // mcpServers
-      undefined, // mcpServerToolRestrictions
-      undefined, // onMCPEvent
       false, // mockTestFallbacks
     );
 
@@ -523,21 +396,12 @@ describe("chat_completion response cache", () => {
       undefined, // onTimingData
       onUsageData,
       undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      undefined, // selectedMCPServers
       undefined, // onImageGenerated
-      undefined, // onSearchResults
       undefined, // temperature
       undefined, // max_tokens
       undefined, // onTotalLatency
       undefined, // customBaseUrl
-      undefined, // mcpServers
-      undefined, // mcpServerToolRestrictions
-      undefined, // onMCPEvent
       undefined, // mockTestFallbacks
-      undefined, // mcpToolsets
       false, // streamingEnabled
     );
 
@@ -568,15 +432,6 @@ describe("chat_completion response cache", () => {
       undefined,
       undefined,
       onUsageData,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -632,15 +487,6 @@ describe("chat_completion custom headers", () => {
       "gpt-4",
       "test-token",
       ["team-a"],
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
       undefined,
       undefined,
       undefined,

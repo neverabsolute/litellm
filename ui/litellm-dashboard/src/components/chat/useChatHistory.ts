@@ -182,7 +182,6 @@ export function useChatHistory(
       title: "New conversation",
       model,
       messages: [],
-      mcpServerNames: [],
       createdAt: now,
       updatedAt: now,
     };

@@ -31,9 +31,6 @@ vi.mock("../networking", async () => {
   const actual = await vi.importActual("../networking");
   return {
     ...actual,
-    getGuardrailsList: vi.fn().mockResolvedValue({
-      guardrails: [{ guardrail_name: "test-guardrail-1" }, { guardrail_name: "test-guardrail-2" }],
-    }),
     tagListCall: vi.fn().mockResolvedValue({}),
     modelAvailableCall: vi.fn().mockResolvedValue({
       data: [{ id: "model-group-1" }, { id: "model-group-2" }],
@@ -178,18 +175,6 @@ vi.mock("@/app/(dashboard)/hooks/teams/useTeams", () => ({
     hasNextPage: false,
     isFetchingNextPage: false,
     isLoading: false,
-  }),
-}));
-
-vi.mock("@/app/(dashboard)/hooks/guardrails/useGuardrails", () => ({
-  useGuardrails: vi.fn().mockReturnValue({
-    data: {
-      guardrails: [{ guardrail_name: "test-guardrail" }],
-      globalGuardrailNames: new Set<string>(),
-      optionalGuardrailNames: new Set<string>(["test-guardrail"]),
-    },
-    isLoading: false,
-    error: null,
   }),
 }));
 

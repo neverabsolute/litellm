@@ -1,7 +1,7 @@
 import useTeams from "@/app/(dashboard)/hooks/useTeams";
 import { StackedUsageChart, type StackedUsageScale } from "@/components/shared/charts";
 import { DataTable } from "@/components/shared/DataTable";
-import { getProviderSpend, getTopAgents, getTopAPIKeys, getTopModels } from "./entityUsageAggregations";
+import { getProviderSpend, getTopAPIKeys, getTopModels } from "./entityUsageAggregations";
 import {
   buildCostBreakdownTiles,
   buildSummaryTiles,
@@ -12,7 +12,7 @@ import {
 import { MoneyCell } from "@/components/shared/table_cells";
 import { hasCapability, type Capability } from "@/utils/capabilities";
 import type { DateRangePickerValue } from "@/components/shared/date_picker_types";
-import { Bot, Boxes, ChevronDown, ChevronRight, ExternalLink, Info, KeyRound, Layers, Server } from "lucide-react";
+import { Boxes, ChevronDown, ChevronRight, ExternalLink, Info, KeyRound, Layers, Server } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { ChartLoader } from "@/components/shared/chart_loader";
@@ -130,7 +130,6 @@ interface EntityUsageProps {
 
 const ENTITY_CAPABILITIES: Partial<Record<EntityType, Capability>> = {
   organization: "viewOrganizationUsage",
-  agent: "viewAgentUsage",
 };
 
 const EntityUsage: React.FC<EntityUsageProps> = ({
@@ -149,7 +148,6 @@ const EntityUsage: React.FC<EntityUsageProps> = ({
   const [modelViewType, setModelViewType] = useState<ModelViewType>("groups");
   const [topKeysLimit, setTopKeysLimit] = useState<number>(5);
   const [topModelsLimit, setTopModelsLimit] = useState<number>(5);
-  const [topAgentsLimit, setTopAgentsLimit] = useState<number>(5);
   const [showCostBreakdown, setShowCostBreakdown] = useState(false);
 
   const startTime = useMemo(() => (dateValue.from ? new Date(dateValue.from) : null), [dateValue.from]);
@@ -157,7 +155,6 @@ const EntityUsage: React.FC<EntityUsageProps> = ({
   const api = ENTITY_API[entityType];
   const entityCapability = ENTITY_CAPABILITIES[entityType];
   const canViewEntity = entityCapability === undefined || hasCapability(userRole, entityCapability, isOrgAdmin);
-  const showAgentBreakdown = entityType === "team" && hasCapability(userRole, "viewAgentUsage");
   const hasRequestWindow = !!accessToken && !!startTime && !!endTime;
   const enabled = hasRequestWindow && canViewEntity;
 
@@ -172,18 +169,6 @@ const EntityUsage: React.FC<EntityUsageProps> = ({
           }
         : null,
     [hasRequestWindow, accessToken, startTime, endTime, selectedTags],
-  );
-  const agentRequest = useMemo<DailyActivityRequest | null>(
-    () =>
-      hasRequestWindow
-        ? {
-            accessToken: accessToken as string,
-            startTime: startTime as Date,
-            endTime: endTime as Date,
-            entityIds: null,
-          }
-        : null,
-    [hasRequestWindow, accessToken, startTime, endTime],
   );
 
   const {
@@ -206,26 +191,6 @@ const EntityUsage: React.FC<EntityUsageProps> = ({
     [spendDataRaw],
   );
   const summaryMetrics = useMemo(() => overallUsageMetrics(spendData.results, spendData.metadata), [spendData]);
-
-  const {
-    data: agentSpendDataRaw,
-    loading: agentLoading,
-    failed: agentFailed,
-    errorMessage: agentErrorMessage,
-    reload: reloadAgent,
-  } = useAggregatedDailyActivity({
-    fetch: () => ENTITY_API.agent.aggregated(agentRequest as DailyActivityRequest),
-    enabled: enabled && showAgentBreakdown && agentRequest !== null,
-    deps: [accessToken, startTime, endTime, showAgentBreakdown],
-  });
-
-  const agentSpendData = useMemo(
-    () => ({
-      results: toDailyData(agentSpendDataRaw),
-      metadata: agentSpendDataRaw.metadata ?? EMPTY_DAILY_ACTIVITY_METADATA,
-    }),
-    [agentSpendDataRaw],
-  );
 
   const fetchTopApiKeys = useCallback(
     (model: string) => api.modelTopKeys(request as DailyActivityRequest, model, modelViewType === "groups"),
@@ -254,7 +219,6 @@ const EntityUsage: React.FC<EntityUsageProps> = ({
 
   const modelBreakdownKey = modelViewType === "groups" ? "model_groups" : "models";
   const modelMetrics = processActivityData(spendData, modelBreakdownKey, teamList);
-  const agentMetrics = showAgentBreakdown ? processActivityData(agentSpendData, "entities", teamList) : {};
 
   const getAllTags = () => {
     if (entityList) {
@@ -594,7 +558,7 @@ const EntityUsage: React.FC<EntityUsageProps> = ({
         </Panel>
         <Panel
           icon={Boxes}
-          title={entityType === "agent" ? "Top Agents" : modelViewTitle}
+          title={modelViewTitle}
           action={<ModelViewToggle value={modelViewType} onChange={setModelViewType} />}
         >
           <TopModelView
@@ -604,20 +568,6 @@ const EntityUsage: React.FC<EntityUsageProps> = ({
           />
         </Panel>
       </div>
-
-      {showAgentBreakdown && (
-        <Panel icon={Bot} title="Top Agents Driving Spend">
-          {agentLoading ? (
-            <ChartLoader />
-          ) : (
-            <TopModelView
-              topModels={getTopAgents(agentSpendData.results, topAgentsLimit)}
-              topModelsLimit={topAgentsLimit}
-              setTopModelsLimit={setTopAgentsLimit}
-            />
-          )}
-        </Panel>
-      )}
 
       <Panel icon={Server} title="Provider Usage">
         <ProviderSpendBreakdown rows={providerSpend} />
@@ -629,29 +579,16 @@ const EntityUsage: React.FC<EntityUsageProps> = ({
     { key: "cost", label: "Cost", content: costPanel },
     {
       key: "models",
-      label: entityType === "agent" ? "Request / Token Consumption" : "Model Activity",
+      label: "Model Activity",
       content: (
         <>
           <div className="mb-3 flex justify-end">
             <ModelViewToggle value={modelViewType} onChange={setModelViewType} />
           </div>
-          <ActivityMetrics
-            modelMetrics={modelMetrics}
-            hidePromptCachingMetrics={entityType === "agent"}
-            fetchTopApiKeys={request ? fetchTopApiKeys : undefined}
-          />
+          <ActivityMetrics modelMetrics={modelMetrics} fetchTopApiKeys={request ? fetchTopApiKeys : undefined} />
         </>
       ),
     },
-    ...(showAgentBreakdown
-      ? [
-          {
-            key: "agents",
-            label: "Agent Activity",
-            content: <ActivityMetrics modelMetrics={agentMetrics} />,
-          },
-        ]
-      : []),
     {
       key: "keys",
       label: "Key Activity",
@@ -663,7 +600,6 @@ const EntityUsage: React.FC<EntityUsageProps> = ({
           fetchKeyDetail={fetchKeyDetail}
           searchKeys={searchKeys}
           teams={teamList}
-          hidePromptCachingMetrics={entityType === "agent"}
         />
       ),
     },
@@ -673,9 +609,6 @@ const EntityUsage: React.FC<EntityUsageProps> = ({
   return (
     <div className="relative grid w-full gap-3">
       {failed && <ErrorState title="Failed to load spend data" message={errorMessage} onRetry={reload} />}
-      {showAgentBreakdown && agentFailed && (
-        <ErrorState title="Failed to load agent data" message={agentErrorMessage} onRetry={reloadAgent} />
-      )}
       <div className="max-w-full [&>div:first-child]:mb-0 [&>div:first-child_label]:sr-only">
         <UsageExportHeader
           dateValue={dateValue}
