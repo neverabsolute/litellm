@@ -1557,3 +1557,62 @@ def test_validate_team_model_max_budget_is_license_gated_only_when_set() -> None
             model_max_budget={"gpt-4o": BudgetConfig(max_budget=1.0, budget_duration="1d")}, premium_user=False
         )
     assert exc.value.status_code == 403
+
+
+_STORED_IPS: Final = {"allowed_ips": ["198.51.100.0/24"]}
+
+
+def _key_update(**fields: object):
+    from litellm.types.proxy.management_endpoints.key_requests import UpdateKeyRequest
+
+    return UpdateKeyRequest(key="sk-1", **fields)
+
+
+@pytest.mark.parametrize(
+    ("fields", "existing", "rejected_field"),
+    [
+        ({"allowed_ips": ["0.0.0.0/0"]}, _STORED_IPS, "allowed_ips"),
+        ({"allowed_ips": []}, _STORED_IPS, "allowed_ips"),
+        ({"allowed_ips": ["198.51.100.7"]}, None, "allowed_ips"),
+        ({"metadata": {"team": "a"}}, _STORED_IPS, "metadata.allowed_ips"),
+        ({"metadata": {"allowed_ips": ["0.0.0.0/0"]}}, _STORED_IPS, "metadata.allowed_ips"),
+        ({"metadata": None}, _STORED_IPS, "metadata.allowed_ips"),
+        ({"allowed_ips": ["198.51.100.0/24"]}, _STORED_IPS, None),
+        ({"metadata": {"team": "a", **_STORED_IPS}}, _STORED_IPS, None),
+        ({"metadata": {"team": "a"}}, None, None),
+        ({"max_budget": 5.0}, _STORED_IPS, None),
+    ],
+)
+def test_non_admins_cannot_change_a_keys_allowed_ips(
+    fields: dict[str, object], existing: dict[str, object] | None, rejected_field: str | None
+) -> None:
+    from litellm.proxy.management_endpoints.common_utils import check_allowed_ips_caller_permission
+
+    caller: Final = UserAPIKeyAuth(user_role=LitellmUserRoles.INTERNAL_USER)
+    if rejected_field is None:
+        check_allowed_ips_caller_permission(_key_update(**fields), caller, existing_metadata=existing)
+        return
+    with pytest.raises(HTTPException) as exc_info:
+        check_allowed_ips_caller_permission(_key_update(**fields), caller, existing_metadata=existing)
+    assert exc_info.value.status_code == 403
+    assert f"`{rejected_field}`" in str(exc_info.value.detail)
+
+
+def test_admins_can_change_allowed_ips_but_not_to_unparseable_entries() -> None:
+    from litellm.proxy.management_endpoints.common_utils import check_allowed_ips_caller_permission
+
+    admin: Final = UserAPIKeyAuth(user_role=LitellmUserRoles.PROXY_ADMIN)
+    check_allowed_ips_caller_permission(_key_update(allowed_ips=[]), admin, existing_metadata=_STORED_IPS)
+    with pytest.raises(HTTPException) as exc_info:
+        check_allowed_ips_caller_permission(
+            _key_update(metadata={"allowed_ips": ["office-vpn"]}), admin, existing_metadata=_STORED_IPS
+        )
+    assert exc_info.value.status_code == 400
+
+
+def test_key_request_rejects_and_normalizes_allowed_ips() -> None:
+    from pydantic import ValidationError
+
+    assert _key_update(allowed_ips=["10.1.2.3/8", "192.0.2.7"]).allowed_ips == ("10.0.0.0/8", "192.0.2.7")
+    with pytest.raises(ValidationError):
+        _key_update(allowed_ips=["office-vpn"])

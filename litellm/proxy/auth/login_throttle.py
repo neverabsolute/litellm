@@ -36,7 +36,7 @@ from litellm.constants import (
     LOGIN_THROTTLE_UNKNOWN_SOURCE,
 )
 from litellm.proxy._types import ProxyErrorTypes, ProxyException
-from litellm.proxy.auth.network import TrustedProxyConfig, resolve_client_ip
+from litellm.proxy.auth.network import TrustedProxyConfig, resolve_client_ip, trusted_client_ip_header
 from litellm.secret_managers.main import get_secret_bool
 
 _LOGIN_THROTTLE_TARGET: Final = "login_throttle"
@@ -296,7 +296,12 @@ class LoginThrottle:
         settings: Final[Mapping[str, object]] = general_settings if general_settings is not None else EMPTY_MAPPING
         proxies: Final = declared_proxy_ranges(settings)
         resolved, _ = resolve_client_ip(
-            request, TrustedProxyConfig(use_forwarded_for=bool(proxies), trusted_proxy_cidrs=proxies or ())
+            request,
+            TrustedProxyConfig(
+                use_forwarded_for=bool(proxies),
+                trusted_proxy_cidrs=proxies or (),
+                client_ip_header=trusted_client_ip_header(general_settings or {}),
+            ),
         )
         source_limit: Final = _source_limit(settings, resolved or LOGIN_THROTTLE_UNKNOWN_SOURCE)
         exempt: Final = source_limit == EXEMPT

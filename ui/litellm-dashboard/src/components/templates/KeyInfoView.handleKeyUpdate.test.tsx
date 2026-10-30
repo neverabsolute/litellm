@@ -713,3 +713,63 @@ describe("KeyInfoView handleKeyUpdate organization", () => {
     expect(shownOrganization()).toHaveTextContent("org-1");
   });
 });
+
+describe("KeyInfoView handleKeyUpdate allowed_ips", () => {
+  const keyWithStoredIps = {
+    ...baseKeyData,
+    user_id: "user_1",
+    metadata: { allowed_ips: ["10.0.0.0/8"] },
+  } as unknown as KeyResponse;
+
+  const submitWithStoredIps = async (userRole: string, formValues: Record<string, unknown>) => {
+    const auth = { accessToken: "access_abc", userId: "user_1", userRole, premiumUser: true, token: "token_123" };
+    mockUseAuthorized.mockReturnValue(auth);
+    render(
+      <KeyInfoView
+        keyId="tok_123"
+        onClose={() => {}}
+        keyData={keyWithStoredIps}
+        onKeyDataUpdate={() => {}}
+        teams={[]}
+      />,
+    );
+    fireEvent.click(screen.getByText("Settings"));
+    fireEvent.click(screen.getByText("Edit Settings"));
+    (globalThis as { __TEST_FORM_VALUES?: Record<string, unknown> }).__TEST_FORM_VALUES = {
+      token: "tok_123",
+      metadata: "{}",
+      ...formValues,
+    };
+    fireEvent.click(screen.getByText("Mock Submit"));
+    await waitFor(() => expect(keyUpdateCallMock).toHaveBeenCalled());
+    return keyUpdateCallMock.mock.calls[0][1];
+  };
+
+  it("sends a changed list top-level", async () => {
+    const payload = await submitWithStoredIps("proxy_admin", { allowed_ips: ["10.0.0.0/8", "203.0.113.7"] });
+
+    expect(payload.allowed_ips).toEqual(["10.0.0.0/8", "203.0.113.7"]);
+  });
+
+  it("sends an explicit empty list when every entry is removed", async () => {
+    const payload = await submitWithStoredIps("proxy_admin", { allowed_ips: [] });
+
+    expect(payload.allowed_ips).toEqual([]);
+  });
+
+  it("leaves an unchanged list off the top level and keeps the stored list in metadata", async () => {
+    const payload = await submitWithStoredIps("internal_user", { allowed_ips: ["10.0.0.0/8"] });
+
+    expect(payload).not.toHaveProperty("allowed_ips");
+    expect(payload.metadata.allowed_ips).toEqual(["10.0.0.0/8"]);
+  });
+
+  it("ignores an allowed_ips list typed into the metadata JSON", async () => {
+    const payload = await submitWithStoredIps("internal_user", {
+      allowed_ips: ["10.0.0.0/8"],
+      metadata: '{"allowed_ips": ["0.0.0.0/0"], "team": "research"}',
+    });
+
+    expect(payload.metadata).toEqual({ team: "research", allowed_ips: ["10.0.0.0/8"] });
+  });
+});

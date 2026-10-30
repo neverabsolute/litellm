@@ -559,6 +559,23 @@ describe("Sidebar (leftnav)", () => {
 
       expect(screen.getByText("Guardrails Monitor")).toBeInTheDocument();
     });
+
+    it.each([
+      ["proxy_admin", true],
+      ["proxy_admin_viewer", true],
+      ["org_admin", false],
+      ["internal_user", false],
+    ])("links IP Analytics for %s only when the endpoint admits the role (%s)", (userRole, visible) => {
+      mockUseAuthorized.mockReturnValue(authFor(userRole));
+      renderWithProviders(<Sidebar {...defaultProps} />);
+
+      const link = screen.queryByRole("link", { name: "IP Analytics" });
+      if (visible) {
+        expect(link).toHaveAttribute("href", "/ui/ip-analytics");
+      } else {
+        expect(link).not.toBeInTheDocument();
+      }
+    });
   });
 
   it("should show Organizations tab for organization admins", () => {

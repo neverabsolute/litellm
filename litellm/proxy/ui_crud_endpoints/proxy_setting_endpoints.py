@@ -15,7 +15,7 @@ from typing import (
 )
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter, ValidationError, create_model, field_validator
 from pydantic.fields import FieldInfo, PydanticUndefined
 from typing_extensions import NotRequired, ReadOnly, TypedDict
@@ -23,8 +23,10 @@ from typing_extensions import NotRequired, ReadOnly, TypedDict
 import litellm
 from litellm._internal_context import with_service_target
 from litellm._logging import verbose_proxy_logger
+from litellm.litellm_core_utils.ip_ranges import normalize_ip_entry
 from litellm.litellm_core_utils.sensitive_data_masker import mask_sensitive_keys
 from litellm.proxy._types import *
+from litellm.proxy.auth.ip_access import allowed_ip_entries, client_ip_from_request, is_ip_allowed
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
 from litellm.proxy.common_utils.validation_error_body import public_validation_errors
 from litellm.proxy.config_resolvers import FieldSource, SettingsStore, source_for
@@ -175,6 +177,15 @@ def _resolve_ui_theme_field(stored_values: Mapping[str, object], field_name: str
 
 class IPAddress(LiteLLMBaseModel):
     ip: str
+
+
+class AllowedIPEntry(IPAddress):
+    model_config = ConfigDict(frozen=True)
+
+    @field_validator("ip")
+    @classmethod
+    def ip_is_address_or_cidr(cls, ip: str) -> str:
+        return normalize_ip_entry(ip)
 
 
 class UIThemeConfig(LiteLLMBaseModel):
@@ -646,6 +657,17 @@ async def get_allowed_ips():
     return {"data": _allowed_ip}
 
 
+def _refuse_self_lockout(request: Request, general_settings: Mapping[str, object], allowed_ips: Sequence[str]) -> None:
+    caller_ip: Final = client_ip_from_request(request, general_settings)
+    if not is_ip_allowed(caller_ip, allowed_ips):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": f"This change would block your own IP address {caller_ip}. Add an entry that covers it first.",
+            },
+        )
+
+
 def _store_allowed_ips(general_settings: MutableMapping[str, object], allowed_ips: Sequence[str]) -> None:
     try:
         general_settings["allowed_ips"] = list(allowed_ips)
@@ -667,12 +689,14 @@ def _store_allowed_ips(general_settings: MutableMapping[str, object], allowed_ip
     dependencies=[Depends(user_api_key_auth)],
 )
 async def add_allowed_ip(
-    ip_address: IPAddress,
+    ip_address: AllowedIPEntry,
+    request: Request,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
 ):
     from litellm.proxy.proxy_server import (
         create_config_audit_log,
         general_settings,
+        general_settings_view,
         prisma_client,
         proxy_config,
         store_model_in_db,
@@ -681,16 +705,16 @@ async def add_allowed_ip(
     if prisma_client is None:
         raise Exception("No DB Connected")
 
-    _allowed_ips: Final[Sequence[str]] = general_settings.get("allowed_ips") or ()
+    _allowed_ips: Final = allowed_ip_entries(general_settings_view().get("allowed_ips")) or ()
     if ip_address.ip in _allowed_ips:
         raise HTTPException(status_code=400, detail="IP address already exists")
-    _store_allowed_ips(general_settings, (*_allowed_ips, ip_address.ip))
-
     if store_model_in_db is not True:
         raise HTTPException(
             status_code=500,
             detail={"error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."},
         )
+    _refuse_self_lockout(request, general_settings_view(), (*_allowed_ips, ip_address.ip))
+    _store_allowed_ips(general_settings, (*_allowed_ips, ip_address.ip))
 
     # Load existing config
     config: Final = await proxy_config.get_config()
@@ -730,18 +754,22 @@ async def add_allowed_ip(
 )
 async def delete_allowed_ip(
     ip_address: IPAddress,
+    request: Request,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
 ):
     from litellm.proxy.proxy_server import (
         create_config_audit_log,
         general_settings,
+        general_settings_view,
         proxy_config,
     )
 
-    _allowed_ips: Final[Sequence[str]] = general_settings.get("allowed_ips") or ()
+    _allowed_ips: Final = allowed_ip_entries(general_settings_view().get("allowed_ips")) or ()
     if ip_address.ip not in _allowed_ips:
         raise HTTPException(status_code=404, detail="IP address not found")
-    _store_allowed_ips(general_settings, tuple(ip for ip in _allowed_ips if ip != ip_address.ip))
+    _remaining_ips: Final[tuple[str, ...]] = tuple(ip for ip in _allowed_ips if ip != ip_address.ip)
+    _refuse_self_lockout(request, general_settings_view(), _remaining_ips)
+    _store_allowed_ips(general_settings, _remaining_ips)
 
     # Load existing config
     config: Final = await proxy_config.get_config()

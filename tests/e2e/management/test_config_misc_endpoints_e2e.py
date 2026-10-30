@@ -12,11 +12,9 @@ not covered here. All three reconfigure the whole proxy: /cache/settings persist
 it receives into a row that outranks the YAML cache_params and is re-applied on a timer,
 /config_overrides/hashicorp_vault swaps the process-wide secret manager, and
 /add/allowed_ip mutates the live general_settings["allowed_ips"] that
-auth_utils._check_valid_ip reads, so the first call locks every other client out of the
-shared proxy. The allowlist is an exact string match with no CIDR support, and no route
-reports the caller's address as the proxy sees it, so a test cannot allowlist itself
-first; /delete/allowed_ip sits behind the same auth dependency, so the cleanup is locked
-out too and the proxy stays poisoned for the rest of the build. None of the three can be
+ip_access.enforce_allowed_ips reads, so the first call locks every other client out of the
+shared proxy. The routes refuse a change that would block the caller itself, but a parallel
+suite on another address is still locked out until the cleanup runs. None of the three can be
 exercised safely against the shared proxy the suites run on, so they need an isolated
 proxy before a test lands. Do not add a read-then-write-back test for any of them.
 """

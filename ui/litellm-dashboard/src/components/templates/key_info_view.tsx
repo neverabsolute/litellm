@@ -38,6 +38,7 @@ import { KeyResponse } from "../key_team_helpers/key_list";
 import LoggingSettingsView from "../logging_settings_view";
 import { toast } from "@/lib/toast";
 import { getPolicyInfoWithGuardrails, keyDeleteCall, keyUpdateCall } from "../networking";
+import { allowedIpsChange, storedAllowedIps, withStoredAllowedIps } from "./keyAllowedIps";
 import { useResetKeySpend } from "@/app/(dashboard)/hooks/keys/useResetKeySpend";
 import { useSetKeyBlockedState } from "@/app/(dashboard)/hooks/keys/useSetKeyBlockedState";
 import { keyKeys } from "@/app/(dashboard)/hooks/keys/useKeys";
@@ -370,6 +371,15 @@ export default function KeyInfoView({
         delete formValues.tags;
       }
       delete formValues.logging_settings;
+
+      const storedIps = storedAllowedIps(currentKeyData.metadata);
+      formValues.metadata = withStoredAllowedIps(formValues.metadata, storedIps);
+      const changedIps = allowedIpsChange(formValues.allowed_ips, storedIps);
+      if (changedIps === undefined) {
+        delete formValues.allowed_ips;
+      } else {
+        formValues.allowed_ips = changedIps;
+      }
 
       // Normalize any legacy word-form budget_duration to the canonical API format
       if (formValues.budget_duration) {
@@ -1115,6 +1125,21 @@ export default function KeyInfoView({
                         ))
                       ) : (
                         <Badge variant="secondary">All routes allowed</Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-medium">Allowed IPs</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {storedAllowedIps(currentKeyData.metadata).length > 0 ? (
+                        storedAllowedIps(currentKeyData.metadata).map((entry) => (
+                          <span key={entry} className="px-2 py-1 bg-info/15 rounded-sm text-xs">
+                            {entry}
+                          </span>
+                        ))
+                      ) : (
+                        <Badge variant="secondary">Any IP address</Badge>
                       )}
                     </div>
                   </div>

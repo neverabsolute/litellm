@@ -109,27 +109,6 @@ def get_request_ip_address(request: Request, use_x_forwarded_for: bool | None = 
 _get_request_ip_address: Final = get_request_ip_address
 
 
-def _check_valid_ip(
-    allowed_ips: list[str] | None,
-    request: Request,
-    use_x_forwarded_for: bool | None = False,
-) -> tuple[bool, str | None]:
-    """
-    Returns if ip is allowed or not
-    """
-    if allowed_ips is None:  # if not set, assume true
-        return True, None
-
-    # if general_settings.get("use_x_forwarded_for") is True then use x-forwarded-for
-    client_ip: Final = get_request_ip_address(request=request, use_x_forwarded_for=use_x_forwarded_for)
-
-    # Check if IP address is allowed
-    if client_ip not in allowed_ips:
-        return False, client_ip
-
-    return True, client_ip
-
-
 def check_complete_credentials(request_body: dict) -> bool:
     """
     if 'api_base' in request body. Check if complete credentials given. Prevent malicious attacks.
@@ -836,17 +815,11 @@ async def pre_db_read_auth_checks(
     )
 
     # Check 3. Check if IP address is allowed
-    is_valid_ip, passed_in_ip = _check_valid_ip(
-        allowed_ips=general_settings.get("allowed_ips", None),
-        use_x_forwarded_for=general_settings.get("use_x_forwarded_for", False),
-        request=request,
-    )
+    from litellm.proxy.auth.ip_access import enforce_allowed_ips
+    from litellm.proxy.proxy_server import general_settings_view
 
-    if not is_valid_ip:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Access forbidden: IP address {passed_in_ip} not allowed.",
-        )
+    settings: Final = general_settings_view()
+    enforce_allowed_ips(request, settings, settings.get("allowed_ips"), "global")
 
     # Check 4. Check if request route is an allowed route on the proxy
     if "allowed_routes" in general_settings:

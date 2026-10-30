@@ -40,6 +40,7 @@ import {
   FileText,
   FlaskConical,
   Folder,
+  Globe,
   HeartPulse,
   House,
   KeyRound,
@@ -307,6 +308,13 @@ const menuGroups: MenuGroup[] = [
             Model Leaderboard <BetaBadge />
           </span>
         ),
+      },
+      {
+        key: "ip-analytics",
+        page: "ip-analytics",
+        icon: <Globe {...ICON} />,
+        roles: proxyAdminTierRoles,
+        label: "IP Analytics",
       },
       {
         key: "cost-optimization",

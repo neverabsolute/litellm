@@ -44,6 +44,8 @@ def validate_budget_duration(budget_duration: str | None, status_code: int = 400
 
 from litellm._logging import verbose_proxy_logger
 from litellm.caching import DualCache
+from litellm.litellm_core_utils.core_helpers import as_str_mapping
+from litellm.litellm_core_utils.ip_ranges import normalize_ip_entries
 from litellm.proxy._types import (  # re-exported
     CommonProxyErrors,
     KeyRequestBase,
@@ -240,6 +242,58 @@ def _metadata_changes_denied_routes(data: BaseModel, metadata: object, existing_
     if isinstance(metadata, dict):
         return (metadata.get("denied_passthrough_routes") or None) != existing_denied
     return metadata is None and "metadata" in data.model_fields_set and existing_denied is not None
+
+
+_IP_LIST: Final[TypeAdapter[tuple[str, ...] | None]] = TypeAdapter(tuple[str, ...] | None)
+
+
+def _stored_allowed_ips(raw: object) -> tuple[str, ...] | None:
+    try:
+        return _IP_LIST.validate_python(raw) or None
+    except ValidationError:
+        return None
+
+
+def check_allowed_ips_caller_permission(
+    data: BaseModel | None,
+    user_api_key_dict: UserAPIKeyAuth,
+    *,
+    entity: str = "key",
+    existing_metadata: Mapping[str, object] | None = None,
+) -> None:
+    """
+    A key's `allowed_ips` restricts where it works from, so only proxy admins may set, change or
+    clear it, whether top-level or under `metadata`. A non-admin request that re-sends the stored
+    list unchanged still goes through.
+    """
+    if data is None:
+        return
+    metadata: Final = as_str_mapping(getattr(data, "metadata", None))
+    if metadata is not None and metadata.get("allowed_ips") is not None:
+        try:
+            normalize_ip_entries(_IP_LIST.validate_python(metadata["allowed_ips"]) or ())
+        except (ValidationError, ValueError) as e:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "`metadata.allowed_ips` must be a list of IP addresses or CIDR ranges."},
+            ) from e
+    if user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN.value:
+        return
+    existing: Final = _stored_allowed_ips((existing_metadata or {}).get("allowed_ips"))
+    requested: Final[object] = getattr(data, "allowed_ips", None)
+    if "allowed_ips" in data.model_fields_set and _stored_allowed_ips(requested) != existing:
+        raise _admin_only_field_error("allowed_ips", entity)
+    if metadata is not None and _stored_allowed_ips(metadata.get("allowed_ips")) != existing:
+        raise _admin_only_field_error("metadata.allowed_ips", entity)
+    if metadata is None and "metadata" in data.model_fields_set and existing is not None:
+        raise _admin_only_field_error("metadata.allowed_ips", entity)
+
+
+def _admin_only_field_error(field: str, entity: str) -> HTTPException:
+    return HTTPException(
+        status_code=403,
+        detail={"error": f"Only proxy admins can set `{field}` on a {entity}."},
+    )
 
 
 def check_disable_global_guardrails_caller_permission(

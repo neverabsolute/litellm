@@ -11,6 +11,7 @@ import AgentSelector from "../agent_management/AgentSelector";
 import RateLimitTypeFormItem from "../common_components/RateLimitTypeFormItem";
 import NumericalInput from "../shared/numerical_input";
 import SkillSelector from "../skills/SkillSelector";
+import { TagsInput } from "@/app/(dashboard)/guardrails/_components/content_filter/TagsInput";
 import { moveTagsOutOfMetadataJson } from "./keyEditFieldNormalizers";
 import { AgentsAndGroups, KeyEditFormValues } from "./keyEditFormValues";
 
@@ -201,4 +202,48 @@ export const KeyBudgetNumberField = ({
       />
     )}
   </FormField>
+);
+
+interface KeyTagListFieldProps {
+  readonly control: Control<KeyEditFormValues>;
+  readonly name: "tags" | "allowed_ips";
+  readonly label: React.ReactNode;
+  readonly placeholder: string;
+  readonly options?: readonly string[];
+  readonly tokenSeparators?: string[];
+}
+
+export const KeyTagListField = ({
+  control,
+  name,
+  label,
+  placeholder,
+  options = [],
+  tokenSeparators,
+}: KeyTagListFieldProps) => (
+  <FormField control={control} name={name} label={label}>
+    {({ value, onChange, id }) => (
+      <TagsInput
+        id={id}
+        value={(value as string[] | undefined) ?? []}
+        onValueChange={onChange}
+        options={options.map((option) => ({ value: option, label: option }))}
+        placeholder={placeholder}
+        tokenSeparators={tokenSeparators}
+      />
+    )}
+  </FormField>
+);
+
+export const KeyAllowedIpsField = ({ control }: { control: Control<KeyEditFormValues> }) => (
+  <KeyTagListField
+    control={control}
+    name="allowed_ips"
+    label={labelWithHint(
+      "Allowed IPs",
+      "IP addresses or CIDR ranges this key can be used from. Leave empty to allow any address the proxy accepts",
+    )}
+    placeholder="e.g. 203.0.113.7 or 10.0.0.0/8"
+    tokenSeparators={[",", " "]}
+  />
 );

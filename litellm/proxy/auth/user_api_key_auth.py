@@ -38,6 +38,7 @@ from litellm.constants import (
 )
 from litellm.integrations.otel.model.config import is_otel_v2_enabled
 from litellm.integrations.otel.runtime import phase_event, phase_span, seed_request_identity
+from litellm.litellm_core_utils.core_helpers import as_str_mapping
 from litellm.litellm_core_utils.dd_tracing import tracer
 from litellm.litellm_core_utils.dot_notation_indexing import get_nested_value
 from litellm.models.end_user import LiteLLM_EndUserTable
@@ -121,6 +122,7 @@ from litellm.proxy.auth.auth_utils import (
     route_in_additonal_public_routes,
 )
 from litellm.proxy.auth.handle_jwt import JWTAuthManager, JWTHandler
+from litellm.proxy.auth.ip_access import ALLOWED_IPS_KEY, enforce_allowed_ips
 from litellm.proxy.auth.network import TrustedProxyConfig, resolve_network_context
 from litellm.proxy.auth.oauth2_check import Oauth2Handler
 from litellm.proxy.auth.oauth2_proxy_hook import handle_oauth2_proxy_request
@@ -3576,6 +3578,7 @@ async def run_centralized_common_checks(
     """
     from litellm.proxy.proxy_server import (
         general_settings,
+        general_settings_view,
         litellm_proxy_admin_name,
         llm_model_list,  # pyright: ignore[reportUnknownVariableType]  # proxy global has untyped deployment entries
         llm_router,
@@ -3623,6 +3626,9 @@ async def run_centralized_common_checks(
         and not general_settings.get("custom_auth_run_common_checks", False)
     ):
         return
+
+    key_metadata: Final[Mapping[str, object]] = as_str_mapping(user_api_key_auth_obj.metadata) or {}
+    enforce_allowed_ips(request, general_settings_view(), key_metadata.get(ALLOWED_IPS_KEY), "key")
 
     parent_otel_span: Final = user_api_key_auth_obj.parent_otel_span
     # In the integrated auth flow ``_user_api_key_auth_builder`` has already
