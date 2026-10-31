@@ -5518,21 +5518,6 @@ async def test_ProxyConfig__init_non_llm_configs_empty_agents_key_clears_remembe
 
 
 # ---------------------------------------------------------------------------
-# _init_guardrails_in_db
-# ---------------------------------------------------------------------------
-
-
-def _db_guardrail_row(guardrail_id: str, guardrail_type: str) -> dict[str, object]:
-    return {
-        "guardrail_id": guardrail_id,
-        "guardrail_name": f"name-{guardrail_id}",
-        "litellm_params": {"guardrail": guardrail_type, "mode": "pre_call"},
-        "guardrail_info": None,
-        "team_id": None,
-    }
-
-
-# ---------------------------------------------------------------------------
 # add_deployment: UI settings convergence
 # ---------------------------------------------------------------------------
 

@@ -64,6 +64,7 @@ import {
 } from "../key_team_helpers/ModelMaxBudgetEditor";
 import { modelMaxBudgetUpdate, StoredModelMaxBudget } from "../key_team_helpers/modelMaxBudgetPayload";
 import {
+  ALL_PROXY_MODELS,
   computeTeamModelBadges,
   normalizeTeamModelSelection,
   TeamAccessGroupModelGrant,
@@ -335,7 +336,7 @@ const EMPTY_TEAM_UPDATE_VALUES: TeamUpdateFormValues = {
 
 const toTeamFormValues = (info: TeamInfoRecord): TeamUpdateFormValues => ({
   team_alias: info.team_alias,
-  models: info.models,
+  models: info.models.length === 0 ? [ALL_PROXY_MODELS] : info.models,
   max_budget: info.max_budget,
   soft_budget: info.soft_budget,
   soft_budget_alerting_emails: Array.isArray(info.metadata?.soft_budget_alerting_emails)
@@ -779,7 +780,7 @@ const TeamInfoView: React.FC<TeamInfoProps> = ({
       const updateData: any = {
         team_id: teamId,
         team_alias: values.team_alias,
-        models: normalizeTeamModelSelection(values.models),
+        ...(form.getFieldState("models").isDirty ? { models: normalizeTeamModelSelection(values.models) } : {}),
         tpm_limit: numberOrNull(values.tpm_limit),
         rpm_limit: numberOrNull(values.rpm_limit),
         tpd_limit: numberOrNull(values.tpd_limit),
