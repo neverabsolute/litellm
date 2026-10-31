@@ -1080,6 +1080,10 @@ class AnthropicModelInfo(BaseLLMModelInfo):
         return cls._is_adaptive_thinking_model(model, custom_llm_provider)
 
     @staticmethod
+    def can_turn_thinking_off(model: str, custom_llm_provider: str) -> bool:
+        return not AnthropicModelInfo._is_always_on_thinking_model(model, custom_llm_provider)
+
+    @staticmethod
     def _is_always_on_thinking_model(model: str, custom_llm_provider: str) -> bool:
         """Whether ``model`` always thinks and rejects ``thinking.type=disabled``
         (Fable 5 / Mythos 5 generation). The model cost map is authoritative: an

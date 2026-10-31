@@ -39,7 +39,7 @@ from litellm.litellm_core_utils.reasoning_effort_strength import (
     nearest_declared_reasoning_effort,
 )
 from litellm.litellm_core_utils.reasoning_effort_utils import reasoning_effort_from_thinking_silently
-from litellm.llms.anthropic.common_utils import AnthropicModelInfo, validated_object_mapping
+from litellm.llms.anthropic.common_utils import AnthropicModelInfo, is_claude_model_target, validated_object_mapping
 from litellm.types.llms.anthropic import AnthropicThinkingParam
 from litellm.types.llms.openai import REASONING_EFFORT
 
@@ -264,12 +264,14 @@ def _catalog_reasoning_effort(
     level: str, *, model: str, custom_llm_provider: str | None, rounding: ReasoningEffortRounding
 ) -> str:
     """A level the GPT reasoning gate would refuse is moved to the nearest one the model accepts, so a
-    request that one model in a fallback chain takes is not rejected by the next. Other providers remap
-    or accept these levels themselves. minimal goes to none where the model can turn reasoning off,
-    since a caller asking for minimal wants the cheapest, fastest answer and the next tier up costs
-    more than either."""
+    request that one model in a fallback chain takes is not rejected by the next. minimal goes to none
+    where the model can turn reasoning off, since a caller asking for minimal wants the cheapest, fastest
+    answer and the next tier up costs more than either. Claude has no minimal tier and would otherwise
+    think at low, so it gets the same treatment. Other providers map these levels themselves."""
     if level not in _OPT_OUT_EFFORTS:
         return level
+    if level == "minimal" and is_claude_model_target(custom_llm_provider, model):
+        return "none" if AnthropicModelInfo.can_turn_thinking_off(model, custom_llm_provider or "") else level
     from litellm.llms.azure.chat.gpt_reasoning_transformation import AzureOpenAIGPT5Config
     from litellm.llms.openai.chat.gpt_reasoning_transformation import OpenAIGPT5Config
     from litellm.utils import ModelInfoLookupMiss, lookup_catalog_model_info

@@ -1066,7 +1066,7 @@ async def test_a_fallback_hop_sends_the_closest_settings_the_next_model_accepts(
 
 
 @pytest.mark.asyncio
-async def test_a_fallback_hop_omits_a_temperature_the_next_model_cannot_take(
+async def test_a_claude_fallback_hop_turns_thinking_off_for_minimal_and_omits_temperature(
     respx_mock: respx.MockRouter, local_model_cost_map: None, httpx_transport: None
 ) -> None:
     respx_mock.post(_GEMINI_URL).mock(return_value=_unavailable())
@@ -1091,4 +1091,6 @@ async def test_a_fallback_hop_omits_a_temperature_the_next_model_cannot_take(
     )
 
     assert response.choices[0].message.content == "ok"
-    assert "temperature" not in json.loads(anthropic_route.calls.last.request.content)
+    sent: Final = json.loads(anthropic_route.calls.last.request.content)
+    assert "temperature" not in sent
+    assert "thinking" not in sent and "output_config" not in sent

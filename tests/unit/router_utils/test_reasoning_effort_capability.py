@@ -612,8 +612,26 @@ class TestResolveDeploymentReasoningEffort:
 
     def test_a_level_the_model_map_accepts_is_sent_as_requested(self, local_model_cost_map: None) -> None:
         assert _sent("low", None, model="gpt-5.6-luna", provider="openai") == "low"
-        assert _sent("minimal", None, model="claude-haiku-5-5", provider="anthropic") == "minimal"
+        assert _sent("minimal", None, model="gemini-3-flash-preview", provider="gemini") == "minimal"
         assert _sent("minimal", None, model="no-such-model", provider="openai") == "minimal"
+
+    @pytest.mark.parametrize(
+        "provider, model",
+        [
+            ("anthropic", "claude-haiku-5-5"),
+            ("bedrock", "us.anthropic.claude-haiku-5-5"),
+            ("vertex_ai", "claude-haiku-5-5"),
+        ],
+    )
+    def test_minimal_turns_claude_thinking_off(self, local_model_cost_map: None, provider: str, model: str) -> None:
+        assert _sent("minimal", None, model=model, provider=provider) == "none"
+        assert _sent("low", None, model=model, provider=provider) == "low"
+
+    def test_minimal_is_kept_on_a_claude_model_that_always_thinks(self, local_model_cost_map: None) -> None:
+        from litellm.llms.anthropic.common_utils import AnthropicModelInfo
+
+        assert not AnthropicModelInfo.can_turn_thinking_off("claude-fable-5", "anthropic")
+        assert _sent("minimal", None, model="claude-fable-5", provider="anthropic") == "minimal"
 
     def test_only_the_deployment_declaration_rounds_never_the_model_map(self, local_model_cost_map: None) -> None:
         assert _sent("xhigh", None, model="kimi-k3", provider="fireworks_ai") == "xhigh"
