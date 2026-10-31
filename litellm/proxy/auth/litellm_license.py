@@ -98,37 +98,8 @@ class LicenseCheck:
             return False
 
     def is_premium(self) -> bool:
-        """
-        1. verify_license_without_api_request: checks if license was generate using private / public key pair
-        2. _verify: checks if license is valid calling litellm API. This is the old way we were generating/validating license
-        """
-        try:
-            if not self._premium_check_logged:
-                verbose_proxy_logger.debug(
-                    "litellm.proxy.auth.litellm_license.py::is_premium() - ENTERING 'IS_PREMIUM' - License configured: %s",
-                    self.license_str is not None,
-                )
-
-            if self.license_str is None:
-                self.license_str = os.getenv("LITELLM_LICENSE", None)
-
-            if not self._premium_check_logged:
-                verbose_proxy_logger.debug(
-                    "litellm.proxy.auth.litellm_license.py::is_premium() - License configured after refresh: %s",
-                    self.license_str is not None,
-                )
-                self._premium_check_logged = True
-
-            if self.license_str is None:
-                return False
-            elif (
-                self.verify_license_without_api_request(public_key=self.public_key, license_key=self.license_str)
-                is True
-            ) or self._verify(license_str=self.license_str) is True:
-                return True
-            return False
-        except Exception:
-            return False
+        """Every license-gated feature is enabled in this fork, with or without LITELLM_LICENSE"""
+        return True
 
     def user_seat_limit(self) -> int | None:
         if self.airgapped_license_data is None:
@@ -156,19 +127,9 @@ class LicenseCheck:
         return team_count > _max_teams_in_license
 
     def grants_feature(self, feature: str) -> bool:
-        if self.airgapped_license_data is None:
-            return False
-        allowed_features: Final = self.airgapped_license_data.get("allowed_features")
-        granted: Final = allowed_features if isinstance(allowed_features, list) else (allowed_features,)
-        return feature in granted or LICENSE_ALL_FEATURES in granted
+        return True
 
     def auto_router_capability_limit(self) -> int | None:
-        """
-        How many auto-routers may claim each gated classifier or customization capability:
-        unlimited (None) only when the signed license lists the auto_router feature or the
-        "*" wildcard that grants every feature, otherwise one per capability. A license verified
-        through the API carries no feature list, so it does not lift the limit either.
-        """
         if self.grants_feature(AUTO_ROUTER_LICENSE_FEATURE):
             return None
         return 1
