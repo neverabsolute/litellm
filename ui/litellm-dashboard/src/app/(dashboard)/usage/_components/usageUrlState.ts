@@ -32,7 +32,6 @@ export const usageUrlParsers = {
   org: entityIds,
   customer: entityIds,
   tag: entityIds,
-  agent: entityIds,
 };
 
 export type UsageUrlParams = inferParserType<typeof usageUrlParsers>;
@@ -46,7 +45,6 @@ const MULTI_ENTITY_KEYS = {
   team: "team",
   customer: "customer",
   tag: "tag",
-  agent: "agent",
 } as const satisfies Record<MultiEntityType, keyof UsageUrlParams>;
 
 const VIEW_ENTITY_KEYS: Readonly<Record<UsageOption, readonly EntityKey[]>> = {
@@ -56,7 +54,6 @@ const VIEW_ENTITY_KEYS: Readonly<Record<UsageOption, readonly EntityKey[]>> = {
   team: ["team"],
   customer: ["customer"],
   tag: ["tag"],
-  agent: ["agent"],
   user: ["user"],
   "user-agent-activity": ["tag"],
 };
@@ -79,7 +76,6 @@ const RESET_TO_DEFAULT_VIEW: UsageUrlPatch = {
   org: null,
   customer: null,
   tag: null,
-  agent: null,
 };
 
 const isUsageOption = (value: string | null): value is UsageOption => USAGE_OPTIONS.some((option) => option === value);
@@ -215,7 +211,7 @@ export const cleanUsageUrl = (params: UsageUrlParams, access: UsageUrlAccess): U
   }
 
   const viewKeys = VIEW_ENTITY_KEYS[view];
-  const strayEntityKeys = (["user", "team", "org", "customer", "tag", "agent"] as const).filter(
+  const strayEntityKeys = (["user", "team", "org", "customer", "tag"] as const).filter(
     (key) => !viewKeys.includes(key) && hasEntityValue(params, key),
   );
   const invalidTab =

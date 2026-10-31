@@ -369,8 +369,6 @@ class LiteLLMRoutes(enum.Enum):
         "/v1/vector_stores/{vector_store_id}/files/{file_id}",
         "/vector_stores/{vector_store_id}/files/{file_id}/content",
         "/v1/vector_stores/{vector_store_id}/files/{file_id}/content",
-        "/vector_store/list",
-        "/v1/vector_store/list",
         # search
         "/search",
         "/v1/search",
@@ -715,17 +713,9 @@ class LiteLLMRoutes(enum.Enum):
 
     global_spend_tracking_routes = [
         # global spend
-        "/global/spend/logs",
         "/global/spend",
-        "/global/spend/keys",
-        "/global/spend/teams",
-        "/global/spend/end_users",
-        "/global/spend/models",
         "/global/predict/spend/logs",
         "/global/spend/report",
-        "/global/spend/provider",
-        "/global/spend/tags",
-        "/global/spend/all_tag_names",
         "/spend/capture_rate",
     ]
 
@@ -739,15 +729,6 @@ class LiteLLMRoutes(enum.Enum):
             "/config/yaml",
             "/litellm/.well-known/litellm-ui-config",
             "/.well-known/litellm-ui-config",
-            "/public/model_hub",
-            "/public/v1/model_hub",
-            "/public/v1/model_hub/providers",
-            "/public/v1/model_hub/modes",
-            "/public/v1/model_hub/features",
-            "/public/model_hub/info",
-            "/public/agent_hub",
-            "/public/mcp_hub",
-            "/public/skill_hub",
             "/public/litellm_model_cost_map",
             "/moyai/connect/exchange",
         )
@@ -902,7 +883,6 @@ class LiteLLMRoutes(enum.Enum):
         "/model/{model_id}/update",
         "/prompt/list",
         "/prompt/info",
-        "/vector_store/info",
         # Project read routes - endpoint scopes results to caller's teams (non-admin)
         "/project/list",
         "/project/info",

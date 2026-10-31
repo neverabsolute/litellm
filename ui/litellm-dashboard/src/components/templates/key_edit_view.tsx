@@ -1,8 +1,6 @@
 import { canDetachKeyProject, KeyProjectField } from "./KeyProjectField";
-import GuardrailSelector from "@/components/guardrails/GuardrailSelector";
 import { useOrganizations } from "@/app/(dashboard)/hooks/organizations/useOrganizations";
 import { useUISettings } from "@/app/(dashboard)/hooks/uiSettings/useUISettings";
-import PolicySelector from "@/components/policies/PolicySelector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -14,8 +12,7 @@ import { FormField } from "@/components/shared/form/FormField";
 import { SearchSelect, SearchSelectOption } from "@/components/shared/SearchSelect";
 import React, { useEffect, useRef, useState } from "react";
 import { hasCapability } from "../../utils/capabilities";
-import { isProxyAdminRole, rolesWithWriteAccess } from "../../utils/roles";
-import AccessGroupSelector from "../common_components/AccessGroupSelector";
+import { isProxyAdminRole } from "../../utils/roles";
 import BudgetDurationDropdown from "../common_components/budget_duration_dropdown";
 import { mapInternalToDisplayNames } from "../callback_info_helpers";
 import KeyLifecycleSettings from "../common_components/KeyLifecycleSettings";
@@ -31,7 +28,6 @@ import {
   parseAllowedRoutes,
 } from "./keyEditFieldNormalizers";
 import {
-  KeyAgentAndSkillFields,
   KeyAllowedIpsField,
   KeyBudgetNumberField,
   KeyMetadataField,
@@ -41,15 +37,7 @@ import {
   labelWithHint,
   moveMetadataTagsToTagsField,
 } from "./KeyEditViewControls";
-import {
-  KeyEditFormValues,
-  keyEditFormSchema,
-  McpServersAndGroups,
-  toKeyEditFormValues,
-  toSubmittedValues,
-  clearMcpGrants,
-  writeMcpToolPermissions,
-} from "./keyEditFormValues";
+import { KeyEditFormValues, keyEditFormSchema, toKeyEditFormValues, toSubmittedValues } from "./keyEditFormValues";
 import { BudgetFallbacksEditor } from "../key_team_helpers/BudgetFallbacksEditor";
 import { END_USER_BUDGET_HINT, EndUserBudgetSelect } from "../key_team_helpers/EndUserBudgetSelect";
 import {
@@ -68,18 +56,15 @@ import {
 } from "../key_team_helpers/TagRateLimitEditor";
 import { excludeProxyWideSentinel, hasAllModelsSentinel } from "../key_team_helpers/fetch_available_models_team_key";
 import { KeyResponse } from "../key_team_helpers/key_list";
-import MCPServerSelector from "../mcp_server_management/MCPServerSelector";
-import MCPToolPermissions from "../mcp_server_management/MCPToolPermissions";
 import { toast } from "@/lib/toast";
 import { getPromptsList, modelAvailableCall, tagListCall } from "../networking";
 import { fetchTeamModels } from "../organisms/create_key_button";
 import NumericalInput from "../shared/numerical_input";
 import { MultiSelect } from "../shared/MultiSelect";
-import { TagsInput } from "@/app/(dashboard)/guardrails/_components/content_filter/TagsInput";
+import { TagsInput } from "@/components/common_components/TagsInput";
 import { Tag } from "../tag_management/types";
 import EditLoggingSettings from "../team/EditLoggingSettings";
 import { useZodForm } from "@/lib/forms/useZodForm";
-import VectorStoreSelector from "../vector_store_management/VectorStoreSelector";
 
 interface KeyEditViewProps {
   keyData: KeyResponse;
@@ -106,8 +91,6 @@ function KeyEditSession({
   userRole,
   premiumUser = false,
 }: KeyEditViewProps) {
-  const canEditGuardrails = premiumUser || (userRole != null && rolesWithWriteAccess.includes(userRole));
-  const canViewPolicies = hasCapability(userRole, "viewPolicies");
   const canViewPrompts = hasCapability(userRole, "viewPrompts");
   const isProxyAdmin = userRole != null && isProxyAdminRole(userRole);
   const estimateTooltip = estimateTooltips(isProxyAdmin);
@@ -157,9 +140,6 @@ function KeyEditSession({
   const selectedModels = (form.watch("models") as string[] | undefined) ?? [];
   const allowedRoutes = parseAllowedRoutes(allowedRoutesValue);
   const isModelsDisabled = allowedRoutes.includes("management_routes") || allowedRoutes.includes("info_routes");
-  const mcpSelection = form.watch("mcp_servers_and_groups") as McpServersAndGroups | undefined;
-  const mcpScope = { teamId: form.watch("team_id") ?? null, userId: keyData.user_id };
-  const mcpToolPermissions = form.watch("mcp_tool_permissions");
 
   useEffect(() => {
     const fetchModels = async () => {
@@ -335,7 +315,6 @@ function KeyEditSession({
 
   const handleTeamChange = (setField: (value: string | null) => void, teamId: string | null) => {
     setField(teamId);
-    clearMcpGrants(form.setValue);
     const organizationId = teams?.find((t) => t.team_id === teamId)?.organization_id;
     if (!organizationId) return;
     form.setValue("organization_id", organizationId, { shouldDirty: true });
@@ -376,9 +355,7 @@ function KeyEditSession({
       <form
         onSubmit={(event) => {
           moveMetadataTagsToTagsField(form);
-          return form.handleSubmit((values) =>
-            handleSubmit(toSubmittedValues(values, { canViewPolicies, canViewPrompts })),
-          )(event);
+          return form.handleSubmit((values) => handleSubmit(toSubmittedValues(values, { canViewPrompts })))(event);
         }}
       >
         <FieldGroup>
@@ -615,57 +592,6 @@ function KeyEditSession({
             <TagRateLimitEditor value={tagRateLimits} onChange={setTagRateLimits} />
           </Field>
 
-          <FormField control={form.control} name="guardrails" label="Guardrails">
-            {({ value, onChange }) =>
-              accessToken ? (
-                <GuardrailSelector
-                  onChange={onChange}
-                  value={value as string[] | undefined}
-                  accessToken={accessToken}
-                  disabled={!canEditGuardrails}
-                />
-              ) : (
-                <div />
-              )
-            }
-          </FormField>
-
-          {isProxyAdmin && (
-            <FormField
-              control={form.control}
-              name="disable_global_guardrails"
-              label={labelWithHint(
-                "Disable Global Guardrails",
-                "When enabled, this key will bypass any guardrails configured to run on every request (global guardrails)",
-              )}
-            >
-              {({ value, onChange, ref: _ref, ...field }) => (
-                <Switch {...field} checked={Boolean(value)} onCheckedChange={onChange} disabled={!canEditGuardrails} />
-              )}
-            </FormField>
-          )}
-
-          {canViewPolicies && (
-            <FormField
-              control={form.control}
-              name="policies"
-              label={labelWithHint("Policies", "Apply policies to this key to control guardrails and other settings")}
-            >
-              {({ value, onChange }) =>
-                accessToken ? (
-                  <PolicySelector
-                    onChange={onChange}
-                    value={value as string[] | undefined}
-                    accessToken={accessToken}
-                    disabled={!premiumUser}
-                  />
-                ) : (
-                  <div />
-                )
-              }
-            </FormField>
-          )}
-
           <KeyTagListField
             control={form.control}
             name="tags"
@@ -700,23 +626,6 @@ function KeyEditSession({
 
           <FormField
             control={form.control}
-            name="access_group_ids"
-            label={labelWithHint(
-              "Access Groups",
-              "Assign access groups to this key. Access groups control which models, MCP servers, and agents this key can use",
-            )}
-          >
-            {({ value, onChange }) => (
-              <AccessGroupSelector
-                value={value as string[] | undefined}
-                onChange={onChange}
-                placeholder="Select access groups (optional)"
-              />
-            )}
-          </FormField>
-
-          <FormField
-            control={form.control}
             name="allowed_passthrough_routes"
             label={
               premiumUser
@@ -744,43 +653,6 @@ function KeyEditSession({
           </FormField>
 
           {isProxyAdmin && <KeyAllowedIpsField control={form.control} />}
-
-          <FormField control={form.control} name="vector_stores" label="Vector Stores">
-            {({ value, onChange }) => (
-              <VectorStoreSelector
-                onChange={onChange}
-                value={value as string[] | undefined}
-                accessToken={accessToken || ""}
-                placeholder="Select vector stores"
-              />
-            )}
-          </FormField>
-
-          <FormField control={form.control} name="mcp_servers_and_groups" label="MCP Servers / Access Groups">
-            {({ value, onChange }) => (
-              <MCPServerSelector
-                onChange={onChange}
-                value={value as McpServersAndGroups | undefined}
-                accessToken={accessToken || ""}
-                {...mcpScope}
-                placeholder="Select MCP servers or access groups (optional)"
-                allowNoMcpServers
-              />
-            )}
-          </FormField>
-
-          <div className="mb-6">
-            <MCPToolPermissions
-              accessToken={accessToken || ""}
-              selectedServers={mcpSelection?.servers || []}
-              selectedAccessGroups={mcpSelection?.accessGroups || []}
-              selectedToolsets={mcpSelection?.toolsets || []}
-              toolPermissions={(mcpToolPermissions as Record<string, string[]> | undefined) || {}}
-              onChange={writeMcpToolPermissions(form)}
-            />
-          </div>
-
-          <KeyAgentAndSkillFields control={form.control} accessToken={accessToken || ""} />
 
           <FormField
             control={form.control}

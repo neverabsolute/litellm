@@ -1,6 +1,5 @@
 import { Page, PageTabs, PageTabsList, PageTabsTrigger } from "@/components/shared/Page";
 import { useOrganizations } from "@/app/(dashboard)/hooks/organizations/useOrganizations";
-import useCan from "@/app/(dashboard)/hooks/useCan";
 import AvailableTeamsPanel from "@/components/team/AvailableTeamsPanel";
 import TeamInfoView from "@/components/team/TeamInfo";
 import TeamSSOSettings from "@/components/TeamSSOSettings";
@@ -15,7 +14,6 @@ import { FormField } from "@/components/shared/form/FormField";
 import { SearchSelect } from "@/components/shared/SearchSelect";
 import { labelWithDocsHint, labelWithHint } from "@/components/shared/form/LabelWithHint";
 import { useZodForm } from "@/lib/forms/useZodForm";
-import { TagsInput } from "@/app/(dashboard)/guardrails/_components/content_filter/TagsInput";
 import { TabsContent } from "@/components/ui/tabs";
 import { ChevronDown, Plus, Users } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
@@ -27,34 +25,27 @@ import { Button as UIButton } from "@/components/ui/button";
 import { teamsTableKeys } from "@/app/(dashboard)/hooks/teams/useTeams";
 import { parseAsString, useQueryState } from "nuqs";
 import { TeamsTable } from "./TeamsPage/TeamsTable";
-import AccessGroupSelector from "./common_components/AccessGroupSelector";
 import MetadataKeyValueFields, {
   metadataPairsSchema,
   metadataPairsToObject,
 } from "./common_components/MetadataKeyValueFields";
 import { useTeamMetadataSchema } from "@/app/(dashboard)/hooks/teams/useTeamMetadataSchema";
 import PassThroughRoutesSelector from "./common_components/PassThroughRoutesSelector";
-import AgentSelector from "./agent_management/AgentSelector";
 import ModelAliasManager from "./common_components/ModelAliasManager";
 import PremiumLoggingSettings from "./common_components/PremiumLoggingSettings";
 import RouterSettingsAccordion, { RouterSettingsAccordionValue } from "./common_components/RouterSettingsAccordion";
 import { fetchAvailableModelsForTeamOrKey } from "./key_team_helpers/fetch_available_models_team_key";
 import type { Team } from "./key_team_helpers/key_list";
-import MCPServerSelector from "./mcp_server_management/MCPServerSelector";
-import MCPToolPermissions from "./mcp_server_management/MCPToolPermissions";
 import { toast } from "@/lib/toast";
 import { extractProxyErrorMessage } from "@/lib/http/client";
 import BudgetDurationDropdown, {
   getBudgetDurationLabel,
   NEVER_RESETS_BUDGET_DURATION,
 } from "./common_components/budget_duration_dropdown";
-import { Organization, getDefaultTeamSettings, getGuardrailsList, getPoliciesList, teamDeleteCall } from "./networking";
+import { Organization, getDefaultTeamSettings, teamDeleteCall } from "./networking";
 import NumericalInput from "./shared/numerical_input";
 import { ModelMaxBudget, ModelMaxBudgetField } from "./key_team_helpers/ModelMaxBudgetEditor";
 import { modelMaxBudgetUpdate } from "./key_team_helpers/modelMaxBudgetPayload";
-import VectorStoreSelector from "./vector_store_management/VectorStoreSelector";
-import SearchToolSelector from "./search_tools/SearchToolSelector";
-import SkillSelector from "./skills/SkillSelector";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface TeamProps {
@@ -90,24 +81,8 @@ const teamCreateFieldsSchema = z.object({
   team_member_rpm_limit: numericInputSchema,
   team_member_tpm_limit: numericInputSchema,
   secret_manager_settings: z.string().optional(),
-  guardrails: z.array(z.string()).optional(),
-  disable_global_guardrails: z.boolean().optional(),
   require_trace_id: z.boolean().optional(),
-  policies: z.array(z.string()).optional(),
-  access_group_ids: z.array(z.string()).optional(),
-  allowed_vector_store_ids: z.array(z.string()).optional(),
   allowed_passthrough_routes: z.array(z.string()).optional(),
-  allowed_mcp_servers_and_groups: z
-    .object({
-      servers: z.array(z.string()),
-      accessGroups: z.array(z.string()),
-      toolsets: z.array(z.string()).optional(),
-    })
-    .optional(),
-  mcp_tool_permissions: z.record(z.string(), z.array(z.string())).optional(),
-  allowed_agents_and_groups: z.object({ agents: z.array(z.string()), accessGroups: z.array(z.string()) }).optional(),
-  object_permission_search_tools: z.array(z.string()).optional(),
-  object_permission_skills: z.array(z.string()).optional(),
 });
 
 type TeamCreateFormValues = z.infer<typeof teamCreateFieldsSchema>;
@@ -128,18 +103,8 @@ const EMPTY_TEAM_CREATE_VALUES: TeamCreateFormValues = {
   team_member_rpm_limit: undefined,
   team_member_tpm_limit: undefined,
   secret_manager_settings: undefined,
-  guardrails: undefined,
-  disable_global_guardrails: undefined,
   require_trace_id: undefined,
-  policies: undefined,
-  access_group_ids: undefined,
-  allowed_vector_store_ids: undefined,
   allowed_passthrough_routes: undefined,
-  allowed_mcp_servers_and_groups: undefined,
-  mcp_tool_permissions: {},
-  allowed_agents_and_groups: undefined,
-  object_permission_search_tools: undefined,
-  object_permission_skills: undefined,
 };
 
 const ADDITIONAL_SETTINGS_FIELDS = [
@@ -149,18 +114,9 @@ const ADDITIONAL_SETTINGS_FIELDS = [
   "team_member_rpm_limit",
   "team_member_tpm_limit",
   "secret_manager_settings",
-  "guardrails",
-  "disable_global_guardrails",
   "require_trace_id",
-  "policies",
-  "access_group_ids",
-  "allowed_vector_store_ids",
   "allowed_passthrough_routes",
 ] as const;
-const MCP_SETTINGS_FIELDS = ["allowed_mcp_servers_and_groups", "mcp_tool_permissions"] as const;
-const AGENT_SETTINGS_FIELDS = ["allowed_agents_and_groups"] as const;
-const SEARCH_TOOL_SETTINGS_FIELDS = ["object_permission_search_tools"] as const;
-const SKILL_SETTINGS_FIELDS = ["object_permission_skills"] as const;
 
 const isParsableJson = (value: string | undefined): boolean => {
   if (!value) {
@@ -225,10 +181,6 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
 
   const isOrgAdmin = userRole !== "Admin";
   const [additionalSettingsOpen, setAdditionalSettingsOpen] = useState(false);
-  const [mcpSettingsOpen, setMcpSettingsOpen] = useState(false);
-  const [agentSettingsOpen, setAgentSettingsOpen] = useState(false);
-  const [searchToolSettingsOpen, setSearchToolSettingsOpen] = useState(false);
-  const [skillSettingsOpen, setSkillSettingsOpen] = useState(false);
 
   const adminOrgs = useMemo(
     () => getAdminOrganizations(userRole, userID, organizations),
@@ -261,8 +213,6 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
 
   const form = useZodForm(teamCreateSchema, { defaultValues: EMPTY_TEAM_CREATE_VALUES });
   const watchedOrganizationId = form.watch("organization_id");
-  const watchedMcpSelection = form.watch("allowed_mcp_servers_and_groups");
-  const watchedToolPermissions = form.watch("mcp_tool_permissions");
 
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useQueryState("team", parseAsString.withOptions({ history: "push" }));
@@ -274,10 +224,6 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
   const [isTeamDeleting, setIsTeamDeleting] = useState(false);
-  // Add this state near the other useState declarations
-  const [guardrailsList, setGuardrailsList] = useState<string[]>([]);
-  const canViewPolicies = useCan("viewPolicies");
-  const [policiesList, setPoliciesList] = useState<string[]>([]);
   const [loggingSettings, setLoggingSettings] = useState<any[]>([]);
   const [modelAliases, setModelAliases] = useState<{ [key: string]: string }>({});
   const [modelMaxBudget, setModelMaxBudget] = useState<ModelMaxBudget>({});
@@ -296,40 +242,6 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
   const budgetDurationPlaceholder = defaultBudgetDuration
     ? `Default: ${getBudgetDurationLabel(defaultBudgetDuration)} (${defaultBudgetDuration})`
     : undefined;
-
-  // Add this useEffect to fetch guardrails
-  useEffect(() => {
-    const fetchGuardrails = async () => {
-      try {
-        if (accessToken == null) {
-          return;
-        }
-
-        const response = await getGuardrailsList(accessToken);
-        const guardrailNames = response.guardrails.map((g: { guardrail_name: string }) => g.guardrail_name);
-        setGuardrailsList(guardrailNames);
-      } catch (error) {
-        console.error("Failed to fetch guardrails:", error);
-      }
-    };
-
-    const fetchPolicies = async () => {
-      try {
-        if (accessToken == null) {
-          return;
-        }
-
-        const response = await getPoliciesList(accessToken);
-        const policyNames = response.policies.map((p: { policy_name: string }) => p.policy_name);
-        setPoliciesList(policyNames);
-      } catch (error) {
-        console.error("Failed to fetch policies:", error);
-      }
-    };
-
-    fetchGuardrails();
-    if (canViewPolicies) fetchPolicies();
-  }, [accessToken, canViewPolicies]);
 
   const openCreateTeamModal = () => {
     // Org admins must scope a team to an org, so with exactly one we preselect it.
@@ -354,9 +266,6 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
   const resetCreateForm = () => {
     form.reset(EMPTY_TEAM_CREATE_VALUES);
     setAdditionalSettingsOpen(false);
-    setMcpSettingsOpen(false);
-    setAgentSettingsOpen(false);
-    setSearchToolSettingsOpen(false);
     setLoggingSettings([]);
     setModelAliases({});
     setModelMaxBudget({});
@@ -454,85 +363,6 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
           }
         }
 
-        const hasSearchTools =
-          Array.isArray(formValues.object_permission_search_tools) &&
-          formValues.object_permission_search_tools.length > 0;
-
-        if (
-          (formValues.allowed_vector_store_ids && formValues.allowed_vector_store_ids.length > 0) ||
-          (formValues.allowed_mcp_servers_and_groups &&
-            (formValues.allowed_mcp_servers_and_groups.servers?.length > 0 ||
-              formValues.allowed_mcp_servers_and_groups.accessGroups?.length > 0 ||
-              formValues.allowed_mcp_servers_and_groups.toolsets?.length > 0 ||
-              formValues.allowed_mcp_servers_and_groups.toolPermissions))
-        ) {
-          if (!formValues.object_permission) {
-            formValues.object_permission = {};
-          }
-          if (formValues.allowed_vector_store_ids && formValues.allowed_vector_store_ids.length > 0) {
-            formValues.object_permission.vector_stores = formValues.allowed_vector_store_ids;
-            delete formValues.allowed_vector_store_ids;
-          }
-          if (formValues.allowed_mcp_servers_and_groups) {
-            const { servers, accessGroups, toolsets } = formValues.allowed_mcp_servers_and_groups;
-            if (servers && servers.length > 0) {
-              formValues.object_permission.mcp_servers = servers;
-            }
-            if (accessGroups && accessGroups.length > 0) {
-              formValues.object_permission.mcp_access_groups = accessGroups;
-            }
-            if (toolsets && toolsets.length > 0) {
-              formValues.object_permission.mcp_toolsets = toolsets;
-            }
-            delete formValues.allowed_mcp_servers_and_groups;
-          }
-
-          if (formValues.mcp_tool_permissions && Object.keys(formValues.mcp_tool_permissions).length > 0) {
-            formValues.object_permission.mcp_tool_permissions = formValues.mcp_tool_permissions;
-            delete formValues.mcp_tool_permissions;
-          }
-        }
-
-        // Transform allowed_mcp_access_groups into object_permission
-        if (formValues.allowed_mcp_access_groups && formValues.allowed_mcp_access_groups.length > 0) {
-          if (!formValues.object_permission) {
-            formValues.object_permission = {};
-          }
-          formValues.object_permission.mcp_access_groups = formValues.allowed_mcp_access_groups;
-          delete formValues.allowed_mcp_access_groups;
-        }
-
-        // Handle agent permissions
-        if (formValues.allowed_agents_and_groups) {
-          const { agents, accessGroups } = formValues.allowed_agents_and_groups;
-          if (!formValues.object_permission) {
-            formValues.object_permission = {};
-          }
-          if (agents && agents.length > 0) {
-            formValues.object_permission.agents = agents;
-          }
-          if (accessGroups && accessGroups.length > 0) {
-            formValues.object_permission.agent_access_groups = accessGroups;
-          }
-          delete formValues.allowed_agents_and_groups;
-        }
-
-        if (hasSearchTools) {
-          if (!formValues.object_permission) {
-            formValues.object_permission = {};
-          }
-          formValues.object_permission.search_tools = formValues.object_permission_search_tools;
-          delete formValues.object_permission_search_tools;
-        }
-
-        if (Array.isArray(formValues.object_permission_skills) && formValues.object_permission_skills.length > 0) {
-          if (!formValues.object_permission) {
-            formValues.object_permission = {};
-          }
-          formValues.object_permission.skills = formValues.object_permission_skills;
-        }
-        delete formValues.object_permission_skills;
-
         // Add model_aliases if any are defined
         if (Object.keys(modelAliases).length > 0) {
           formValues.model_aliases = modelAliases;
@@ -573,14 +403,7 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
   };
 
   const mountedCreateValues = (values: TeamCreateFormValues): Record<string, unknown> => {
-    const unmounted = new Set<string>([
-      ...(additionalSettingsOpen ? [] : ADDITIONAL_SETTINGS_FIELDS),
-      ...(additionalSettingsOpen && canViewPolicies ? [] : ["policies"]),
-      ...(mcpSettingsOpen ? [] : MCP_SETTINGS_FIELDS),
-      ...(agentSettingsOpen ? [] : AGENT_SETTINGS_FIELDS),
-      ...(searchToolSettingsOpen ? [] : SEARCH_TOOL_SETTINGS_FIELDS),
-      ...(skillSettingsOpen ? [] : SKILL_SETTINGS_FIELDS),
-    ]);
+    const unmounted = new Set<string>([...(additionalSettingsOpen ? [] : ADDITIONAL_SETTINGS_FIELDS)]);
     return Object.fromEntries(Object.entries(values).filter(([key]) => !unmounted.has(key)));
   };
 
@@ -983,52 +806,6 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
                             />
                           )}
                         </FormField>
-                        <FormField
-                          control={form.control}
-                          name="guardrails"
-                          className="mt-8"
-                          label={labelWithDocsHint(
-                            "Guardrails",
-                            "Setup your first guardrail",
-                            "https://docs.litellm.ai/docs/proxy/guardrails/quick_start",
-                          )}
-                          description="Select existing guardrails or enter new ones"
-                        >
-                          {({ id, value, onChange }) => (
-                            <TagsInput
-                              id={id}
-                              value={value ?? []}
-                              onValueChange={onChange}
-                              options={guardrailsList.map((name) => ({ value: name, label: name }))}
-                              placeholder="Select or enter guardrails"
-                            />
-                          )}
-                        </FormField>
-                        {isProxyAdminRole(userRole || "") && (
-                          <FormField
-                            control={form.control}
-                            name="disable_global_guardrails"
-                            className="mt-4"
-                            label={labelWithHint(
-                              "Disable Global Guardrails",
-                              "When enabled, this team will bypass any guardrails configured to run on every request (global guardrails)",
-                            )}
-                            description={
-                              premiumUser
-                                ? "Bypass global guardrails for this team"
-                                : "Premium feature - Upgrade to disable global guardrails by team"
-                            }
-                          >
-                            {({ id, value, onChange }) => (
-                              <Switch
-                                id={id}
-                                disabled={!premiumUser}
-                                checked={value === true}
-                                onCheckedChange={onChange}
-                              />
-                            )}
-                          </FormField>
-                        )}
                         {canEditAsProxyAdmin && (
                           <FormField
                             control={form.control}
@@ -1036,7 +813,7 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
                             className="mt-4"
                             label={labelWithHint(
                               "Require Trace ID",
-                              "Reject LLM, MCP and agent requests from this team that do not send a trace ID (x-litellm-trace-id header, LLM requests can also use traceparent or metadata.trace_id)",
+                              "Reject LLM requests from this team that do not send a trace ID (x-litellm-trace-id header, traceparent or metadata.trace_id)",
                             )}
                           >
                             {({ id, value, onChange }) => (
@@ -1044,66 +821,6 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
                             )}
                           </FormField>
                         )}
-                        {canViewPolicies && (
-                          <FormField
-                            control={form.control}
-                            name="policies"
-                            className="mt-8"
-                            label={labelWithDocsHint(
-                              "Policies",
-                              "Apply policies to this team to control guardrails and other settings",
-                              "https://docs.litellm.ai/docs/proxy/guardrails/guardrail_policies",
-                            )}
-                            description="Select existing policies or enter new ones"
-                          >
-                            {({ id, value, onChange }) => (
-                              <TagsInput
-                                id={id}
-                                value={value ?? []}
-                                onValueChange={onChange}
-                                options={policiesList.map((name) => ({ value: name, label: name }))}
-                                placeholder="Select or enter policies"
-                              />
-                            )}
-                          </FormField>
-                        )}
-                        <FormField
-                          control={form.control}
-                          name="access_group_ids"
-                          className="mt-8"
-                          label={labelWithHint(
-                            "Access Groups",
-                            "Assign access groups to this team. Access groups control which models, MCP servers, and agents this team can use",
-                          )}
-                          description="Select access groups to assign to this team"
-                        >
-                          {({ value, onChange }) => (
-                            <AccessGroupSelector
-                              value={value}
-                              onChange={onChange}
-                              placeholder="Select access groups (optional)"
-                            />
-                          )}
-                        </FormField>
-                        <FormField
-                          control={form.control}
-                          name="allowed_vector_store_ids"
-                          className="mt-8"
-                          label={labelWithHint(
-                            "Allowed Vector Stores",
-                            "Select which vector stores this team can access by default. Leave empty for access to all vector stores",
-                          )}
-                          description="Select vector stores this team can access. Leave empty for access to all vector stores"
-                        >
-                          {({ value, onChange }) => (
-                            <VectorStoreSelector
-                              onChange={onChange}
-                              value={value}
-                              accessToken={accessToken || ""}
-                              placeholder="Select vector stores (optional)"
-                            />
-                          )}
-                        </FormField>
                         <FormField
                           control={form.control}
                           name="allowed_passthrough_routes"
@@ -1133,146 +850,6 @@ const Teams: React.FC<TeamProps> = ({ accessToken, userID, userRole, isViewOnly 
                           )}
                         </FormField>
                       </FieldGroup>
-                    </CollapsibleContent>
-                  </Collapsible>
-
-                  <Collapsible
-                    open={mcpSettingsOpen}
-                    onOpenChange={setMcpSettingsOpen}
-                    className="mt-8 mb-8 overflow-hidden rounded-lg border"
-                  >
-                    <CollapsibleTrigger className="group/section flex w-full items-center justify-between px-4 py-3 text-left">
-                      <b>MCP Settings</b>
-                      <ChevronDown className="size-5 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]/section:rotate-180" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-3">
-                      <FormField
-                        control={form.control}
-                        name="allowed_mcp_servers_and_groups"
-                        className="mt-4"
-                        label={labelWithHint(
-                          "Allowed MCP Servers",
-                          "Select which MCP servers or access groups this team can access",
-                        )}
-                        description="Select MCP servers or access groups this team can access"
-                      >
-                        {({ value, onChange }) => (
-                          <MCPServerSelector
-                            onChange={onChange}
-                            value={value}
-                            accessToken={accessToken || ""}
-                            placeholder="Select MCP servers or access groups (optional)"
-                            allowAllProxyMcpServers={isProxyAdminRole(userRole || "")}
-                          />
-                        )}
-                      </FormField>
-
-                      <div className="mt-6">
-                        <MCPToolPermissions
-                          accessToken={accessToken || ""}
-                          selectedServers={watchedMcpSelection?.servers || []}
-                          selectedAccessGroups={watchedMcpSelection?.accessGroups || []}
-                          selectedToolsets={watchedMcpSelection?.toolsets || []}
-                          toolPermissions={watchedToolPermissions || {}}
-                          onChange={(toolPerms) => form.setValue("mcp_tool_permissions", toolPerms)}
-                        />
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-
-                  <Collapsible
-                    open={agentSettingsOpen}
-                    onOpenChange={setAgentSettingsOpen}
-                    className="mt-8 mb-8 overflow-hidden rounded-lg border"
-                  >
-                    <CollapsibleTrigger className="group/section flex w-full items-center justify-between px-4 py-3 text-left">
-                      <b>Agent Settings</b>
-                      <ChevronDown className="size-5 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]/section:rotate-180" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-3">
-                      <FormField
-                        control={form.control}
-                        name="allowed_agents_and_groups"
-                        className="mt-4"
-                        label={labelWithHint(
-                          "Allowed Agents",
-                          "Select which agents or access groups this team can access",
-                        )}
-                        description="Select agents or access groups this team can access"
-                      >
-                        {({ value, onChange }) => (
-                          <AgentSelector
-                            onChange={onChange}
-                            value={value}
-                            accessToken={accessToken || ""}
-                            placeholder="Select agents or access groups (optional)"
-                          />
-                        )}
-                      </FormField>
-                    </CollapsibleContent>
-                  </Collapsible>
-
-                  <Collapsible
-                    open={searchToolSettingsOpen}
-                    onOpenChange={setSearchToolSettingsOpen}
-                    className="mt-8 mb-8 overflow-hidden rounded-lg border"
-                  >
-                    <CollapsibleTrigger className="group/section flex w-full items-center justify-between px-4 py-3 text-left">
-                      <b>Search Tool Settings</b>
-                      <ChevronDown className="size-5 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]/section:rotate-180" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-3">
-                      <FormField
-                        control={form.control}
-                        name="object_permission_search_tools"
-                        className="mt-4"
-                        label={labelWithHint(
-                          "Allowed Search Tools",
-                          "Select which search tools this team can access. Leave empty to allow all search tools.",
-                        )}
-                        description="Restrict which configured search tools keys on this team may call."
-                      >
-                        {({ value, onChange }) => (
-                          <SearchToolSelector
-                            onChange={onChange}
-                            value={value}
-                            accessToken={accessToken || ""}
-                            placeholder="Select search tools (optional, empty = all allowed)"
-                          />
-                        )}
-                      </FormField>
-                    </CollapsibleContent>
-                  </Collapsible>
-
-                  <Collapsible
-                    open={skillSettingsOpen}
-                    onOpenChange={setSkillSettingsOpen}
-                    className="mt-8 mb-8 overflow-hidden rounded-lg border"
-                  >
-                    <CollapsibleTrigger className="group/section flex w-full items-center justify-between px-4 py-3 text-left">
-                      <b>Skill Settings</b>
-                      <ChevronDown className="size-5 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]/section:rotate-180" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-3">
-                      <FormField
-                        control={form.control}
-                        name="object_permission_skills"
-                        className="mt-4"
-                        label={labelWithHint(
-                          "Allowed Skills",
-                          "Enabled skills are visible to every team. Grant disabled (private) Claude Code plugins to this team here.",
-                        )}
-                        description="Private skills keys on this team may see in the Claude Code marketplace."
-                      >
-                        {({ value, onChange }) => (
-                          <SkillSelector
-                            onChange={onChange}
-                            value={value}
-                            accessToken={accessToken || ""}
-                            placeholder="Select skills (optional)"
-                          />
-                        )}
-                      </FormField>
                     </CollapsibleContent>
                   </Collapsible>
 

@@ -39,10 +39,6 @@ import { toast } from "@/lib/toast";
 import { getBudgetDurationLabel } from "@/components/common_components/budget_duration_dropdown";
 import DeleteResourceModal from "@/components/common_components/DeleteResourceModal";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
-import MCPServerPermissions from "@/components/permissions/MCPServerPermissions";
-import { useMCPServers } from "@/app/(dashboard)/hooks/mcpServers/useMCPServers";
-import { useMCPToolsets } from "@/app/(dashboard)/hooks/mcpServers/useMCPToolsets";
-import { extractMcpEntitlement } from "@/components/mcp_server_management/mcpEntitlement";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ScopedSavingsTab from "@/components/shared/ScopedSavingsTab";
 import { AutoRouterUsageView } from "@/app/(dashboard)/cost-optimization/_components/AutoRouterBenchmarksTab";
@@ -117,8 +113,6 @@ export default function UserInfoView({
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [selectedRole, setSelectedRole] = useState<string>("user");
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
-  const { data: allMcpServers = [] } = useMCPServers();
-  const { data: allMcpToolsets = [] } = useMCPToolsets();
 
   React.useEffect(() => {
     setBaseUrl(getProxyBaseUrl());
@@ -322,18 +316,7 @@ export default function UserInfoView({
     try {
       if (!accessToken || !userData) return;
 
-      const mcpEntitlement = extractMcpEntitlement(formValues, allMcpServers, allMcpToolsets);
-      const userFields = Object.fromEntries(
-        Object.entries(formValues).filter(
-          ([field]) => field !== "mcp_servers_and_groups" && field !== "mcp_tool_permissions",
-        ),
-      );
-
-      await userUpdateUserCall(
-        accessToken,
-        mcpEntitlement ? { ...userFields, object_permission: mcpEntitlement } : userFields,
-        null,
-      );
+      await userUpdateUserCall(accessToken, formValues, null);
 
       // Update local state with new values
       setUserData({
@@ -348,9 +331,6 @@ export default function UserInfoView({
           formValues.budget_duration === undefined ? userData.budget_duration : formValues.budget_duration,
         metadata: formValues.metadata ?? userData.metadata,
         model_max_budget: formValues.model_max_budget ?? userData.model_max_budget,
-        object_permission: mcpEntitlement
-          ? { ...userData.object_permission, ...mcpEntitlement }
-          : userData.object_permission,
       });
 
       toast.success("User updated successfully");
@@ -621,7 +601,6 @@ export default function UserInfoView({
                 userRole={userRole}
                 userModels={userModels}
                 possibleUIRoles={possibleUIRoles}
-                objectPermission={userData.object_permission}
                 premiumUser={premiumUser === true}
               />
             ) : (
@@ -704,17 +683,6 @@ export default function UserInfoView({
                   <pre className="bg-muted p-2 rounded-sm text-xs overflow-auto mt-1">
                     {JSON.stringify(userData.metadata || {}, null, 2)}
                   </pre>
-                </div>
-
-                <div>
-                  <p className="font-medium mb-2">MCP Permissions</p>
-                  <MCPServerPermissions
-                    mcpServers={userData.object_permission?.mcp_servers || []}
-                    mcpAccessGroups={userData.object_permission?.mcp_access_groups || []}
-                    mcpToolPermissions={userData.object_permission?.mcp_tool_permissions || {}}
-                    mcpToolsets={userData.object_permission?.mcp_toolsets || []}
-                    accessToken={accessToken}
-                  />
                 </div>
               </div>
             )}

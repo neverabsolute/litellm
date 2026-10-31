@@ -40,23 +40,11 @@ vi.mock("@/app/(dashboard)/hooks/organizations/useOrganizations", () => ({
 const mockUseOrganization = vi.mocked(useOrganization);
 
 // Mock noisy/heavy child components to keep this test focused on render
-vi.mock("../object_permissions_view", () => ({
-  __esModule: true,
-  default: () => <div data-testid="object-permissions-view" />,
-}));
 vi.mock("../team/edit_membership", () => ({
   __esModule: true,
   default: () => null,
 }));
 vi.mock("../common_components/user_search_modal", () => ({
-  __esModule: true,
-  default: () => null,
-}));
-vi.mock("../vector_store_management/VectorStoreSelector", () => ({
-  __esModule: true,
-  default: () => null,
-}));
-vi.mock("../mcp_server_management/MCPServerSelector", () => ({
   __esModule: true,
   default: () => null,
 }));
@@ -95,7 +83,6 @@ const mockOrg = {
     budget_duration: "30d",
     max_parallel_requests: null,
   },
-  object_permission: {},
   members: [],
   teams: [],
   metadata: null,

@@ -6,9 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Plus,
   MessageSquare,
-  Network,
-  LayoutGrid,
-  KeyRound,
   Lock,
   BarChart3,
   ScrollText,
@@ -18,7 +15,6 @@ import {
   Settings2,
   ChevronDown,
   Info,
-  Settings,
   LogOut,
 } from "lucide-react";
 import { useMediaQuery } from "usehooks-ts";
@@ -43,9 +39,6 @@ export function getChatRoutes() {
   const base = uiHref("chat");
   return {
     chats: base,
-    models: `${base}/models`,
-    integrations: `${base}/integrations`,
-    credentials: `${base}/credentials`,
     apiKeys: `${base}/api-keys`,
     logs: `${base}/logs`,
     usage: `${base}/usage`,
@@ -103,7 +96,6 @@ const ChatShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isChatsRoute = pathname === routes.chats;
   const accountName = userEmail?.split("@")[0] || userId || "Account";
   const workspaceItems = [
-    { label: "Credentials", route: routes.credentials, Icon: KeyRound },
     { label: "API Keys", route: routes.apiKeys, Icon: Lock },
     { label: "Logs", route: routes.logs, Icon: ScrollText },
     { label: "Usage", route: routes.usage, Icon: BarChart3 },
@@ -153,18 +145,6 @@ const ChatShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           label="Chats"
           onClick={() => navigate(routes.chats)}
           active={isChatsRoute}
-        />
-        <NavItem
-          icon={<Network className="size-4" />}
-          label="Models"
-          onClick={() => navigate(routes.models)}
-          active={pathname === routes.models}
-        />
-        <NavItem
-          icon={<LayoutGrid className="size-4" />}
-          label="Integrations"
-          onClick={() => navigate(routes.integrations)}
-          active={pathname === routes.integrations}
         />
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -246,9 +226,6 @@ const ChatShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           {accountName}
         </span>
         <ThemeToggle />
-        <Button variant="ghost" size="icon-sm" aria-label="Settings" onClick={() => navigate(routes.credentials)}>
-          <Settings className="size-4" />
-        </Button>
         <Button variant="ghost" size="icon-sm" aria-label="Sign out" onClick={handleLogout}>
           <LogOut className="size-4" />
         </Button>

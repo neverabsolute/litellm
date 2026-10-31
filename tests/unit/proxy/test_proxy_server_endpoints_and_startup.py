@@ -847,8 +847,6 @@ def _mock_scheduled_proxy_config() -> MagicMock:
         check_periodic_reloads=create_autospec(config.check_periodic_reloads),
         get_credentials=create_autospec(config.get_credentials),
         add_deployment=create_autospec(config.add_deployment),
-        reload_search_tools_from_db=create_autospec(config.reload_search_tools_from_db),
-        reload_mcp_servers_from_db=create_autospec(config.reload_mcp_servers_from_db),
     )
 
 
@@ -1126,67 +1124,6 @@ async def test_initialize_scheduled_jobs_rejects_non_positive_config_reload_inte
     }
     assert scheduled_seconds["add_deployment_job"] == 30
     assert "get_credentials_job" not in scheduled_seconds
-
-
-@pytest.mark.asyncio
-async def test_initialize_scheduled_jobs_hydrates_mcp_when_store_model_in_db_false(monkeypatch):
-    """
-    Regression (LIT-4128): MCP servers created via the UI are persisted to the DB
-    regardless of store_model_in_db, but the in-memory registry that GET
-    /v1/mcp/server reads is hydrated from the DB only by the store_model_in_db
-    model-sync loop (add_deployment). On a DB-backed proxy with store_model_in_db
-    unset the registry must still be hydrated on startup so previously-added
-    servers survive a restart instead of showing an empty list until a write.
-    """
-    monkeypatch.delenv("DISABLE_PRISMA_SCHEMA_UPDATE", raising=False)
-    monkeypatch.delenv("STORE_MODEL_IN_DB", raising=False)
-    from litellm.proxy.proxy_server import ProxyStartupEvent
-    from litellm.proxy.utils import ProxyLogging
-
-    mock_prisma_client = MagicMock()
-    mock_proxy_logging = MagicMock(spec=ProxyLogging)
-    mock_proxy_logging.slack_alerting_instance = MagicMock()
-    mock_proxy_logging.db_spend_update_writer = MagicMock()
-    mock_proxy_config = _mock_scheduled_proxy_config()
-
-    with (
-        patch("litellm.proxy.proxy_server.proxy_config", mock_proxy_config),
-        patch("litellm.proxy.proxy_server.store_model_in_db", False),
-    ):
-        await ProxyStartupEvent.initialize_scheduled_background_jobs(
-            general_settings={},
-            prisma_client=mock_prisma_client,
-            proxy_budget_rescheduler_min_time=1,
-            proxy_budget_rescheduler_max_time=2,
-            proxy_batch_write_at=5,
-            proxy_logging_obj=mock_proxy_logging,
-        )
-
-    mock_proxy_config.add_deployment.assert_not_called()
-    mock_proxy_config.init_mcp_servers_from_db.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_init_mcp_servers_from_db_respects_supported_db_objects(monkeypatch):
-    """
-    init_mcp_servers_from_db hydrates MCP from the DB by default but skips it when
-    an explicit supported_db_objects allowlist omits "mcp".
-    """
-    from litellm.proxy.proxy_server import ProxyConfig
-
-    config = ProxyConfig()
-    with patch.object(config, "_init_mcp_servers_in_db", new=AsyncMock()) as mock_init:
-        monkeypatch.setattr("litellm.proxy.proxy_server.general_settings", {})
-        await config.init_mcp_servers_from_db()
-        mock_init.assert_awaited_once()
-
-        mock_init.reset_mock()
-        monkeypatch.setattr(
-            "litellm.proxy.proxy_server.general_settings",
-            {"supported_db_objects": ["models"]},
-        )
-        await config.init_mcp_servers_from_db()
-        mock_init.assert_not_awaited()
 
 
 def test_settings_store_deep_merge_db_wins():
@@ -10937,8 +10874,8 @@ class TestLazyFeatureMiddleware:
 
 class TestInjectLazyStubs:
     """Stub injection keys off the app-tracked loaded set, never sys.modules:
-    proxy boot imports several feature modules (mcp_management, cloudzero,
-    vantage, config_overrides) without mounting their routers, and their
+    proxy boot imports several feature modules (cloudzero, vantage,
+    config_overrides) without mounting their routers, and their
     /openapi.json entries must survive that (LIT-6275)."""
 
     def test_imported_but_unregistered_module_still_gets_stub(self):
@@ -10974,9 +10911,9 @@ class TestInjectLazyStubs:
         snapshot = load_snapshot()
         assert snapshot
         boot_imported = tuple(
-            f for f in LAZY_FEATURES if f.name in ("mcp_management", "cloudzero", "vantage", "config_overrides")
+            f for f in LAZY_FEATURES if f.name in ("cloudzero", "vantage", "config_overrides")
         )
-        assert len(boot_imported) == 4
+        assert len(boot_imported) == 3
 
         schema = inject_lazy_stubs({"paths": {}}, loaded_modules=frozenset(), features=boot_imported)
         for feat in boot_imported:
@@ -14828,60 +14765,6 @@ async def test_audio_speech_already_shaped_failure_answers_with_the_callers_lite
     else:
         assert raised.value is exc
     assert raised.value.headers["x-litellm-call-id"] == call_id
-
-
-@pytest.mark.asyncio
-async def test_init_agents_in_db_rebuilds_registry_under_agent_reconcile_lock(monkeypatch):
-    from litellm.proxy.agent_endpoints.agent_registry import (
-        AGENT_RECONCILE_LOCK,
-        global_agent_registry,
-    )
-    from litellm.proxy.proxy_server import ProxyConfig
-
-    lock_states: list[bool] = []
-
-    async def fake_get_all_agents_from_db(prisma_client) -> list:
-        lock_states.append(AGENT_RECONCILE_LOCK.locked())
-        return []
-
-    def fake_load_agents_from_db_and_config(db_agents) -> None:
-        lock_states.append(AGENT_RECONCILE_LOCK.locked())
-
-    monkeypatch.setattr(global_agent_registry, "get_all_agents_from_db", fake_get_all_agents_from_db)
-    monkeypatch.setattr(global_agent_registry, "load_agents_from_db_and_config", fake_load_agents_from_db_and_config)
-
-    await ProxyConfig()._init_agents_in_db(prisma_client=MagicMock())
-
-    assert lock_states == [True, True]
-    assert not AGENT_RECONCILE_LOCK.locked()
-
-
-@pytest.mark.asyncio
-async def test_init_guardrails_in_db_snapshots_and_reconciles_under_guardrail_reconcile_lock(monkeypatch):
-    from litellm.proxy.guardrails.guardrail_registry import (
-        GUARDRAIL_RECONCILE_LOCK,
-        IN_MEMORY_GUARDRAIL_HANDLER,
-        GuardrailRegistry,
-    )
-    from litellm.proxy.proxy_server import ProxyConfig
-
-    lock_states: list[bool] = []
-
-    async def fake_get_all_guardrails_from_db(prisma_client) -> list:
-        lock_states.append(GUARDRAIL_RECONCILE_LOCK.locked())
-        return []
-
-    def fake_reconcile_db_guardrails(db_guardrail_ids) -> list:
-        lock_states.append(GUARDRAIL_RECONCILE_LOCK.locked())
-        return []
-
-    monkeypatch.setattr(GuardrailRegistry, "get_all_guardrails_from_db", fake_get_all_guardrails_from_db)
-    monkeypatch.setattr(IN_MEMORY_GUARDRAIL_HANDLER, "reconcile_db_guardrails", fake_reconcile_db_guardrails)
-
-    await ProxyConfig()._init_guardrails_in_db(prisma_client=MagicMock())
-
-    assert lock_states == [True, True]
-    assert not GUARDRAIL_RECONCILE_LOCK.locked()
 
 
 @pytest.mark.asyncio

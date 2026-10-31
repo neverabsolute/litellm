@@ -1,18 +1,16 @@
-import { useRef, useState, type RefObject } from "react";
+import { useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { EndpointType } from "@/components/chat_ui/mode_endpoint_mapping";
 import type { MessageType, ReplyTrace } from "@/components/chat_ui/types";
 import { gatewayTraceFromHeaders } from "@/components/llm_calls/reply_trace";
 import type { CustomHeaders } from "@/components/llm_calls/request_headers";
-import type { MCPToolArgumentsFormRef } from "@/components/mcp_tools/MCPToolArgumentsForm";
-import type { MCPServer, MCPToolset } from "@/components/mcp_tools/types";
 import { toast } from "@/lib/toast";
 import type { UseChatHistoryReturn } from "../../hooks/useChatHistory";
 import type { UseCodeInterpreterReturn } from "../../hooks/useCodeInterpreter";
 import { createChatMultimodalMessage } from "../chat_ui/ChatImageUtils";
 import { createMultimodalMessage } from "../chat_ui/ResponsesImageUtils";
 import { addFiles, toAttachment, type DraftFile } from "./composerFiles";
-import { dispatchRequest, type DirectToolCall, type DispatchContext } from "./dispatchRequest";
+import { dispatchRequest, type DispatchContext } from "./dispatchRequest";
 import type { AttachKind, Capabilities } from "./endpointCapabilities";
 import type { PlaygroundSettings } from "./playgroundSettings";
 
@@ -34,10 +32,6 @@ export type SendDeps = Readonly<{
   apiKey: string | null;
   signedIn: boolean;
   customHeaders: CustomHeaders;
-  mcpServers: readonly MCPServer[];
-  mcpToolsets: readonly MCPToolset[];
-  directCall: () => Omit<DirectToolCall, "arguments"> | null;
-  toolArgsForm: RefObject<MCPToolArgumentsFormRef | null>;
   chat: UseChatHistoryReturn;
   codeInterpreter: UseCodeInterpreterReturn;
 }>;
@@ -56,8 +50,6 @@ const missingInput = (deps: SendDeps, text: string, files: readonly DraftFile[])
   if (settings.endpoint === EndpointType.TRANSCRIPTION && files.length === 0)
     return "Please upload an audio file for transcription";
   if (capabilities.textRequired && text.trim() === "") return "";
-  if (settings.endpoint === EndpointType.A2A_AGENTS && !settings.agent)
-    return "Please select an agent to send a message";
   if (MODEL_ENDPOINTS.includes(settings.endpoint) && !settings.model)
     return "Please select a model before sending a request";
   return null;
@@ -67,15 +59,6 @@ const apiMessage = async (endpoint: EndpointType, text: string, file: File | und
   if (file && endpoint === EndpointType.RESPONSES) return createMultimodalMessage(text, file);
   if (file && endpoint === EndpointType.CHAT) return createChatMultimodalMessage(text, file);
   return { role: "user", content: text };
-};
-
-const targetName = (
-  settings: PlaygroundSettings,
-  direct: Omit<DirectToolCall, "arguments"> | null,
-): string | undefined => {
-  if (settings.endpoint === EndpointType.A2A_AGENTS) return settings.agent ?? undefined;
-  if (settings.endpoint === EndpointType.MCP) return direct?.tool;
-  return settings.model ?? undefined;
 };
 
 const withTrace = (history: MessageType[], from: number, trace: ReplyTrace): MessageType[] => {
@@ -97,8 +80,6 @@ const untilAborted = <T extends object>(target: T, signal: AbortSignal): T =>
 type Draft = Readonly<{ kind: AttachKind | null; files: readonly DraftFile[] }>;
 
 type PreparedRequest = Readonly<{
-  direct: Omit<DirectToolCall, "arguments"> | null;
-  toolArguments: Record<string, unknown>;
   userMessage: Awaited<ReturnType<typeof apiMessage>>;
 }>;
 
@@ -150,18 +131,6 @@ export function usePlaygroundSend(deps: SendDeps) {
       if (missing) toast.fromError(missing);
       return null;
     }
-    const direct = settings.endpoint === EndpointType.MCP ? deps.directCall() : null;
-    if (settings.endpoint === EndpointType.MCP && !direct) {
-      toast.fromError("Pick an MCP server and a tool to call");
-      return null;
-    }
-    const toolArguments = await (direct
-      ? deps.toolArgsForm.current?.getSubmitValues().catch((error: unknown) => {
-          toast.fromError(error instanceof Error ? error.message : "Please fill in all required parameters");
-          return null;
-        })
-      : Promise.resolve({}));
-    if (toolArguments === null) return null;
     if (!deps.signedIn) return null;
     if (!deps.apiKey) {
       toast.fromError("Please provide a Virtual Key or select Current UI Session");
@@ -173,7 +142,7 @@ export function usePlaygroundSend(deps: SendDeps) {
       toast.fromError("Failed to process the attachment. Please try again.");
       return null;
     }
-    return { direct, toolArguments: toolArguments ?? {}, userMessage };
+    return { userMessage };
   };
 
   const send = async () => {
@@ -184,12 +153,12 @@ export function usePlaygroundSend(deps: SendDeps) {
     });
     if (!prepared || !deps.apiKey) return;
     const { settings, chat } = deps;
-    const { direct, toolArguments, userMessage } = prepared;
+    const { userMessage } = prepared;
 
     const traceId = chat.messageTraceId ?? uuidv4();
     if (!chat.messageTraceId) chat.setMessageTraceId(traceId);
     const history = chat.chatHistory;
-    const requestedModel = targetName(settings, direct);
+    const requestedModel = settings.model ?? undefined;
     chat.setChatHistory([
       ...history,
       {
@@ -197,10 +166,8 @@ export function usePlaygroundSend(deps: SendDeps) {
         content: text,
         model: requestedModel,
         ...(files.length > 0 ? { attachments: files.map(toAttachment) } : {}),
-        ...(direct ? { mcpToolCall: { tool: direct.tool, arguments: toolArguments } } : {}),
       },
     ]);
-    chat.clearMCPEvents();
     deps.codeInterpreter.clearResult();
     const sentFiles = files.map((draft) => draft.file);
     setText("");
@@ -229,9 +196,6 @@ export function usePlaygroundSend(deps: SendDeps) {
         signal: controller.signal,
         files: sentFiles,
         customHeaders: deps.customHeaders,
-        mcpServers: deps.mcpServers,
-        mcpToolsets: deps.mcpToolsets,
-        directCall: direct ? { ...direct, arguments: toolArguments } : null,
         chat: live,
         codeInterpreter: untilAborted(deps.codeInterpreter, controller.signal),
         onHeaders: (headers) => {

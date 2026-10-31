@@ -1,6 +1,5 @@
 /* @vitest-environment jsdom */
 import { screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as networking from "@/components/networking";
 import { renderWithProviders } from "../../../../tests/test-utils";
@@ -51,20 +50,10 @@ vi.mock("@/components/networking", () => ({
   teamMemberAddCall: vi.fn(),
   teamMemberUpdateCall: vi.fn(),
   teamUpdateCall: vi.fn(),
-  getGuardrailsList: vi.fn(),
-  getPoliciesList: vi.fn(),
-  getPolicyInfoWithGuardrails: vi.fn(),
-  fetchMCPAccessGroups: vi.fn(),
   getTeamPermissionsCall: vi.fn(),
   organizationInfoCall: vi.fn(),
   getRouterSettingsCall: vi.fn().mockResolvedValue({ fields: [] }),
   getPassThroughEndpointsCall: vi.fn().mockResolvedValue({ endpoints: [] }),
-  fetchMCPServers: vi.fn().mockResolvedValue([]),
-  fetchMCPToolsets: vi.fn().mockResolvedValue([]),
-  listMCPTools: vi.fn().mockResolvedValue({ tools: [] }),
-  vectorStoreListCall: vi.fn().mockResolvedValue({ data: [] }),
-  getAgentsList: vi.fn().mockResolvedValue({ agents: [] }),
-  getClaudeCodePluginsList: vi.fn().mockResolvedValue({ plugins: [], count: 0 }),
 }));
 
 const can = vi.fn();
@@ -105,18 +94,6 @@ vi.mock("@/app/(dashboard)/hooks/users/useCurrentUser", () => ({
   useCurrentUser: vi.fn(() => ({ data: { models: [] }, isLoading: false })),
 }));
 
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPServers", () => ({
-  useMCPServers: vi.fn(() => ({ data: [], isLoading: false, isError: false })),
-}));
-
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPToolsets", () => ({
-  useMCPToolsets: vi.fn(() => ({ data: [], isLoading: false, isError: false })),
-}));
-
-vi.mock("@/components/mcp_server_management/MCPServerSelector", () => ({
-  default: () => <div>mcp server selector</div>,
-}));
-
 vi.mock("@/components/team/TeamMemberTab", () => ({
   default: vi.fn(() => <div>member tab</div>),
 }));
@@ -139,14 +116,6 @@ vi.mock("@/components/team/member_permissions", () => ({
 
 vi.mock("@/components/common_components/ModelAliasManager", () => ({
   default: vi.fn(() => <div>alias manager</div>),
-}));
-
-vi.mock("@/app/(dashboard)/hooks/accessGroups/useAccessGroups", () => ({
-  useAccessGroups: vi.fn().mockReturnValue({ data: [], isLoading: false, isError: false }),
-}));
-
-vi.mock("@/components/common_components/AccessGroupSelector", () => ({
-  default: () => <div>access group selector</div>,
 }));
 
 vi.mock("@/app/(dashboard)/hooks/keys/useKeys", () => {
@@ -204,9 +173,6 @@ describe("ModelsAndEndpointsPage ?team drill-in", () => {
     authState.userRole = "Admin";
     authState.isViewOnly = false;
     can.mockReturnValue(true);
-    vi.mocked(networking.getGuardrailsList).mockResolvedValue({ guardrails: [] });
-    vi.mocked(networking.getPoliciesList).mockResolvedValue({ policies: [] });
-    vi.mocked(networking.fetchMCPAccessGroups).mockResolvedValue([]);
     vi.mocked(networking.getTeamPermissionsCall).mockResolvedValue({
       all_available_permissions: [],
       team_member_permissions: [],
@@ -224,24 +190,12 @@ describe("ModelsAndEndpointsPage ?team drill-in", () => {
     vi.clearAllMocks();
   });
 
-  it("shows the Disable all global guardrails switch to a proxy admin session", async () => {
-    const user = userEvent.setup({ delay: null });
-    renderWithProviders(<ModelsAndEndpointsPage />, { searchParams: { team: "team-a1b2" } });
-
-    await user.click(await screen.findByRole("tab", { name: "Settings" }));
-    await user.click(await screen.findByRole("button", { name: /edit settings/i }));
-    await screen.findByLabelText(/Team Name/);
-
-    expect(screen.getByRole("switch", { name: /Disable all global guardrails/i })).toBeChecked();
-  });
-
-  it("keeps the switch hidden from an internal user session on the same team", async () => {
+  it("keeps team settings read-only for an internal user session on the same team", async () => {
     authState.userRole = "Internal User";
     renderWithProviders(<ModelsAndEndpointsPage />, { searchParams: { team: "team-a1b2" } });
 
     await screen.findByText("Test Team");
 
     expect(screen.queryByRole("button", { name: /edit settings/i })).not.toBeInTheDocument();
-    expect(screen.queryByText("Disable all global guardrails")).not.toBeInTheDocument();
   });
 });

@@ -47,7 +47,6 @@ describe("dailyActivityAggregatedCall", () => {
     ["tag", "tags"],
     ["organization", "organization_ids"],
     ["customer", "end_user_ids"],
-    ["agent", "agent_ids"],
   ])("GETs /%s/daily/activity/aggregated with %s filters", async (entity, param) => {
     const mockFetch = captureFetch();
 
@@ -78,7 +77,6 @@ describe("dailyActivityAggregatedCall", () => {
     ["team", "exclude_team_ids"],
     ["organization", "exclude_organization_ids"],
     ["customer", "exclude_end_user_ids"],
-    ["agent", "exclude_agent_ids"],
   ])("sends exclude ids comma-joined under %s", async (entity, param) => {
     const mockFetch = captureFetch();
 

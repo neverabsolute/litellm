@@ -1,15 +1,13 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState, useLayoutEffect } from "react";
-import { Plus, ChevronDown, Paperclip, ImageIcon, X } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ChevronDown, Paperclip, ImageIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/toast";
 import { useRouter } from "next/navigation";
 import { useChatShell } from "@/contexts/ChatShellContext";
 import { getChatRoutes } from "@/components/chat/ChatShell";
 import ChatMessages from "@/components/chat/ChatMessages";
-import MCPConnectPicker from "@/components/chat/MCPConnectPicker";
 import { fetchAvailableModels, type ModelGroup } from "@/components/llm_calls/fetch_models";
 import type { AssistantMessageUpdate, ChatAttachment, ChatMessage } from "@/components/chat/types";
 import ChatModelPicker, { isChatModel, modelChatMode, type ChatMode } from "@/components/chat/ChatModelPicker";
@@ -22,7 +20,7 @@ import { useQueryState } from "nuqs";
 
 const LOCALSTORAGE_MODEL_KEY = "litellm_chat_selected_model";
 
-type ReplayMessage = Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages" | "mcpEvents">;
+type ReplayMessage = Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages">;
 
 function hasMessageContent(text: string, images: ChatAttachment[], mode: ChatMode): boolean {
   return Boolean(text.trim()) || (mode === "chat" && images.length > 0);
@@ -75,8 +73,6 @@ export default function ChatConversationPage() {
   const {
     accessToken,
     conversations,
-    selectedMCPServers,
-    setSelectedMCPServers,
     activeConversationId,
     activeConversation,
     storageUnavailable,
@@ -104,7 +100,6 @@ export default function ChatConversationPage() {
   const [prevConversationIdForSessionReset, setPrevConversationIdForSessionReset] = useState(activeConversationId);
   const [isStreaming, setIsStreaming] = useState(false);
   const [inputText, setInputText] = useState("");
-  const [mcpPopoverOpen, setMcpPopoverOpen] = useState(false);
   const [storageBannerDismissed, setStorageBannerDismissed] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -297,7 +292,6 @@ export default function ChatConversationPage() {
         signal: requestController.signal,
         messages: history,
         previousResponseId,
-        mcpServers: selectedMCPServers,
         onResponseId: (id: string | null) => {
           if (responsesSessionGenerationRef.current === sessionGeneration) setResponsesSessionId(id);
         },
@@ -317,7 +311,6 @@ export default function ChatConversationPage() {
       activeConversationId,
       activeConversation,
       selectedModel,
-      selectedMCPServers,
       mode,
       attachments,
       accessToken,
@@ -481,32 +474,6 @@ export default function ChatConversationPage() {
                 >
                   <Paperclip className="size-4" />
                 </Button>
-                <Popover open={mcpPopoverOpen} onOpenChange={setMcpPopoverOpen}>
-                  <PopoverTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={isStreaming}
-                        aria-label="Connect tools"
-                        className="gap-1.5 text-muted-foreground"
-                      >
-                        <Plus className="size-3.5" />
-                        <span>Tools</span>
-                        {selectedMCPServers.length > 0 && (
-                          <span className="text-primary">{selectedMCPServers.length}</span>
-                        )}
-                      </Button>
-                    }
-                  />
-                  <PopoverContent side="top" align="start" className="p-0 w-auto">
-                    <MCPConnectPicker
-                      accessToken={accessToken}
-                      selectedServers={selectedMCPServers}
-                      onChange={setSelectedMCPServers}
-                    />
-                  </PopoverContent>
-                </Popover>
               </>
             ) : (
               <span className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -9,7 +9,6 @@ vi.mock("./networking", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./networking")>()),
   updatePassThroughEndpoint: (...args: unknown[]) => updatePassThroughEndpoint(...args),
   deletePassThroughEndpointsCall: vi.fn().mockResolvedValue({}),
-  getGuardrailsList: vi.fn().mockResolvedValue({ guardrails: [] }),
 }));
 
 vi.mock("@/lib/toast", () => ({
@@ -71,7 +70,6 @@ describe("pass_through_info update payload", () => {
       timeout: 600,
       auth: false,
       methods: ["GET"],
-      guardrails: undefined,
     });
   });
 

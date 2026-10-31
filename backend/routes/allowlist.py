@@ -86,7 +86,6 @@ BACKEND_PATH_PREFIXES: tuple[str, ...] = (
     # Spend / analytics
     "/spend/",
     "/analytics/",
-    "/lens/",
     "/v1/traces",
     "/v1/logs",
     "/global/",
@@ -97,6 +96,7 @@ BACKEND_PATH_PREFIXES: tuple[str, ...] = (
     # than all of /gateway/, which stays free for data-plane routes.
     "/gateway/daily/",
     "/gateway/errors/",
+    "/ip_analytics/",
     # CloudZero cost-export admin (init / settings / export / dry-run / delete)
     "/cloudzero/",
     # Caching admin

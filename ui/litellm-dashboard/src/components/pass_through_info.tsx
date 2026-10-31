@@ -6,7 +6,6 @@ import { z } from "zod";
 import RoutePreview from "./route_preview";
 import { toast } from "@/lib/toast";
 import PassThroughSecuritySection from "./common_components/PassThroughSecuritySection";
-import PassThroughGuardrailsSection from "./common_components/PassThroughGuardrailsSection";
 import { FormField } from "@/components/shared/form/FormField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,7 +103,6 @@ interface PassThroughEndpoint {
   timeout?: number;
   auth?: boolean;
   methods?: string[];
-  guardrails?: Record<string, { request_fields?: string[]; response_fields?: string[] } | null>;
 }
 
 // Password field component for headers
@@ -143,9 +141,6 @@ const PassThroughInfoView: React.FC<PassThroughInfoProps> = ({
   const [endpointData, setEndpointData] = useState<PassThroughEndpoint | null>(initialEndpointData);
   const [loading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [guardrails, setGuardrails] = useState<
-    Record<string, { request_fields?: string[]; response_fields?: string[] } | null>
-  >(initialEndpointData?.guardrails || {});
 
   const form = useZodForm(endpointSettingsSchema, {
     defaultValues: {
@@ -189,7 +184,6 @@ const PassThroughInfoView: React.FC<PassThroughInfoProps> = ({
         timeout: values.timeout,
         auth: values.auth,
         methods: values.methods.length > 0 ? values.methods : undefined,
-        guardrails: guardrails && Object.keys(guardrails).length > 0 ? guardrails : undefined,
       };
 
       await updatePassThroughEndpoint(accessToken, endpointData.id, updateData);
@@ -334,31 +328,6 @@ const PassThroughInfoView: React.FC<PassThroughInfoProps> = ({
                 </div>
               </Card>
             )}
-
-            {endpointData.guardrails && Object.keys(endpointData.guardrails).length > 0 && (
-              <Card className="block mt-6 p-6">
-                <div className="flex justify-between items-center">
-                  <p className="text-sm font-medium">Guardrails</p>
-                  <Badge variant="secondary">{Object.keys(endpointData.guardrails).length} guardrails configured</Badge>
-                </div>
-                <div className="mt-4 space-y-2">
-                  {Object.entries(endpointData.guardrails).map(([name, settings]) => (
-                    <div key={name} className="p-3 bg-muted rounded-sm">
-                      <div className="font-medium text-sm">{name}</div>
-                      {settings && (settings.request_fields || settings.response_fields) && (
-                        <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                          {settings.request_fields && <div>Request fields: {settings.request_fields.join(", ")}</div>}
-                          {settings.response_fields && (
-                            <div>Response fields: {settings.response_fields.join(", ")}</div>
-                          )}
-                        </div>
-                      )}
-                      {!settings && <div className="text-xs text-muted-foreground mt-1">Uses entire payload</div>}
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
           </TabsContent>
 
           {/* Settings Panel (only for admins) */}
@@ -473,14 +442,6 @@ const PassThroughInfoView: React.FC<PassThroughInfoProps> = ({
                         <PassThroughSecuritySection authEnabled={value} onAuthChange={onChange} />
                       )}
                     </FormField>
-
-                    <div className="mt-4">
-                      <PassThroughGuardrailsSection
-                        accessToken={accessToken || ""}
-                        value={guardrails}
-                        onChange={setGuardrails}
-                      />
-                    </div>
 
                     <div className="mt-6 flex justify-end gap-2">
                       <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>

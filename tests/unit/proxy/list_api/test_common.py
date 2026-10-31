@@ -111,7 +111,6 @@ PROXY_PACKAGE = LIST_API_PACKAGE.parent
 GUARDED_PACKAGES = (
     LIST_API_PACKAGE,
     PROXY_PACKAGE / "management_endpoints" / "management_v1",
-    PROXY_PACKAGE / "public_endpoints" / "public_v1",
 )
 FRAMEWORK_SOURCE_FILES = sorted(
     (path for package in GUARDED_PACKAGES for path in package.glob("*.py")),

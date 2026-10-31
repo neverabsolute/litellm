@@ -1,28 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ToolSpendResponse } from "@/components/networking";
+import { describe, expect, it, vi } from "vitest";
 
 import { EMPTY_DAILY_ACTIVITY_METADATA } from "@/components/UsagePage/dailyActivityApi";
 import type { DailyData, SpendMetrics } from "@/components/UsagePage/types";
-
-const mockGetToolSpend = vi.fn();
-
-const { useAuthorizedMock } = vi.hoisted(() => ({ useAuthorizedMock: vi.fn() }));
-
-vi.mock("@/app/(dashboard)/hooks/useAuthorized", () => ({
-  default: useAuthorizedMock,
-}));
-
-// useCan reaches useOrganizations (react-query) through useIsOrgAdmin; stub the
-// org-admin leg so role gating flows through hasCapability without a QueryClient
-vi.mock("@/app/(dashboard)/hooks/useIsOrgAdmin", () => ({
-  default: () => false,
-}));
-
-vi.mock("@/components/networking", () => ({
-  getToolSpend: (...args: unknown[]) => mockGetToolSpend(...args),
-}));
 
 vi.mock("@/components/shared/advanced_date_picker", () => ({
   __esModule: true,
@@ -64,12 +45,9 @@ vi.mock("@/components/shared/charts", () => ({
   CustomLegend: ({ categories }: { categories: readonly string[] }) => (
     <div data-testid="chart-legend">{categories.join(",")}</div>
   ),
-  SEQUENTIAL_COLOR_RAMP: ["indigo", "blue", "sky", "cyan"],
 }));
 
 import UsageTab from "./UsageTab";
-
-const emptyToolSpend: ToolSpendResponse = { by_tool: [], daily: [], start_date: null, end_date: null };
 
 const baseMetrics = (overrides: Partial<SpendMetrics>): SpendMetrics => ({
   spend: 0,
@@ -98,24 +76,14 @@ const day = (date: string, metrics: Partial<SpendMetrics>): DailyData => ({
 });
 
 interface RenderOptions {
-  toolSpend?: ToolSpendResponse;
   from?: Date;
   to?: Date;
-  userRole?: string;
 }
 
 const renderWith = (results: DailyData[], options: RenderOptions = {}) => {
-  const {
-    toolSpend = emptyToolSpend,
-    from = new Date(2026, 6, 1),
-    to = new Date(2026, 6, 14),
-    userRole = "Admin",
-  } = options;
-  mockGetToolSpend.mockResolvedValue(toolSpend);
-  useAuthorizedMock.mockReturnValue({ accessToken: "test-token", userId: "u1", userRole });
+  const { from = new Date(2026, 6, 1), to = new Date(2026, 6, 14) } = options;
   return render(
     <UsageTab
-      accessToken="test-token"
       activity={{
         dateValue: { from, to },
         onDateChange: vi.fn(),
@@ -138,10 +106,6 @@ const renderWith = (results: DailyData[], options: RenderOptions = {}) => {
 const readSeries = (element: HTMLElement) => JSON.parse(element.getAttribute("data-series") ?? "[]");
 
 describe("UsageTab", () => {
-  beforeEach(() => {
-    mockGetToolSpend.mockReset();
-  });
-
   it("sums compression and caching dollars across days into the summary cards", () => {
     // Total caching and the LiteLLM-injected share deliberately differ so these
     // assertions pin which one each figure uses: the caching headline and the
@@ -365,82 +329,5 @@ describe("UsageTab", () => {
     // And the cumulative line accumulates the auto-router series alongside the others.
     const series = readSeries(screen.getByTestId("area-chart"));
     expect(series[2]["Auto-router"]).toBeCloseTo(0.07, 5);
-  });
-
-  it("renders spend-by-tool bars from the tool spend endpoint", async () => {
-    const toolSpend = {
-      by_tool: [
-        { tool_name: "search", spend: 4.0, call_count: 3, total_tokens: 150 },
-        { tool_name: "read_file", spend: 1.0, call_count: 2, total_tokens: 50 },
-      ],
-      daily: [{ date: "2026-07-12", tool_name: "search", spend: 4.0, call_count: 3 }],
-      start_date: "2026-07-12",
-      end_date: "2026-07-12",
-    };
-    renderWith([day("2026-07-12", {})], { toolSpend });
-
-    const bars = await screen.findAllByTestId("bar-chart");
-    const series = JSON.parse(bars[0].getAttribute("data-series") ?? "[]");
-    expect(series[0]).toMatchObject({ tool_name: "search", spend: 4.0 });
-    // The 64px bar cap is this card's opt-in; the shared BarChart must not cap
-    // by default (other consumers keep their pre-existing geometry).
-    expect(bars[0]).toHaveAttribute("data-max-bar-size", "64");
-  });
-
-  it("renders the tool legend once outside the charts, with both charts sharing the tool colors", async () => {
-    const toolSpend = {
-      by_tool: [
-        { tool_name: "search", spend: 4.0, call_count: 3, total_tokens: 150 },
-        { tool_name: "read_file", spend: 1.0, call_count: 2, total_tokens: 50 },
-      ],
-      daily: [{ date: "2026-07-12", tool_name: "search", spend: 4.0, call_count: 3 }],
-      start_date: "2026-07-12",
-      end_date: "2026-07-12",
-    };
-    renderWith([day("2026-07-12", {})], { toolSpend });
-
-    const bars = await screen.findAllByTestId("bar-chart");
-    const [totalByTool, dailyByTool] = bars.slice(-2);
-    expect(dailyByTool).toHaveAttribute("data-show-legend", "false");
-    expect(totalByTool).toHaveAttribute("data-colors", dailyByTool.getAttribute("data-colors"));
-
-    const toolLegends = screen
-      .getAllByTestId("chart-legend")
-      .filter((legend) => legend.textContent === "search,read_file");
-    expect(toolLegends).toHaveLength(1);
-  });
-
-  // `/v1/tool/spend` is proxy-admin-only while the daily-activity charts around
-  // it are not, so this one card is dropped rather than the whole tab.
-  describe("proxy-admin-only spend-by-tool card", () => {
-    const toolSpend = {
-      by_tool: [{ tool_name: "search", spend: 4.0, call_count: 3, total_tokens: 150 }],
-      daily: [{ date: "2026-07-12", tool_name: "search", spend: 4.0, call_count: 3 }],
-      start_date: "2026-07-12",
-      end_date: "2026-07-12",
-    };
-
-    it.each(["Internal User", "Internal Viewer", "Org Admin"])(
-      "hides the card and never calls the endpoint for %s",
-      async (userRole) => {
-        renderWith([day("2026-07-12", { compression_savings_spend: 0.04 })], {
-          toolSpend,
-          userRole,
-        });
-
-        // Liveness gate: the daily-activity charts still render for this role,
-        // so the absence below is the gate, not an empty tab.
-        expect(screen.getByTestId("donut-chart")).toBeInTheDocument();
-        expect(screen.queryByText("Spend by tool")).not.toBeInTheDocument();
-        await vi.waitFor(() => expect(mockGetToolSpend).not.toHaveBeenCalled());
-      },
-    );
-
-    it("keeps the card and the endpoint call for an admin", async () => {
-      renderWith([day("2026-07-12", { compression_savings_spend: 0.04 })], { toolSpend });
-
-      expect(await screen.findByText("Spend by tool")).toBeInTheDocument();
-      expect(mockGetToolSpend).toHaveBeenCalled();
-    });
   });
 });

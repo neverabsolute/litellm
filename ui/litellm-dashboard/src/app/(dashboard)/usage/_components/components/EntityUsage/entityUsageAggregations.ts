@@ -57,37 +57,6 @@ export const getTopModels = (
     .slice(0, topModelsLimit);
 };
 
-export const getTopAgents = (results: ExtendedDailyData[], topAgentsLimit: number) => {
-  const agentSpend: { [key: string]: any } = {};
-  results.forEach((day) => {
-    Object.entries(day.breakdown.entities || {}).forEach(([agentId, data]) => {
-      if (!agentSpend[agentId]) {
-        agentSpend[agentId] = {
-          spend: 0,
-          requests: 0,
-          successful_requests: 0,
-          failed_requests: 0,
-          tokens: 0,
-          agent_name: (data.metadata as any)?.agent_name || agentId,
-        };
-      }
-      agentSpend[agentId].spend += data.metrics.spend;
-      agentSpend[agentId].requests += data.metrics.api_requests;
-      agentSpend[agentId].successful_requests += data.metrics.successful_requests;
-      agentSpend[agentId].failed_requests += data.metrics.failed_requests;
-      agentSpend[agentId].tokens += data.metrics.total_tokens;
-    });
-  });
-
-  return Object.entries(agentSpend)
-    .map(([agentId, metrics]) => ({
-      key: metrics.agent_name,
-      ...metrics,
-    }))
-    .sort((a, b) => b.spend - a.spend)
-    .slice(0, topAgentsLimit);
-};
-
 export const getGlobalTopKeys = (results: DailyData[], topKeysLimit: number): TopKeyItem[] => {
   const keySpend: { [key: string]: KeyMetricWithMetadata } = {};
   results.forEach((day) => {

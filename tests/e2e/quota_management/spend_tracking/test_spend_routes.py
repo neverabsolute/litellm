@@ -34,7 +34,7 @@ pytestmark = pytest.mark.e2e
 # activity. Most are include_in_schema=False, so keep this list exhaustive by
 # hand; the schema test below only auto-catches the visible minority. Excluded
 # by design: path-param routes (/spend/logs/ui/{request_id}), POST readers
-# (/spend/calculate has its own test, /global/spend/end_users), mutating
+# (/spend/calculate has its own test), mutating
 # POSTs (/global/spend/reset, /global/spend/refresh), and /provider/budgets,
 # which 500s whenever router_settings.provider_budget_config is absent, so it
 # is only probeable on a proxy configured with provider budget routing.
@@ -47,14 +47,7 @@ SPEND_ROUTES = (
     "/spend/logs/v2",
     "/spend/logs/session/ui",
     "/global/spend",
-    "/global/spend/keys",
-    "/global/spend/teams",
-    "/global/spend/models",
-    "/global/spend/provider",
     "/global/spend/report",
-    "/global/spend/tags",
-    "/global/spend/logs",
-    "/global/spend/all_tag_names",
     "/global/all_end_users",
     "/global/activity",
     "/global/activity/model",
@@ -81,19 +74,11 @@ _CAPTURE_RATE_ROUTE: Final = "/spend/capture_rate"
 # Served from the MonthlyGlobalSpend / DailyTagSpend / Last30d* views, which the
 # proxy creates in the background once the schema migrations have landed, so on a
 # fresh database they can 500 for a while after the proxy starts serving.
-_VIEW_BACKED_ROUTES: Final = frozenset(
-    (
-        "/global/spend",
-        "/global/spend/keys",
-        "/global/spend/models",
-        "/global/spend/tags",
-        "/global/spend/logs",
-    )
-)
+_VIEW_BACKED_ROUTES: Final = frozenset(("/global/spend",))
 
 
 def _date_range() -> DateRangeParams:
-    # Satisfies date-required endpoints (report/activity/provider); ignored elsewhere.
+    # Satisfies date-required endpoints (report/activity); ignored elsewhere.
     end = datetime.now(timezone.utc).date()
     start = end - timedelta(days=1)
     return DateRangeParams(start_date=start.isoformat(), end_date=end.isoformat())

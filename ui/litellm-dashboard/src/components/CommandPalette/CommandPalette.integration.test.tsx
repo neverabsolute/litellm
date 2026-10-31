@@ -415,8 +415,8 @@ describe("CommandPalette integration", () => {
   });
 
   it.each([
-    [true, "si hub", /^SI Hub/],
-    [false, "ai hub", /^AI Hub/],
+    [true, "si gateway", /^Home/],
+    [false, "ai gateway", /^Home/],
   ])(
     "lists and matches nav pages in the configured terminology when SI terminology is %s",
     async (useSi, query, option) => {

@@ -22,14 +22,12 @@ vi.mock("./networking", () => ({
   modelInfoV1Call: vi.fn(),
   credentialGetCall: vi.fn(),
   credentialListCall: vi.fn(),
-  getGuardrailsList: vi.fn(),
   tagListCall: vi.fn(),
   testConnectionRequest: vi.fn(),
   testModelGroupConnection: vi.fn(),
   modelPatchUpdateCall: vi.fn(),
   modelDeleteCall: vi.fn(),
   credentialCreateCall: vi.fn(),
-  vectorStoreListCall: vi.fn(),
 }));
 
 const mockUseModelsInfo = vi.fn();
@@ -59,14 +57,12 @@ const mockToast = vi.mocked(toast);
 const mockModelInfoV1Call = vi.mocked(networking.modelInfoV1Call);
 const mockCredentialGetCall = vi.mocked(networking.credentialGetCall);
 const mockCredentialListCall = vi.mocked(networking.credentialListCall);
-const mockGetGuardrailsList = vi.mocked(networking.getGuardrailsList);
 const mockTagListCall = vi.mocked(networking.tagListCall);
 const mockTestConnectionRequest = vi.mocked(networking.testConnectionRequest);
 const mockTestModelGroupConnection = vi.mocked(networking.testModelGroupConnection);
 const mockModelPatchUpdateCall = vi.mocked(networking.modelPatchUpdateCall);
 const mockModelDeleteCall = vi.mocked(networking.modelDeleteCall);
 const mockCredentialCreateCall = vi.mocked(networking.credentialCreateCall);
-const mockVectorStoreListCall = vi.mocked(networking.vectorStoreListCall);
 
 describe("ModelInfoView", () => {
   let queryClient: QueryClient;
@@ -153,10 +149,6 @@ describe("ModelInfoView", () => {
       ],
     });
 
-    mockGetGuardrailsList.mockResolvedValue({
-      guardrails: [{ guardrail_name: "content_filter" }, { guardrail_name: "toxicity_filter" }],
-    });
-
     mockTagListCall.mockResolvedValue({
       test_tag: {
         name: "test_tag",
@@ -178,12 +170,6 @@ describe("ModelInfoView", () => {
       status: "success",
     });
 
-    mockVectorStoreListCall.mockResolvedValue({
-      data: [
-        { vector_store_id: "vs-alpha", vector_store_name: "Alpha" },
-        { vector_store_id: "vs-beta", vector_store_name: "Beta" },
-      ],
-    } as never);
     mockModelPatchUpdateCall.mockResolvedValue({});
     mockModelDeleteCall.mockResolvedValue({});
     mockCredentialCreateCall.mockResolvedValue({});
@@ -1477,13 +1463,6 @@ describe("ModelInfoView", () => {
     });
   });
 
-  it("should display guardrails field", async () => {
-    render(<ModelInfoView {...DEFAULT_ADMIN_PROPS} />, { wrapper });
-    await waitFor(() => {
-      expect(screen.getByText("Guardrails")).toBeInTheDocument();
-    });
-  });
-
   it("should display pricing information", async () => {
     render(<ModelInfoView {...DEFAULT_ADMIN_PROPS} />, { wrapper });
     await waitFor(() => {
@@ -1758,7 +1737,6 @@ describe("ModelInfoView", () => {
           api_base: "https://api.openai.com/v1",
           custom_llm_provider: "openai",
           tags: [],
-          guardrails: [],
         },
         model_info: {
           id: "123",
@@ -1889,13 +1867,11 @@ describe("ModelInfoView", () => {
       await enterEditMode(user);
 
       await addTag(user, "Select existing groups or type to create new ones", "beta-testers");
-      await addTag(user, "Select existing guardrails or type to create new ones", "content_filter");
       await addTag(user, "Select existing tags or type to create new ones", "production_tag");
 
       const payload = await save(user);
 
       expect(payload.model_info.access_groups).toEqual(["beta-testers"]);
-      expect(payload.litellm_params.guardrails).toEqual(["content_filter"]);
       expect(payload.litellm_params.tags).toEqual(["production_tag"]);
     });
 
@@ -2129,19 +2105,6 @@ describe("ModelInfoView", () => {
       await waitFor(() => expect(mockToast.fromError).toHaveBeenCalled());
       expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument();
       expect(mockToast.success).not.toHaveBeenCalledWith("Model settings updated successfully");
-    });
-
-    it("sends the vector stores picked in the knowledge base selector", async () => {
-      const user = userEvent.setup();
-      await enterEditMode(user);
-
-      await user.click(screen.getByPlaceholderText("Select knowledge bases (optional)"));
-      await user.click(await screen.findByText("Beta (vs-beta)"));
-      await user.keyboard("{Escape}");
-
-      const payload = await save(user);
-
-      expect(payload.litellm_params.vector_store_ids).toEqual(["vs-beta"]);
     });
 
     it("sends the health check model picked for a wildcard deployment", async () => {

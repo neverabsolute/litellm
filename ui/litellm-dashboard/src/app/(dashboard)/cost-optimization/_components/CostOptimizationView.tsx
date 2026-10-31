@@ -9,7 +9,6 @@ import { Alert, AlertDescription } from "@/components/shared/Alert";
 import { TabsContent } from "@/components/ui/tabs";
 import { PageHeader, PageHeaderControls, PageHeaderDescription, PageHeaderTitle } from "@/components/shared/PageHeader";
 import UsageTab from "./UsageTab";
-import PromptCompressionTab from "./PromptCompressionTab";
 import PromptCachingTab from "./PromptCachingTab";
 import AutoRouterBenchmarksTab from "./AutoRouterBenchmarksTab";
 import { useDailyActivityRange } from "./useDailyActivityRange";
@@ -42,15 +41,14 @@ const CostOptimizationView: React.FC<CostOptimizationViewProps> = ({ accessToken
             Cost Optimization
           </PageHeaderTitle>
           <PageHeaderDescription>
-            Track and configure the mechanisms that save you money: prompt compression and prompt caching. Auto routers
-            live under Models + Endpoints, on the Auto-Routers tab
+            Track the mechanisms that save you money, like prompt caching. Auto routers live under Models + Endpoints,
+            on the Auto-Routers tab
           </PageHeaderDescription>
           <PageHeaderControls>
             <PageTabsList>
               <PageTabsTrigger value="usage">Overall</PageTabsTrigger>
               {canViewProxyWideCostData && (
                 <>
-                  <PageTabsTrigger value="compression">Prompt Compression</PageTabsTrigger>
                   <PageTabsTrigger value="caching">Prompt Caching</PageTabsTrigger>
                   <PageTabsTrigger value="autorouter-usage">Auto-Router</PageTabsTrigger>
                 </>
@@ -87,13 +85,10 @@ const CostOptimizationView: React.FC<CostOptimizationViewProps> = ({ accessToken
           </Alert>
         )}
         <TabsContent value="usage" keepMounted={visitedTabs.includes("usage")}>
-          <UsageTab accessToken={accessToken} activity={activity} />
+          <UsageTab activity={activity} />
         </TabsContent>
         {canViewProxyWideCostData && (
           <>
-            <TabsContent value="compression" keepMounted={visitedTabs.includes("compression")}>
-              <PromptCompressionTab accessToken={accessToken} />
-            </TabsContent>
             <TabsContent value="caching" keepMounted={visitedTabs.includes("caching")}>
               <PromptCachingTab accessToken={accessToken} activity={activity} />
             </TabsContent>

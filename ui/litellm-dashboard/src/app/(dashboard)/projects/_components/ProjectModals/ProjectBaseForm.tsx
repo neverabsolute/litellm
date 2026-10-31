@@ -10,8 +10,6 @@ import { useTeams } from "@/app/(dashboard)/hooks/teams/useTeams";
 import { Team } from "@/components/key_team_helpers/key_list";
 import { fetchTeamModels } from "@/components/organisms/create_key_button";
 import { getModelDisplayName } from "@/components/key_team_helpers/fetch_available_models_team_key";
-import { getGuardrailsList } from "@/components/networking";
-import { TagsInput } from "@/app/(dashboard)/guardrails/_components/content_filter/TagsInput";
 import { Alert, AlertTitle } from "@/components/shared/Alert";
 import { SearchSelect } from "@/components/shared/SearchSelect";
 import { FieldGroup } from "@/components/ui/field";
@@ -46,7 +44,6 @@ export function ProjectBaseForm({ form, advancedOpen, onAdvancedOpenChange }: Pr
 
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [modelsToPick, setModelsToPick] = useState<string[]>([]);
-  const [guardrailsList, setGuardrailsList] = useState<string[]>([]);
 
   const modelLimits = useFieldArray({ control: form.control, name: "modelLimits" });
   const metadata = useFieldArray({ control: form.control, name: "metadata" });
@@ -60,20 +57,6 @@ export function ProjectBaseForm({ form, advancedOpen, onAdvancedOpenChange }: Pr
 
   const teamIdValue = useWatch({ control: form.control, name: "team_id" });
   const isBlocked = useWatch({ control: form.control, name: "isBlocked" });
-
-  useEffect(() => {
-    const fetchGuardrails = async () => {
-      if (!accessToken) return;
-      try {
-        const response = await getGuardrailsList(accessToken);
-        const names = response.guardrails.map((g: { guardrail_name: string }) => g.guardrail_name);
-        setGuardrailsList(names);
-      } catch (error) {
-        console.error("Failed to fetch guardrails:", error);
-      }
-    };
-    fetchGuardrails();
-  }, [accessToken]);
 
   useEffect(() => {
     if (teamIdValue && teams) {
@@ -257,25 +240,6 @@ export function ProjectBaseForm({ form, advancedOpen, onAdvancedOpenChange }: Pr
               <AlertTitle>All API requests using keys under this project will be rejected.</AlertTitle>
             </Alert>
           ) : null}
-
-          <Separator className="my-4" />
-
-          <FormField
-            control={form.control}
-            name="guardrails"
-            label="Guardrails"
-            description="Select existing guardrails or enter new ones"
-          >
-            {({ id, value, onChange }) => (
-              <TagsInput
-                id={id}
-                value={value ?? []}
-                onValueChange={onChange}
-                options={guardrailsList.map((name) => ({ label: name, value: name }))}
-                placeholder="Select or enter guardrails"
-              />
-            )}
-          </FormField>
 
           <Separator className="my-4" />
 

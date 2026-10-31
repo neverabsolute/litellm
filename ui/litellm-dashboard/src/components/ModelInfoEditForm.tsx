@@ -7,7 +7,7 @@ import * as React from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 
-import { TagsInput } from "@/app/(dashboard)/guardrails/_components/content_filter/TagsInput";
+import { TagsInput } from "@/components/common_components/TagsInput";
 import { FormField } from "@/components/shared/form/FormField";
 import { UtcDateTimeInput } from "@/components/shared/form/UtcDateTimeInput";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +32,6 @@ import type { CredentialItem } from "./networking";
 import NumericalInput from "./shared/numerical_input";
 import type { Tag } from "./tag_management/types";
 import { ModelTeamSelect } from "./view_model/ModelTeamSelect";
-import VectorStoreSelector from "./vector_store_management/VectorStoreSelector";
 import { formatPtuUtcDisplay, utcIsoToPickerValue } from "../utils/ptuDatetime";
 import { editableModelExtraParams, parseModelExtraParams } from "../utils/modelEditParams";
 import {
@@ -115,8 +114,6 @@ const modelEditShape = {
   cache_control: z.boolean().optional(),
   cache_control_injection_points: z.array(z.custom<CacheControlInjectionPoint>()).optional(),
   model_access_group: z.array(z.string()).optional(),
-  guardrails: z.array(z.string()).optional(),
-  vector_store_ids: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   health_check_model: z.string().nullish(),
   litellm_credential_name: z.string().nullish(),
@@ -226,12 +223,6 @@ export const toModelEditFormValues = (localModelData: any, isWildcardModel: bool
   model_access_group: Array.isArray(localModelData.model_info?.access_groups)
     ? localModelData.model_info.access_groups
     : [],
-  guardrails: Array.isArray(localModelData.litellm_params?.guardrails) ? localModelData.litellm_params.guardrails : [],
-  vector_store_ids:
-    Array.isArray(localModelData.litellm_params?.vector_store_ids) &&
-    localModelData.litellm_params.vector_store_ids.length > 0
-      ? localModelData.litellm_params.vector_store_ids
-      : undefined,
   tags: Array.isArray(localModelData.litellm_params?.tags) ? localModelData.litellm_params.tags : [],
   // antd never mounted this field for a non-wildcard model, so the key must be absent, not null.
   ...(isWildcardModel ? { health_check_model: localModelData.model_info?.health_check_model } : {}),
@@ -260,7 +251,6 @@ interface ModelInfoEditFormProps {
   onCancel: () => void;
   onSubmit: (values: ModelEditSubmitValues, isFieldTouched: (field: TouchedPricingField) => boolean) => Promise<void>;
   modelAccessGroups: string[] | null;
-  guardrailsList: string[];
   tagsList: Record<string, Tag>;
   credentialsList: CredentialItem[];
   healthCheckModelOptions: { value: string; label: string }[];
@@ -332,7 +322,6 @@ const ModelInfoEditForm: React.FC<ModelInfoEditFormProps> = ({
   onCancel,
   onSubmit,
   modelAccessGroups,
-  guardrailsList,
   tagsList,
   credentialsList,
   healthCheckModelOptions,
@@ -414,7 +403,7 @@ const ModelInfoEditForm: React.FC<ModelInfoEditFormProps> = ({
     );
 
   const tagsField = (
-    name: "model_access_group" | "guardrails" | "tags",
+    name: "model_access_group" | "tags",
     options: { value: string; label: string }[],
     placeholder: string,
   ) => (
@@ -540,56 +529,6 @@ const ModelInfoEditForm: React.FC<ModelInfoEditFormProps> = ({
               ) : (
                 <Display>
                   <ChipList values={localModelData.model_info?.access_groups} emptyLabel="No groups assigned" />
-                </Display>
-              )}
-            </div>
-
-            <div>
-              <FieldLabel>
-                Guardrails
-                <DocsHint
-                  text="Apply safety guardrails to this model to filter content or enforce policies"
-                  href="https://docs.litellm.ai/docs/proxy/guardrails/quick_start"
-                />
-              </FieldLabel>
-              {isEditing ? (
-                tagsField(
-                  "guardrails",
-                  guardrailsList.map((name) => ({ value: name, label: name })),
-                  "Select existing guardrails or type to create new ones",
-                )
-              ) : (
-                <Display>
-                  <ChipList values={localModelData.litellm_params?.guardrails} emptyLabel="No guardrails assigned" />
-                </Display>
-              )}
-            </div>
-
-            <div>
-              <FieldLabel>
-                Attached Knowledge Bases (RAG)
-                <DocsHint
-                  text="Vector stores used for RAG. Every request to this model will automatically retrieve context from these knowledge bases."
-                  href="https://docs.litellm.ai/docs/completion/knowledgebase"
-                />
-              </FieldLabel>
-              {isEditing ? (
-                <FormField control={form.control} name="vector_store_ids">
-                  {({ value, onChange }) => (
-                    <VectorStoreSelector
-                      value={value as string[] | undefined}
-                      onChange={onChange}
-                      accessToken={accessToken || ""}
-                      placeholder="Select knowledge bases (optional)"
-                    />
-                  )}
-                </FormField>
-              ) : (
-                <Display>
-                  <ChipList
-                    values={localModelData.litellm_params?.vector_store_ids}
-                    emptyLabel="No knowledge bases attached"
-                  />
                 </Display>
               )}
             </div>

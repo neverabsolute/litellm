@@ -1,6 +1,4 @@
-import type { MCPEvent } from "../mcp_tools/types";
 import type { TokenUsage } from "../chat_ui/ResponseMetrics";
-export type { MCPEvent };
 
 interface AttachmentData {
   id: string;
@@ -33,8 +31,6 @@ export interface ChatMessage {
   generatedImages?: ChatImageAttachment[];
   imageGeneration?: ChatImageGeneration;
   reasoningContent?: string;
-  /** MCP tool events that occurred during this assistant turn, in order. */
-  mcpEvents?: MCPEvent[];
   toolName?: string;
   toolArgs?: Record<string, unknown>;
   toolResult?: string;
@@ -49,7 +45,6 @@ export type AssistantMessageUpdate = Partial<
     ChatMessage,
     | "content"
     | "reasoningContent"
-    | "mcpEvents"
     | "timeToFirstToken"
     | "totalLatency"
     | "usage"
@@ -63,7 +58,6 @@ export interface Conversation {
   title: string;
   model: string;
   messages: ChatMessage[];
-  mcpServerNames: string[];
   createdAt: number;
   updatedAt: number;
 }

@@ -18,7 +18,6 @@ import { organizationIdFilter, useOrganizationsTableState } from "./useOrganizat
 interface OrganizationsPanelProps {
   userRole: string;
   accessToken: string | null;
-  premiumUser: boolean;
 }
 
 const ORGANIZATION_DETAIL_STATE = {
@@ -27,7 +26,7 @@ const ORGANIZATION_DETAIL_STATE = {
 };
 const ORGANIZATION_DETAIL_URL_KEYS = { tab: ORGANIZATION_TAB_URL_KEY };
 
-const OrganizationsPanel: React.FC<OrganizationsPanelProps> = ({ userRole, accessToken, premiumUser }) => {
+const OrganizationsPanel: React.FC<OrganizationsPanelProps> = ({ userRole, accessToken }) => {
   const [{ org: selectedOrgId }, setOrganizationDetail] = useQueryStates(ORGANIZATION_DETAIL_STATE, {
     history: "push",
     urlKeys: ORGANIZATION_DETAIL_URL_KEYS,
@@ -95,25 +94,6 @@ const OrganizationsPanel: React.FC<OrganizationsPanelProps> = ({ userRole, acces
     setOrgToDelete(null);
   };
 
-  if (!premiumUser) {
-    return (
-      <div className="mx-4 mt-4">
-        <p className="text-sm text-muted-foreground">
-          This is a LiteLLM Enterprise feature, and requires a valid key to use. Get a trial key{" "}
-          <a
-            href="https://www.litellm.ai/#pricing"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline-offset-4 hover:underline"
-          >
-            here
-          </a>
-          .
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-4 mt-4 flex flex-col gap-4">
       {(userRole === "Admin" || userRole === "Org Admin") && (
@@ -153,7 +133,7 @@ const OrganizationsPanel: React.FC<OrganizationsPanelProps> = ({ userRole, acces
         </>
       )}
 
-      <OrgCreateDialog open={isOrgModalVisible} onOpenChange={setIsOrgModalVisible} accessToken={accessToken || ""} />
+      <OrgCreateDialog open={isOrgModalVisible} onOpenChange={setIsOrgModalVisible} />
 
       <DeleteResourceModal
         isOpen={isDeleteModalOpen}

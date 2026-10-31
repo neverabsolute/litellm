@@ -329,13 +329,11 @@ async def read_request_body(request: Request | None) -> dict:
             request_dispatched_to_pass_through_endpoint,
             request_dispatched_to_provider_pass_through,
         )
-        from litellm.proxy.lens.buffering import LensRoute
 
         route: Final[object] = request.scope.get("route")
         if (
             request_dispatched_to_pass_through_endpoint(request)
             or request_dispatched_to_provider_pass_through(request)
-            or isinstance(route, LensRoute)
             or (
                 isinstance(route, APIRoute)
                 and route.body_field is not None

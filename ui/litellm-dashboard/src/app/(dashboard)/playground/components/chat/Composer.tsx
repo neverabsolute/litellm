@@ -1,24 +1,14 @@
 "use client";
 
-import { useRef, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
-import { ArrowUp, Code2, Database, Paperclip, Shield, Square } from "lucide-react";
+import { useRef, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { ArrowUp, Code2, Paperclip, Square } from "lucide-react";
 import { EndpointType } from "@/components/chat_ui/mode_endpoint_mapping";
-import MCPToolArgumentsForm, { type MCPToolArgumentsFormRef } from "@/components/mcp_tools/MCPToolArgumentsForm";
-import type { MCPTool } from "@/components/mcp_tools/types";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
 import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DraftAttachments } from "./ComposerControls";
 import type { DraftFile } from "./composerFiles";
 import { ACCEPT_FOR, ATTACH_LABEL, type Capabilities } from "./endpointCapabilities";
-import { ChecklistMenu, type OptionGroup } from "./Pickers";
-
-export type ChecklistProps = Readonly<{
-  groups: readonly OptionGroup[];
-  value: readonly string[];
-  onValueChange: (value: readonly string[]) => void;
-  isLoading: boolean;
-}>;
 
 export type DraftState = Readonly<{
   text: string;
@@ -93,11 +83,6 @@ export function Composer({
   endpoint,
   targetRow,
   draft,
-  directTool,
-  toolArgsForm,
-  mcpControl,
-  vectorStores,
-  guardrails,
   codeInterpreter,
   settingsControl,
   sendDisabled,
@@ -106,16 +91,10 @@ export function Composer({
   endpoint: EndpointType;
   targetRow: ReactNode;
   draft: DraftState;
-  directTool: MCPTool | null;
-  toolArgsForm: RefObject<MCPToolArgumentsFormRef | null>;
-  mcpControl: ReactNode;
-  vectorStores: ChecklistProps;
-  guardrails: ChecklistProps;
   codeInterpreter: Readonly<{ enabled: boolean; onToggle: (enabled: boolean) => void }>;
   settingsControl: ReactNode;
   sendDisabled: boolean;
 }) {
-  const isDirectCall = endpoint === EndpointType.MCP;
   const isRealtime = endpoint === EndpointType.REALTIME;
   const message = useRef<HTMLTextAreaElement>(null);
   const focusMessage = (event: MouseEvent<HTMLDivElement>) => {
@@ -133,15 +112,6 @@ export function Composer({
     event.preventDefault();
     if (!sendDisabled) void draft.send();
   };
-  const directCallBody = (
-    <div data-slot="input-group-control" className="w-full px-3 py-3">
-      {directTool ? (
-        <MCPToolArgumentsForm ref={toolArgsForm} tool={directTool} className="flex flex-col gap-3" />
-      ) : (
-        <p className="text-sm text-muted-foreground">Pick a server and a tool above to fill in its arguments</p>
-      )}
-    </div>
-  );
   const textBody = (
     <InputGroupTextarea
       ref={message}
@@ -164,15 +134,8 @@ export function Composer({
           <DraftAttachments files={draft.files} onRemove={draft.removeFile} />
         </InputGroupAddon>
       )}
-      {!isRealtime && (isDirectCall ? directCallBody : textBody)}
+      {!isRealtime && textBody}
       <InputGroupAddon align="block-end" className="gap-1" onClick={focusMessage}>
-        {capabilities.mcp && mcpControl}
-        {capabilities.vectorStores && (
-          <ChecklistMenu label="Vector stores" icon={<Database />} emptyText="No vector stores yet" {...vectorStores} />
-        )}
-        {capabilities.guardrails && (
-          <ChecklistMenu label="Guardrails" icon={<Shield />} emptyText="No guardrails yet" {...guardrails} />
-        )}
         {capabilities.codeInterpreter && (
           <Toggle
             size="sm"

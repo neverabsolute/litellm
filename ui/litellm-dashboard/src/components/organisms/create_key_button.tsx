@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -23,15 +22,12 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { MultiSelect, type MultiSelectOption } from "@/components/shared/MultiSelect";
 import { PaginatedSearchSelect } from "@/components/shared/PaginatedSearchSelect";
 import { SearchSelect, type SearchSelectOption } from "@/components/shared/SearchSelect";
-import { TagsInput } from "@/app/(dashboard)/guardrails/_components/content_filter/TagsInput";
+import { TagsInput } from "@/components/common_components/TagsInput";
 import { ChevronDown, Info } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { type Control, useForm, useWatch, type UseFormSetValue } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { isProxyAdminRole, rolesWithWriteAccess } from "../../utils/roles";
 import { ipEntriesError } from "@/utils/ipAddress";
-import AgentSelector from "../agent_management/AgentSelector";
-import SkillSelector from "../skills/SkillSelector";
-import AccessGroupSelector from "../common_components/AccessGroupSelector";
 import BudgetDurationDropdown from "../common_components/budget_duration_dropdown";
 import SchemaFormFields from "../common_components/check_openapi_schema";
 import KeyLifecycleSettings from "../common_components/KeyLifecycleSettings";
@@ -65,13 +61,8 @@ import {
   hasAllModelsSentinel,
 } from "../key_team_helpers/fetch_available_models_team_key";
 import { Team } from "../key_team_helpers/key_list";
-import MCPServerSelector from "../mcp_server_management/MCPServerSelector";
-import MCPToolPermissions from "../mcp_server_management/MCPToolPermissions";
 import { toast } from "@/lib/toast";
 import {
-  getAgentsList,
-  getGuardrailsList,
-  getPoliciesList,
   getPossibleUserRoles,
   getPromptsList,
   keyCreateCall,
@@ -82,7 +73,6 @@ import {
 } from "../networking";
 import CreatedKeyDisplay from "../shared/CreatedKeyDisplay";
 import NumericalInput from "../shared/numerical_input";
-import VectorStoreSelector from "../vector_store_management/VectorStoreSelector";
 import {
   administersTeam,
   anotherUserScope,
@@ -109,10 +99,6 @@ const SECTION_CHEVRON_CLASS =
 
 type FieldWrite = (value: unknown) => void;
 
-type McpSelectorValue = { servers: string[]; accessGroups: string[]; toolsets?: string[] };
-
-type AgentSelectorValue = { agents: string[]; accessGroups: string[] };
-
 const isBlank = (value: unknown): boolean => value === undefined || value === null || value === "";
 
 const requiredRule = (required: boolean, message: string) => ({
@@ -123,32 +109,6 @@ const ceilingRule = (ceiling: number | null | undefined, message: (limit: number
   validate: (value: unknown) =>
     value && ceiling !== null && ceiling !== undefined && (value as number) > ceiling ? message(ceiling) : true,
 });
-
-interface McpToolPermissionsFieldProps {
-  readonly accessToken: string;
-  readonly control: Control<MountedFormValues>;
-  readonly setValue: UseFormSetValue<MountedFormValues>;
-}
-
-const McpToolPermissionsField: React.FC<McpToolPermissionsFieldProps> = ({ accessToken, control, setValue }) => {
-  const selection = useWatch({ control, name: "allowed_mcp_servers_and_groups" }) as
-    | { servers?: string[]; accessGroups?: string[]; toolsets?: string[] }
-    | undefined;
-  const toolPermissions = useWatch({ control, name: "mcp_tool_permissions" }) as Record<string, string[]> | undefined;
-
-  return (
-    <div className="mt-6">
-      <MCPToolPermissions
-        accessToken={accessToken}
-        selectedServers={selection?.servers || []}
-        selectedAccessGroups={selection?.accessGroups || []}
-        selectedToolsets={selection?.toolsets || []}
-        toolPermissions={toolPermissions || {}}
-        onChange={(toolPerms) => setValue("mcp_tool_permissions", toolPerms)}
-      />
-    </div>
-  );
-};
 
 /**
  * Interface for pre-filling the create key form from URL parameters
@@ -235,8 +195,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
     label: term(option.label),
     hint: term(option.hint),
   }));
-  const canEditGuardrails = premiumUser || (userRole != null && rolesWithWriteAccess.includes(userRole));
-  const canViewPolicies = useCan("viewPolicies");
   const canViewPrompts = useCan("viewPrompts");
   const { data: organizations, isLoading: isOrganizationsLoading } = useOrganizations();
   const { data: projects, isLoading: isProjectsLoading } = useProjects();
@@ -251,7 +209,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
     key_type: "llm_api",
     tpm_limit_type: null,
     rpm_limit_type: null,
-    mcp_tool_permissions: {},
     duration: "",
   }));
   const form = useForm<MountedFormValues>({
@@ -268,8 +225,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
   const [requestedKeyOwner, setKeyOwner] = useState("you");
   const [hasPrefilled, setHasPrefilled] = useState(false);
   const [pendingPrefillModels, setPendingPrefillModels] = useState<string[] | null>(null);
-  const [guardrailsList, setGuardrailsList] = useState<string[]>([]);
-  const [policiesList, setPoliciesList] = useState<string[]>([]);
   const [promptsList, setPromptsList] = useState<string[]>([]);
   const [loggingSettings, setLoggingSettings] = useState<any[]>([]);
   const [selectedCreateKeyTeam, setSelectedCreateKeyTeam] = useState<Team | null>(team);
@@ -293,8 +248,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
   const [budgetFallbacks, setBudgetFallbacks] = useState<Record<string, string[]>>({});
   const [budgetFallbacksKey, setBudgetFallbacksKey] = useState<number>(0);
   const [routerSettingsKey, setRouterSettingsKey] = useState<number>(0);
-  const [agentsList, setAgentsList] = useState<{ agent_id: string; agent_name: string }[]>([]);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const selectedModels: string[] = (useWatch({ control: form.control, name: "models" }) as string[] | undefined) ?? [];
   const teamAdminEditableFields = parseTeamAdminEditableFields(uiSettingsData?.values);
   const keyOwnerViewer = { userRole, userId: userID, teamAdminEditableFields, teams };
@@ -302,11 +255,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
   const keyOwner = effectiveKeyOwner(requestedKeyOwner, ownerScope);
   const ownerLimitedToTeamMembers = keyOwner === "another_user" && ownerScope === "team_members";
   const memberOwnerOptions = teamMemberOwnerOptions(selectedCreateKeyTeam, userID);
-  const createKeyOwner = form.watch("user_id");
-  useEffect(() => {
-    form.setValue("allowed_mcp_servers_and_groups", { servers: [], accessGroups: [] });
-    form.setValue("mcp_tool_permissions", {});
-  }, [createKeyOwner, form]);
   const ownerRequiresTeam = keyOwner === "service_account" || ownerLimitedToTeamMembers;
   const handleCancel = () => {
     setIsModalVisible(false);
@@ -321,7 +269,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
     setRotationInterval("30d");
     setRouterSettings(null);
     setRouterSettingsKey((prev) => prev + 1);
-    setSelectedAgentId(null);
     setSelectedOrganizationId(null);
     setSelectedProjectId(null);
     setBudgetLimits([]);
@@ -337,34 +284,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
   }, [accessToken, userID, userRole]);
 
   useEffect(() => {
-    if (accessToken) {
-      getAgentsList(accessToken)
-        .then((res) => setAgentsList(res?.agents || []))
-        .catch(() => setAgentsList([]));
-    }
-  }, [accessToken]);
-
-  useEffect(() => {
-    const fetchGuardrails = async () => {
-      try {
-        const response = await getGuardrailsList(accessToken);
-        const guardrailNames = response.guardrails.map((g: { guardrail_name: string }) => g.guardrail_name);
-        setGuardrailsList(guardrailNames);
-      } catch (error) {
-        console.error("Failed to fetch guardrails:", error);
-      }
-    };
-
-    const fetchPolicies = async () => {
-      try {
-        const response = await getPoliciesList(accessToken);
-        const policyNames = response.policies.map((p: { policy_name: string }) => p.policy_name);
-        setPoliciesList(policyNames);
-      } catch (error) {
-        console.error("Failed to fetch policies:", error);
-      }
-    };
-
     const fetchPrompts = async () => {
       try {
         const response = await getPromptsList(accessToken);
@@ -374,10 +293,8 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
       }
     };
 
-    fetchGuardrails();
-    if (canViewPolicies) fetchPolicies();
     if (canViewPrompts) fetchPrompts();
-  }, [accessToken, canViewPolicies, canViewPrompts]);
+  }, [accessToken, canViewPrompts]);
 
   // Fetch possible user roles when component mounts
   useEffect(() => {
@@ -456,7 +373,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
         existingKeys: data,
         keyOwner,
         userID,
-        selectedAgentId,
         loggingSettings,
         disabledCallbacks,
         autoRotationEnabled,
@@ -478,10 +394,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
       toast.info("Making API Call");
       setIsModalVisible(true);
 
-      if (built.kind === "agent_not_selected") {
-        toast.fromError("Please select an agent");
-        return;
-      }
       const { payload, endpoint } = built;
 
       const response =
@@ -538,9 +450,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
     if (!pendingPrefillModels) {
       form.setValue("models", []);
     }
-    // Clear MCP server selection when team changes (available servers may differ)
-    form.setValue("allowed_mcp_servers_and_groups", { servers: [], accessGroups: [] });
-    form.setValue("mcp_tool_permissions", {});
   }, [selectedCreateKeyTeam, selectedProjectId, accessToken, userID, userRole, form]);
 
   // Apply deferred model prefill once the available model list arrives.
@@ -798,37 +707,10 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
                         Another User
                       </label>
                     )}
-                    <label className={KEY_OWNER_LABEL_CLASS}>
-                      <RadioGroupItem value="agent" />
-                      Agent <Badge>New</Badge>
-                    </label>
                   </RadioGroup>
                 </Field>
 
                 {!ownerLimitedToTeamMembers && ownerField}
-                {keyOwner === "agent" && (
-                  <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-md dark:bg-purple-950 dark:border-purple-800">
-                    <div className="mb-3">
-                      <label htmlFor="create-key-agent" className="text-sm font-medium text-foreground">
-                        Select Agent <span className="text-destructive">*</span>
-                      </label>
-                    </div>
-                    <SearchSelect
-                      inputId="create-key-agent"
-                      placeholder="Select an agent"
-                      emptyText="No agents found"
-                      value={selectedAgentId}
-                      onValueChange={setSelectedAgentId}
-                      options={agentsList.map((a) => ({
-                        label: a.agent_name || a.agent_id,
-                        value: a.agent_id,
-                      }))}
-                    />
-                    <div className="text-xs text-muted-foreground mt-2">
-                      This key will be used by the selected agent to make requests to LiteLLM
-                    </div>
-                  </div>
-                )}
                 <MountedFormField
                   label={
                     <span>
@@ -1321,122 +1203,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
                           />
                         )}
                       </MountedFormField>
-                      <MountedFormField
-                        label={
-                          <span>
-                            Guardrails{" "}
-                            <SimpleTooltip content="Apply safety guardrails to this key to filter content or enforce policies">
-                              <a
-                                href="https://docs.litellm.ai/docs/proxy/guardrails/quick_start"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()} // Prevent accordion from collapsing when clicking link
-                              >
-                                <Info className="ml-1 inline size-3.5 align-text-bottom" />
-                              </a>
-                            </SimpleTooltip>
-                          </span>
-                        }
-                        name="guardrails"
-                        className="mt-4"
-                        help={
-                          canEditGuardrails
-                            ? "Select existing guardrails or enter new ones"
-                            : "Premium feature - Upgrade to set guardrails by key"
-                        }
-                      >
-                        {(control) => (
-                          <TagsInput
-                            id={control.id}
-                            value={(control.value as string[] | undefined) ?? []}
-                            onValueChange={control.onChange}
-                            disabled={!canEditGuardrails}
-                            placeholder={
-                              !canEditGuardrails
-                                ? "Premium feature - Upgrade to set guardrails by key"
-                                : "Select or enter guardrails"
-                            }
-                            options={guardrailsList.map((name) => ({ value: name, label: name }))}
-                          />
-                        )}
-                      </MountedFormField>
-                      {userRole != null && isProxyAdminRole(userRole) && (
-                        <MountedFormField
-                          label={
-                            <span>
-                              Disable Global Guardrails{" "}
-                              <SimpleTooltip content="When enabled, this key will bypass any guardrails configured to run on every request (global guardrails)">
-                                <a
-                                  href="https://docs.litellm.ai/docs/proxy/guardrails/quick_start"
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()} // Prevent accordion from collapsing when clicking link
-                                >
-                                  <Info className="ml-1 inline size-3.5 align-text-bottom" />
-                                </a>
-                              </SimpleTooltip>
-                            </span>
-                          }
-                          name="disable_global_guardrails"
-                          className="mt-4"
-                          help={
-                            canEditGuardrails
-                              ? "Bypass global guardrails for this key"
-                              : "Premium feature - Upgrade to disable global guardrails by key"
-                          }
-                        >
-                          {(control) => (
-                            <Switch
-                              id={control.id}
-                              checked={control.value === true}
-                              onCheckedChange={control.onChange}
-                              disabled={!canEditGuardrails}
-                              aria-describedby={control["aria-describedby"]}
-                            />
-                          )}
-                        </MountedFormField>
-                      )}
-                      {canViewPolicies && (
-                        <MountedFormField
-                          label={
-                            <span>
-                              Policies{" "}
-                              <SimpleTooltip content="Apply policies to this key to control guardrails and other settings">
-                                <a
-                                  href="https://docs.litellm.ai/docs/proxy/guardrails/guardrail_policies"
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()} // Prevent accordion from collapsing when clicking link
-                                >
-                                  <Info className="ml-1 inline size-3.5 align-text-bottom" />
-                                </a>
-                              </SimpleTooltip>
-                            </span>
-                          }
-                          name="policies"
-                          className="mt-4"
-                          help={
-                            premiumUser
-                              ? "Select existing policies or enter new ones"
-                              : "Premium feature - Upgrade to set policies by key"
-                          }
-                        >
-                          {(control) => (
-                            <TagsInput
-                              id={control.id}
-                              value={(control.value as string[] | undefined) ?? []}
-                              onValueChange={control.onChange}
-                              disabled={!premiumUser}
-                              placeholder={
-                                !premiumUser
-                                  ? "Premium feature - Upgrade to set policies by key"
-                                  : "Select or enter policies"
-                              }
-                              options={policiesList.map((name) => ({ value: name, label: name }))}
-                            />
-                          )}
-                        </MountedFormField>
-                      )}
                       {canViewPrompts && (
                         <MountedFormField
                           label={
@@ -1478,27 +1244,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
                           )}
                         </MountedFormField>
                       )}
-                      <MountedFormField
-                        label={
-                          <span>
-                            Access Groups{" "}
-                            <SimpleTooltip content="Assign access groups to this key. Access groups control which models, MCP servers, and agents this key can use">
-                              <Info className="ml-1 inline size-3.5 align-text-bottom" />
-                            </SimpleTooltip>
-                          </span>
-                        }
-                        name="access_group_ids"
-                        className="mt-4"
-                        help="Select access groups to assign to this key"
-                      >
-                        {(control) => (
-                          <AccessGroupSelector
-                            value={control.value as string[] | undefined}
-                            onChange={control.onChange}
-                            placeholder="Select access groups (optional)"
-                          />
-                        )}
-                      </MountedFormField>
                       <MountedFormField
                         label={
                           <span>
@@ -1568,28 +1313,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
                       <MountedFormField
                         label={
                           <span>
-                            Allowed Vector Stores{" "}
-                            <SimpleTooltip content="Select which vector stores this key can access. If none selected, the key will have access to all available vector stores">
-                              <Info className="ml-1 inline size-3.5 align-text-bottom" />
-                            </SimpleTooltip>
-                          </span>
-                        }
-                        name="allowed_vector_store_ids"
-                        className="mt-4"
-                        help="Select vector stores this key can access. Leave empty for access to all vector stores"
-                      >
-                        {(control) => (
-                          <VectorStoreSelector
-                            onChange={control.onChange}
-                            value={control.value as string[] | undefined}
-                            accessToken={accessToken}
-                            placeholder="Select vector stores (optional)"
-                          />
-                        )}
-                      </MountedFormField>
-                      <MountedFormField
-                        label={
-                          <span>
                             Metadata{" "}
                             <SimpleTooltip content="JSON object with additional information about this key. Used for tracking or custom logic">
                               <Info className="ml-1 inline size-3.5 align-text-bottom" />
@@ -1632,110 +1355,6 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
                           />
                         )}
                       </MountedFormField>
-                      <Collapsible className="mt-4 mb-4 overflow-hidden rounded-lg border">
-                        <CollapsibleTrigger className={SECTION_HEADER_CLASS}>
-                          <b>MCP Settings</b>
-                          <ChevronDown className={SECTION_CHEVRON_CLASS} />
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="px-4 pb-3">
-                          <MountedFormField
-                            label={
-                              <span>
-                                Allowed MCP Servers{" "}
-                                <SimpleTooltip content="Select which MCP servers or access groups this key can access">
-                                  <Info className="ml-1 inline size-3.5 align-text-bottom" />
-                                </SimpleTooltip>
-                              </span>
-                            }
-                            name="allowed_mcp_servers_and_groups"
-                            help="Select MCP servers or access groups this key can access"
-                          >
-                            {(control) => (
-                              <MCPServerSelector
-                                onChange={control.onChange}
-                                value={control.value as McpSelectorValue | undefined}
-                                accessToken={accessToken}
-                                teamId={selectedCreateKeyTeam?.team_id ?? null}
-                                userId={typeof createKeyOwner === "string" ? createKeyOwner : null}
-                                placeholder="Select MCP servers or access groups (optional)"
-                                allowNoMcpServers
-                              />
-                            )}
-                          </MountedFormField>
-
-                          {/* Hidden field to register mcp_tool_permissions with the form */}
-                          <MountedFormField name="mcp_tool_permissions" bare>
-                            {(control) => <input type="hidden" id={control.id} name={control.name} />}
-                          </MountedFormField>
-
-                          <McpToolPermissionsField
-                            accessToken={accessToken}
-                            control={form.control}
-                            setValue={form.setValue}
-                          />
-                        </CollapsibleContent>
-                      </Collapsible>
-
-                      <Collapsible className="mt-4 mb-4 overflow-hidden rounded-lg border">
-                        <CollapsibleTrigger className={SECTION_HEADER_CLASS}>
-                          <b>Agent Settings</b>
-                          <ChevronDown className={SECTION_CHEVRON_CLASS} />
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="px-4 pb-3">
-                          <MountedFormField
-                            label={
-                              <span>
-                                Allowed Agents{" "}
-                                <SimpleTooltip content="Select which agents or access groups this key can access">
-                                  <Info className="ml-1 inline size-3.5 align-text-bottom" />
-                                </SimpleTooltip>
-                              </span>
-                            }
-                            name="allowed_agents_and_groups"
-                            help="Select agents or access groups this key can access"
-                          >
-                            {(control) => (
-                              <AgentSelector
-                                onChange={control.onChange}
-                                value={control.value as AgentSelectorValue | undefined}
-                                accessToken={accessToken}
-                                placeholder="Select agents or access groups (optional)"
-                              />
-                            )}
-                          </MountedFormField>
-                        </CollapsibleContent>
-                      </Collapsible>
-
-                      <Collapsible className="mt-4 mb-4 overflow-hidden rounded-lg border">
-                        <CollapsibleTrigger className={SECTION_HEADER_CLASS}>
-                          <b>Skill Settings</b>
-                          <ChevronDown className={SECTION_CHEVRON_CLASS} />
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="px-4 pb-3">
-                          <MountedFormField
-                            label={
-                              <span>
-                                Allowed Skills{" "}
-                                <SimpleTooltip content="Enabled skills are visible to every key. Grant disabled (private) Claude Code plugins to this key here">
-                                  <Info className="ml-1 inline size-3.5 align-text-bottom" />
-                                </SimpleTooltip>
-                              </span>
-                            }
-                            name="allowed_skills"
-                            help="Select private skills this key can access in the Claude Code marketplace"
-                          >
-                            {(control) => (
-                              <SkillSelector
-                                onChange={control.onChange}
-                                value={control.value as string[] | undefined}
-                                accessToken={accessToken}
-                                placeholder="Select skills (optional)"
-                              />
-                            )}
-                          </MountedFormField>
-                        </CollapsibleContent>
-                      </Collapsible>
-
                       {premiumUser ? (
                         <Collapsible className="mt-4 mb-4 overflow-hidden rounded-lg border">
                           <CollapsibleTrigger className={SECTION_HEADER_CLASS}>

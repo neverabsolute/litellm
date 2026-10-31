@@ -68,34 +68,11 @@ vi.mock("@/app/(dashboard)/hooks/projects/useProjects", () => ({
   useProjects: vi.fn().mockReturnValue({ data: [], isLoading: false }),
 }));
 
-const MCP_CATALOG = [
-  { server_id: "srv-1", server_name: "deploy_tracker", alias: "deploy" },
-  { server_id: "srv-2", server_name: "incident_log", alias: "incidents", mcp_access_groups: ["ops_readonly"] },
-];
-
-const MCP_TOOLSETS = [
-  { toolset_id: "ts-1", toolset_name: "incidents", tools: [{ server_id: "srv-2", tool_name: "write" }] },
-];
-
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPServers", () => ({
-  useMCPServers: vi.fn(() => ({ data: MCP_CATALOG })),
-}));
-
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPToolsets", () => ({
-  useMCPToolsets: vi.fn(() => ({ data: MCP_TOOLSETS })),
-}));
-
-import { useMCPServers } from "@/app/(dashboard)/hooks/mcpServers/useMCPServers";
-import { useMCPToolsets } from "@/app/(dashboard)/hooks/mcpServers/useMCPToolsets";
-
 vi.mock("../networking", () => ({
   serverRootPath: "",
   keyDeleteCall: vi.fn().mockResolvedValue({}),
   keyUpdateCall: vi.fn().mockResolvedValue({}),
   teamInfoCall: vi.fn(),
-  getPolicyInfoWithGuardrails: vi.fn().mockResolvedValue({
-    resolved_guardrails: ["guardrail-1", "guardrail-2"],
-  }),
 }));
 
 const mockResetKeySpendMutate = vi.fn();
@@ -964,58 +941,6 @@ describe("KeyInfoView", () => {
     });
   });
 
-  it("should display guardrails when present", async () => {
-    vi.mocked(useAuthorized).mockReturnValue(baseUseAuthorizedMock);
-
-    const keyDataWithGuardrails = {
-      ...MOCK_KEY_DATA,
-      metadata: {
-        ...MOCK_KEY_DATA.metadata,
-        guardrails: ["guardrail-1", "guardrail-2"],
-      },
-    };
-
-    renderWithProviders(
-      <KeyInfoView
-        keyData={keyDataWithGuardrails}
-        onClose={() => {}}
-        keyId={"test-key-id"}
-        onKeyDataUpdate={() => {}}
-        teams={[]}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Guardrails")).toBeInTheDocument();
-    });
-  });
-
-  it("should display policies when present", async () => {
-    vi.mocked(useAuthorized).mockReturnValue(baseUseAuthorizedMock);
-
-    const keyDataWithPolicies = {
-      ...MOCK_KEY_DATA,
-      metadata: {
-        ...MOCK_KEY_DATA.metadata,
-        policies: ["policy-1"],
-      },
-    };
-
-    renderWithProviders(
-      <KeyInfoView
-        keyData={keyDataWithPolicies}
-        onClose={() => {}}
-        keyId={"test-key-id"}
-        onKeyDataUpdate={() => {}}
-        teams={[]}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Policies")).toBeInTheDocument();
-    });
-  });
-
   it("should display no key found message when keyData is undefined", async () => {
     vi.mocked(useAuthorized).mockReturnValue(baseUseAuthorizedMock);
 
@@ -1209,55 +1134,61 @@ describe("KeyInfoView", () => {
       vi.mocked(keyUpdateCall).mockResolvedValue({});
     });
 
-    it("should drop an empty policies field when the key previously had no policies", async () => {
+    it("should drop an empty allowed_passthrough_routes field when the key previously had none", async () => {
       // Reproduces the real bug: after a successful /key/update, the response echoes
-      // top-level `policies: []` into client state. Without stripping, the next save
+      // top-level empty premium fields into client state. Without stripping, the next save
       // resends `[]` and trips the premium gate in prepare_metadata_fields.
       const keyData: KeyResponse = {
         ...MOCK_KEY_DATA,
         user_id: "proxy-admin-user",
         metadata: {},
-        policies: [],
+        allowed_passthrough_routes: [],
       } as KeyResponse;
 
       await enterEditMode(keyData);
-      await editViewMocks.onSubmit!({ key: keyData.token, token: keyData.token, policies: [] });
+      await editViewMocks.onSubmit!({ key: keyData.token, token: keyData.token, allowed_passthrough_routes: [] });
 
       expect(keyUpdateCall).toHaveBeenCalledWith(
         expect.anything(),
-        expect.not.objectContaining({ policies: expect.anything() }),
+        expect.not.objectContaining({ allowed_passthrough_routes: expect.anything() }),
       );
     });
 
-    it("should keep an empty policies field when the key previously had policies set", async () => {
-      // Premium users must still be able to clear existing policies by sending `[]`.
+    it("should keep an empty allowed_passthrough_routes field when the key previously had routes set", async () => {
+      // Premium users must still be able to clear existing routes by sending `[]`.
       const keyData: KeyResponse = {
         ...MOCK_KEY_DATA,
         user_id: "proxy-admin-user",
-        metadata: { policies: ["existing-policy"] },
-        policies: ["existing-policy"],
+        metadata: { allowed_passthrough_routes: ["/existing-route"] },
+        allowed_passthrough_routes: ["/existing-route"],
       } as KeyResponse;
 
       await enterEditMode(keyData);
-      await editViewMocks.onSubmit!({ key: keyData.token, token: keyData.token, policies: [] });
+      await editViewMocks.onSubmit!({ key: keyData.token, token: keyData.token, allowed_passthrough_routes: [] });
 
-      expect(keyUpdateCall).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ policies: [] }));
+      expect(keyUpdateCall).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ allowed_passthrough_routes: [] }),
+      );
     });
 
-    it("should keep an empty policies field when the previous value lives only at the top level of keyData", async () => {
+    it("should keep an empty allowed_passthrough_routes field when the previous value lives only at the top level of keyData", async () => {
       // Defensive: some premium fields may be present at the top level but not
       // mirrored into metadata. A genuine clear must still be forwarded.
       const keyData: KeyResponse = {
         ...MOCK_KEY_DATA,
         user_id: "proxy-admin-user",
         metadata: {},
-        policies: ["existing-policy"],
+        allowed_passthrough_routes: ["/existing-route"],
       } as KeyResponse;
 
       await enterEditMode(keyData);
-      await editViewMocks.onSubmit!({ key: keyData.token, token: keyData.token, policies: [] });
+      await editViewMocks.onSubmit!({ key: keyData.token, token: keyData.token, allowed_passthrough_routes: [] });
 
-      expect(keyUpdateCall).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ policies: [] }));
+      expect(keyUpdateCall).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ allowed_passthrough_routes: [] }),
+      );
     });
 
     it("puts the key identifier and an explicit null max_budget on the wire when the edit view hands over a cleared budget", async () => {
@@ -1268,182 +1199,6 @@ describe("KeyInfoView", () => {
         expect.anything(),
         expect.objectContaining({ key: "test-token-123", max_budget: null }),
       );
-    });
-  });
-
-  describe("MCP tool permissions on save", () => {
-    const KEY_WITH_TOOL_PERMISSIONS: KeyResponse = {
-      ...MOCK_KEY_DATA,
-      user_id: "proxy-admin-user",
-      object_permission: {
-        ...MOCK_KEY_DATA.object_permission,
-        mcp_servers: ["srv-1", "srv-2"],
-        mcp_access_groups: [],
-        mcp_tool_permissions: { "srv-1": ["read"], "srv-2": ["write"] },
-      },
-    } as KeyResponse;
-
-    const enterEditMode = async (keyData: KeyResponse) => {
-      vi.mocked(useAuthorized).mockReturnValue({
-        ...baseUseAuthorizedMock,
-        userId: "proxy-admin-user",
-        userRole: "proxy_admin",
-      });
-      renderWithProviders(
-        <KeyInfoView keyData={keyData} onClose={() => {}} keyId="test-key-id" onKeyDataUpdate={() => {}} teams={[]} />,
-      );
-      await userEvent.click(screen.getByRole("tab", { name: /settings/i }));
-      await userEvent.click(screen.getByRole("button", { name: /edit settings/i }));
-      await waitFor(() => expect(editViewMocks.onSubmit).toBeDefined());
-    };
-
-    const submittedToolPermissions = () => {
-      const payload = vi.mocked(keyUpdateCall).mock.calls.at(-1)?.[1] as Record<string, any>;
-      return payload.object_permission.mcp_tool_permissions;
-    };
-
-    beforeEach(() => {
-      editViewMocks.onSubmit = undefined;
-      vi.mocked(keyUpdateCall).mockClear();
-      vi.mocked(keyUpdateCall).mockResolvedValue({});
-      vi.mocked(useMCPServers).mockReturnValue({ data: MCP_CATALOG } as unknown as ReturnType<typeof useMCPServers>);
-      vi.mocked(useMCPToolsets).mockReturnValue({ data: MCP_TOOLSETS } as unknown as ReturnType<typeof useMCPToolsets>);
-    });
-
-    it("drops the allowlist of every deselected server instead of leaving it entitled", async () => {
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: [] },
-        mcp_tool_permissions: { "srv-1": ["read"], "srv-2": ["write"] },
-      });
-
-      expect(submittedToolPermissions()).toEqual({});
-    });
-
-    it("drops only the deselected server and keeps the one still granted", async () => {
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        mcp_servers_and_groups: { servers: ["srv-1"], accessGroups: [], toolsets: [] },
-        mcp_tool_permissions: { "srv-1": ["read"], "srv-2": ["write"] },
-      });
-
-      expect(submittedToolPermissions()).toEqual({ "srv-1": ["read"] });
-    });
-
-    it("keeps an allowlist whose server is reachable through a retained access group", async () => {
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        mcp_servers_and_groups: { servers: [], accessGroups: ["ops_readonly"], toolsets: [] },
-        mcp_tool_permissions: { "srv-2": ["write"] },
-      });
-
-      expect(submittedToolPermissions()).toEqual({ "srv-2": ["write"] });
-    });
-
-    it("drops an allowlist the retained access group does not reach", async () => {
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        mcp_servers_and_groups: { servers: [], accessGroups: ["ops_readonly"], toolsets: [] },
-        mcp_tool_permissions: { "srv-1": ["read"], "srv-2": ["write"] },
-      });
-
-      expect(submittedToolPermissions()).toEqual({ "srv-2": ["write"] });
-    });
-
-    it("drops an allowlist the retained toolset does not cover", async () => {
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: ["ts-1"] },
-        mcp_tool_permissions: { "srv-1": ["read"], "srv-2": ["write"] },
-      });
-
-      expect(submittedToolPermissions()).toEqual({ "srv-2": ["write"] });
-    });
-
-    it("refuses to save a permission change while a selected toolset is unresolvable", async () => {
-      vi.mocked(useMCPToolsets).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof useMCPToolsets>);
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: ["ts-1"] },
-        mcp_tool_permissions: { "srv-1": ["read"], "srv-2": ["write"] },
-      });
-
-      expect(keyUpdateCall).not.toHaveBeenCalled();
-    });
-
-    it("resolves a name-keyed allowlist against the server catalog", async () => {
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        mcp_servers_and_groups: { servers: ["srv-1"], accessGroups: [], toolsets: [] },
-        mcp_tool_permissions: { deploy_tracker: ["read"], incident_log: ["write"] },
-      });
-
-      expect(submittedToolPermissions()).toEqual({ deploy_tracker: ["read"] });
-    });
-
-    it("clears every allowlist when the admin picks the no-MCP-servers sentinel", async () => {
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        mcp_servers_and_groups: { servers: ["no-mcp-servers"], accessGroups: [], toolsets: [] },
-        mcp_tool_permissions: { "srv-1": ["read"], "srv-2": ["write"] },
-      });
-
-      expect(submittedToolPermissions()).toEqual({});
-    });
-
-    it("keeps every allowlist when the admin grants all proxy servers", async () => {
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        mcp_servers_and_groups: { servers: ["all-proxy-mcpservers"], accessGroups: [], toolsets: [] },
-        mcp_tool_permissions: { "srv-1": ["read"], "srv-2": ["write"] },
-      });
-
-      expect(submittedToolPermissions()).toEqual({ "srv-1": ["read"], "srv-2": ["write"] });
-    });
-
-    it("refuses to save a permission change it cannot compute without the server catalog", async () => {
-      vi.mocked(useMCPServers).mockReturnValue({ data: undefined } as ReturnType<typeof useMCPServers>);
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: [] },
-        mcp_tool_permissions: { "srv-1": ["read"], "srv-2": ["write"] },
-      });
-
-      expect(keyUpdateCall).not.toHaveBeenCalled();
-    });
-
-    it("preserves a vector-store edit made in the same save", async () => {
-      await enterEditMode(KEY_WITH_TOOL_PERMISSIONS);
-      await editViewMocks.onSubmit!({
-        key: KEY_WITH_TOOL_PERMISSIONS.token,
-        token: KEY_WITH_TOOL_PERMISSIONS.token,
-        vector_stores: ["vs-1"],
-        mcp_servers_and_groups: { servers: ["srv-1"], accessGroups: [], toolsets: [] },
-        mcp_tool_permissions: { "srv-1": ["read"] },
-      });
-
-      const payload = vi.mocked(keyUpdateCall).mock.calls.at(-1)?.[1] as Record<string, any>;
-      expect(payload.object_permission.vector_stores).toEqual(["vs-1"]);
     });
   });
 

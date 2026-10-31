@@ -4,13 +4,11 @@ import { ComparisonInstance } from "../CompareUI";
 import { MessageDisplay } from "./MessageDisplay";
 import { UnifiedSelector } from "./UnifiedSelector";
 import TagSelector from "@/components/tag_management/TagSelector";
-import VectorStoreSelector from "@/components/vector_store_management/VectorStoreSelector";
-import GuardrailSelector from "@/components/guardrails/GuardrailSelector";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
-import { SelectorOption, EndpointConfig, isAgentEndpoint, getComparisonSelection } from "../endpoint_config";
+import { SelectorOption, EndpointConfig } from "../endpoint_config";
 
 interface ComparisonPanelProps {
   comparison: ComparisonInstance;
@@ -35,8 +33,6 @@ export function ComparisonPanel({
   endpointConfig,
   apiKey,
 }: ComparisonPanelProps) {
-  const isA2AMode = isAgentEndpoint(endpointConfig.id);
-  const currentSelection = getComparisonSelection(comparison, endpointConfig.id);
   const [popoverVisible, setPopoverVisible] = useState(false);
   const syncId = useId();
   const advancedParamsId = useId();
@@ -49,13 +45,11 @@ export function ComparisonPanel({
           temperature: comparison.temperature,
           maxTokens: comparison.maxTokens,
           tags: [...comparison.tags],
-          vectorStores: [...comparison.vectorStores],
-          guardrails: [...comparison.guardrails],
           useAdvancedParams: comparison.useAdvancedParams,
         },
         {
           applyToAll: true,
-          keysToApply: ["temperature", "maxTokens", "tags", "vectorStores", "guardrails", "useAdvancedParams"],
+          keysToApply: ["temperature", "maxTokens", "tags", "useAdvancedParams"],
         },
       );
     } else {
@@ -133,22 +127,6 @@ export function ComparisonPanel({
                 accessToken={apiKey}
               />
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-0.5">Vector Stores</label>
-              <VectorStoreSelector
-                value={comparison.vectorStores}
-                onChange={(value) => handleSettingChange("vectorStores", value)}
-                accessToken={apiKey}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-0.5">Guardrails</label>
-              <GuardrailSelector
-                value={comparison.guardrails}
-                onChange={(value) => handleSettingChange("guardrails", value)}
-                accessToken={apiKey}
-              />
-            </div>
           </div>
         </div>
         {/* Advanced Settings */}
@@ -215,11 +193,11 @@ export function ComparisonPanel({
       <div className="border-b flex items-center justify-between gap-3 px-4 py-3">
         <div className="flex items-center gap-3 flex-1">
           <UnifiedSelector
-            value={currentSelection}
+            value={comparison.model}
             options={selectorOptions}
             loading={isLoadingOptions}
             config={endpointConfig}
-            onChange={(value) => onUpdate(isA2AMode ? { agent: value } : { model: value })}
+            onChange={(value) => onUpdate({ model: value })}
           />
           <div className="flex items-center gap-2">
             <Popover

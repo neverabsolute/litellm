@@ -37,17 +37,13 @@ import { extractLoggingSettings, formatMetadataForDisplay, stripTagsFromMetadata
 import { KeyResponse } from "../key_team_helpers/key_list";
 import LoggingSettingsView from "../logging_settings_view";
 import { toast } from "@/lib/toast";
-import { getPolicyInfoWithGuardrails, keyDeleteCall, keyUpdateCall } from "../networking";
+import { keyDeleteCall, keyUpdateCall } from "../networking";
 import { allowedIpsChange, storedAllowedIps, withStoredAllowedIps } from "./keyAllowedIps";
 import { useResetKeySpend } from "@/app/(dashboard)/hooks/keys/useResetKeySpend";
 import { useSetKeyBlockedState } from "@/app/(dashboard)/hooks/keys/useSetKeyBlockedState";
 import { keyKeys } from "@/app/(dashboard)/hooks/keys/useKeys";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMCPServers } from "@/app/(dashboard)/hooks/mcpServers/useMCPServers";
-import { useMCPToolsets } from "@/app/(dashboard)/hooks/mcpServers/useMCPToolsets";
 import { useTeamMemberBudgets } from "@/app/(dashboard)/hooks/teams/useTeamMemberBudgets";
-import { extractMcpEntitlement } from "../mcp_server_management/mcpEntitlement";
-import ObjectPermissionsView from "../object_permissions_view";
 import { RegenerateKeyModal } from "../organisms/RegenerateKeyModal";
 import { parseErrorMessage } from "../shared/errorUtils";
 import {
@@ -79,12 +75,7 @@ interface KeyInfoViewProps {
 // litellm/proxy/_types.py) that the key-edit form submits as arrays/strings, where
 // "empty" means "unset". The loop below drops them when they're empty-and-were-empty
 // so a non-premium edit of unrelated fields doesn't trip the server's premium gate.
-//
-// Boolean premium fields (e.g. disable_global_guardrails) do NOT belong here: false is
-// a real value, not "empty", so isEmptyValue(false) is false and the loop would never
-// drop it — we'd resend false on every edit and trip the gate. Booleans get their own
-// "send only when changed" guard instead (see disable_global_guardrails below).
-const PREMIUM_METADATA_FIELDS = ["policies", "guardrails", "prompts", "tags", "allowed_passthrough_routes"] as const;
+const PREMIUM_METADATA_FIELDS = ["prompts", "tags", "allowed_passthrough_routes"] as const;
 
 const isEmptyValue = (v: unknown): boolean =>
   v == null || (Array.isArray(v) && v.length === 0) || (typeof v === "string" && v.trim() === "");
@@ -108,14 +99,12 @@ export default function KeyInfoView({
   const accessGroupNames = useModelAccessGroupNames();
   const activityDateRange = useActivityDateRange();
   const queryClient = useQueryClient();
-  const canEditGuardrails = premiumUser || (userRole != null && rolesWithWriteAccess.includes(userRole));
+  const canEditPrompts = premiumUser || (userRole != null && rolesWithWriteAccess.includes(userRole));
   const { teams: teamsData } = useTeams();
   const { data: organizations } = useOrganizations();
   const { data: projects } = useProjects();
   const { data: uiSettingsData } = useUISettings();
   const applyUserBudgetToTeamKeys = useApplyUserBudgetToTeamKeys();
-  const { data: allMcpServers } = useMCPServers();
-  const { data: allMcpToolsets } = useMCPToolsets();
   const enableProjectsUI = Boolean(uiSettingsData?.values?.enable_projects_ui);
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -140,8 +129,6 @@ export default function KeyInfoView({
     null,
   );
   const [isRecentlyRegenerated, setIsRecentlyRegenerated] = useState(false);
-  const [policyGuardrails, setPolicyGuardrails] = useState<Record<string, string[]>>({});
-  const [loadingPolicies, setLoadingPolicies] = useState(false);
 
   // Update local state when keyData prop changes (but don't reset to undefined)
   useEffect(() => {
@@ -149,40 +136,6 @@ export default function KeyInfoView({
       setCurrentKeyData(keyData);
     }
   }, [keyData]);
-
-  // Fetch resolved guardrails for all policies
-  useEffect(() => {
-    const fetchPolicyGuardrails = async () => {
-      const policies = currentKeyData?.metadata?.policies;
-      if (!accessToken || !policies || !Array.isArray(policies) || policies.length === 0) {
-        return;
-      }
-
-      setLoadingPolicies(true);
-      const guardrailsMap: Record<string, string[]> = {};
-
-      try {
-        await Promise.all(
-          policies.map(async (policyName: string) => {
-            try {
-              const policyInfo = await getPolicyInfoWithGuardrails(accessToken, policyName);
-              guardrailsMap[policyName] = policyInfo.resolved_guardrails || [];
-            } catch (error) {
-              console.error(`Failed to fetch guardrails for policy ${policyName}:`, error);
-              guardrailsMap[policyName] = [];
-            }
-          }),
-        );
-        setPolicyGuardrails(guardrailsMap);
-      } catch (error) {
-        console.error("Failed to fetch policy guardrails:", error);
-      } finally {
-        setLoadingPolicies(false);
-      }
-    };
-
-    fetchPolicyGuardrails();
-  }, [accessToken, currentKeyData?.metadata?.policies]);
 
   // Reset recent regeneration indicator after 5 seconds
   useEffect(() => {
@@ -215,13 +168,12 @@ export default function KeyInfoView({
       formValues.key = currentKey;
 
       // Guard premium features
-      if (!canEditGuardrails) {
-        delete formValues.guardrails;
+      if (!canEditPrompts) {
         delete formValues.prompts;
       }
 
       // Drop premium metadata fields that are empty AND were empty before.
-      // The /key/update response echoes defaults like `policies: []` back into
+      // The /key/update response echoes defaults like `prompts: []` back into
       // state; without this, the next save resends `[]` and trips the premium
       // gate in prepare_metadata_fields for non-premium users.
       for (const field of PREMIUM_METADATA_FIELDS) {
@@ -231,15 +183,6 @@ export default function KeyInfoView({
         if (isEmptyValue(formValues[field]) && isEmptyValue(previousValue)) {
           delete formValues[field];
         }
-      }
-
-      // disable_global_guardrails is premium-gated server-side; only send it when it
-      // changed so a non-premium edit of unrelated fields isn't blocked by that gate.
-      const previousDisableGlobalGuardrails = Boolean(
-        (currentKeyData.metadata as Record<string, unknown> | undefined)?.disable_global_guardrails,
-      );
-      if (Boolean(formValues.disable_global_guardrails) === previousDisableGlobalGuardrails) {
-        delete formValues.disable_global_guardrails;
       }
 
       if ((formValues.organization_id || null) === keyOrganizationId(currentKeyData)) {
@@ -266,56 +209,6 @@ export default function KeyInfoView({
         formValues.soft_budget = nextSoftBudget;
       }
 
-      // Handle object_permission updates
-      if (formValues.vector_stores !== undefined) {
-        formValues.object_permission = {
-          ...currentKeyData.object_permission,
-          vector_stores: formValues.vector_stores || [],
-        };
-        // Remove vector_stores from the top level as it should be in object_permission
-        delete formValues.vector_stores;
-      }
-
-      const mcpEntitlement = extractMcpEntitlement(formValues, allMcpServers ?? [], allMcpToolsets ?? []);
-      if (mcpEntitlement) {
-        // Without a catalog the grants an allowlist key still has are unresolvable, so nothing is
-        // pruned and a revocation would save as a no-op while reporting success. Refuse instead.
-        const unresolvableSelection =
-          allMcpServers === undefined ||
-          mcpEntitlement.mcp_toolsets.some(
-            (toolsetId) => !(allMcpToolsets ?? []).some((toolset) => toolset.toolset_id === toolsetId),
-          );
-        if (unresolvableSelection && Object.keys(mcpEntitlement.mcp_tool_permissions).length > 0) {
-          toast.error("MCP server or toolset list is unavailable, so MCP permissions cannot be saved yet. Retry.");
-          return;
-        }
-        formValues.object_permission = {
-          ...(formValues.object_permission ?? currentKeyData.object_permission),
-          ...mcpEntitlement,
-        };
-      }
-      delete formValues.mcp_servers_and_groups;
-      delete formValues.mcp_tool_permissions;
-
-      // Handle agent permissions
-      if (formValues.agents_and_groups !== undefined) {
-        const { agents, accessGroups } = formValues.agents_and_groups || { agents: [], accessGroups: [] };
-        formValues.object_permission = {
-          ...formValues.object_permission,
-          agents: agents || [],
-          agent_access_groups: accessGroups || [],
-        };
-        delete formValues.agents_and_groups;
-      }
-
-      if (formValues.skills !== undefined) {
-        formValues.object_permission = {
-          ...formValues.object_permission,
-          skills: formValues.skills || [],
-        };
-        delete formValues.skills;
-      }
-
       formValues.max_budget = mapEmptyStringToNull(formValues.max_budget);
       formValues.tpm_limit = mapEmptyStringToNull(formValues.tpm_limit);
       formValues.rpm_limit = mapEmptyStringToNull(formValues.rpm_limit);
@@ -333,7 +226,6 @@ export default function KeyInfoView({
           formValues.metadata = {
             ...parsedMetadata,
             ...(Array.isArray(formValues.tags) && formValues.tags.length > 0 ? { tags: formValues.tags } : {}),
-            ...(formValues.guardrails?.length > 0 ? { guardrails: formValues.guardrails } : {}),
             ...(Array.isArray(formValues.logging_settings) && formValues.logging_settings.length > 0
               ? { logging: formValues.logging_settings }
               : {}),
@@ -354,7 +246,6 @@ export default function KeyInfoView({
         formValues.metadata = {
           ...rest,
           ...(Array.isArray(formValues.tags) && formValues.tags.length > 0 ? { tags: formValues.tags } : {}),
-          ...(formValues.guardrails?.length > 0 ? { guardrails: formValues.guardrails } : {}),
           ...(Array.isArray(formValues.logging_settings) && formValues.logging_settings.length > 0
             ? { logging: formValues.logging_settings }
             : {}),
@@ -821,67 +712,6 @@ export default function KeyInfoView({
                 </div>
               </Card>
 
-              <Card className="block p-6">
-                <ObjectPermissionsView
-                  objectPermission={currentKeyData.object_permission}
-                  variant="inline"
-                  accessToken={accessToken}
-                />
-              </Card>
-
-              <Card className="block p-6">
-                <p className="text-sm font-medium mb-3">Guardrails</p>
-                {Array.isArray(currentKeyData.metadata?.guardrails) && currentKeyData.metadata.guardrails.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {currentKeyData.metadata.guardrails.map((guardrail: string, index: number) => (
-                      <Badge key={index} variant="secondary" className="min-w-0 break-words">
-                        {guardrail}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No guardrails configured</p>
-                )}
-                {typeof currentKeyData.metadata?.disable_global_guardrails === "boolean" &&
-                  currentKeyData.metadata.disable_global_guardrails === true && (
-                    <div className="mt-3 pt-3 border-t border-border">
-                      <Badge variant="destructive">Global Guardrails Disabled</Badge>
-                    </div>
-                  )}
-              </Card>
-
-              <Card className="block p-6">
-                <p className="text-sm font-medium mb-3">Policies</p>
-                {Array.isArray(currentKeyData.metadata?.policies) && currentKeyData.metadata.policies.length > 0 ? (
-                  <div className="space-y-4">
-                    {currentKeyData.metadata.policies.map((policy: string, index: number) => (
-                      <div key={index} className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="min-w-0 break-words">
-                            {policy}
-                          </Badge>
-                          {loadingPolicies && <p className="text-xs text-muted-foreground">Loading guardrails...</p>}
-                        </div>
-                        {!loadingPolicies && policyGuardrails[policy] && policyGuardrails[policy].length > 0 && (
-                          <div className="ml-4 pl-3 border-l-2 border-border">
-                            <p className="text-xs text-muted-foreground mb-1">Resolved Guardrails:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {policyGuardrails[policy].map((guardrail: string, gIndex: number) => (
-                                <Badge key={gIndex} variant="secondary" className="min-w-0 break-words">
-                                  {guardrail}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No policies configured</p>
-                )}
-              </Card>
-
               <LoggingSettingsView
                 loggingConfigs={extractLoggingSettings(currentKeyData.metadata)}
                 disabledCallbacks={
@@ -1159,17 +989,6 @@ export default function KeyInfoView({
                   </div>
 
                   <div>
-                    <p className="text-sm font-medium">Disable Global Guardrails</p>
-                    <p className="text-sm">
-                      {currentKeyData.metadata?.disable_global_guardrails === true ? (
-                        <Badge variant="destructive">Enabled - Global guardrails bypassed</Badge>
-                      ) : (
-                        <Badge variant="secondary">Disabled - Global guardrails active</Badge>
-                      )}
-                    </p>
-                  </div>
-
-                  <div>
                     <p className="text-sm font-medium">Models</p>
                     <div className="flex flex-wrap gap-2 mt-1">
                       {currentKeyData.models && currentKeyData.models.length > 0 ? (
@@ -1242,13 +1061,6 @@ export default function KeyInfoView({
                       {formatMetadataForDisplay(stripTagsFromMetadata(currentKeyData.metadata))}
                     </pre>
                   </div>
-
-                  <ObjectPermissionsView
-                    objectPermission={currentKeyData.object_permission}
-                    variant="inline"
-                    className="pt-4 border-t border-border"
-                    accessToken={accessToken}
-                  />
 
                   <LoggingSettingsView
                     loggingConfigs={extractLoggingSettings(currentKeyData.metadata)}

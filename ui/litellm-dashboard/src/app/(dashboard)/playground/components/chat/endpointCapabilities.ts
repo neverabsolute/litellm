@@ -4,11 +4,6 @@ import { AUDIO_ACCEPT, CHAT_ATTACHMENT_ACCEPT, IMAGE_EDIT_ACCEPT } from "../chat
 export type AttachKind = "chat" | "images" | "audio";
 
 export type Capabilities = Readonly<{
-  target: "model" | "agent" | "mcpTool";
-  mcp: boolean;
-  vectorStores: boolean;
-  guardrails: boolean;
-  policies: boolean;
   attach: AttachKind | null;
   codeInterpreter: boolean;
   stream: boolean;
@@ -22,11 +17,6 @@ export type Capabilities = Readonly<{
 }>;
 
 const BASE: Capabilities = {
-  target: "model",
-  mcp: false,
-  vectorStores: false,
-  guardrails: false,
-  policies: false,
   attach: null,
   codeInterpreter: false,
   stream: false,
@@ -39,18 +29,10 @@ const BASE: Capabilities = {
   placeholder: "Send a test request",
 };
 
-const TEXT_CHAT: Partial<Capabilities> = {
-  mcp: true,
-  vectorStores: true,
-  guardrails: true,
-  policies: true,
-  stream: true,
-};
-
 const CAPABILITIES: Readonly<Record<EndpointType, Capabilities>> = {
-  [EndpointType.CHAT]: { ...BASE, ...TEXT_CHAT, attach: "chat", simulateFallback: true, sampling: true },
-  [EndpointType.RESPONSES]: { ...BASE, ...TEXT_CHAT, attach: "chat", codeInterpreter: true, sessions: true },
-  [EndpointType.ANTHROPIC_MESSAGES]: { ...BASE, ...TEXT_CHAT },
+  [EndpointType.CHAT]: { ...BASE, stream: true, attach: "chat", simulateFallback: true, sampling: true },
+  [EndpointType.RESPONSES]: { ...BASE, stream: true, attach: "chat", codeInterpreter: true, sessions: true },
+  [EndpointType.ANTHROPIC_MESSAGES]: { ...BASE, stream: true },
   [EndpointType.IMAGE]: { ...BASE, placeholder: "Describe the image you want to generate" },
   [EndpointType.VIDEO]: { ...BASE, placeholder: "Describe the video you want to generate" },
   [EndpointType.IMAGE_EDITS]: { ...BASE, attach: "images", placeholder: "Describe how to edit the images" },
@@ -62,9 +44,7 @@ const CAPABILITIES: Readonly<Record<EndpointType, Capabilities>> = {
     textRequired: false,
     placeholder: "Optional context for the transcription",
   },
-  [EndpointType.A2A_AGENTS]: { ...BASE, target: "agent", guardrails: true, placeholder: "Send a message to the agent" },
-  [EndpointType.MCP]: { ...BASE, target: "mcpTool", guardrails: true, textRequired: false },
-  [EndpointType.REALTIME]: { ...BASE, guardrails: true, customHeaders: false },
+  [EndpointType.REALTIME]: { ...BASE, customHeaders: false },
   [EndpointType.INTERACTIONS]: { ...BASE },
 };
 
@@ -94,7 +74,6 @@ export const SUGGESTIONS: Readonly<Partial<Record<EndpointType, readonly string[
     "Explain quantum computing",
     "Draft a polite email requesting a meeting",
   ],
-  [EndpointType.A2A_AGENTS]: ["What can you help me with?", "Tell me about yourself", "What tasks can you perform?"],
 };
 
 export const CODE_INTERPRETER_SUGGESTIONS: readonly string[] = [

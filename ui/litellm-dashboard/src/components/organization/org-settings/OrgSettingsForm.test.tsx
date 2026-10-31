@@ -11,33 +11,6 @@ vi.mock("@/components/ModelSelect/ModelSelect", () => ({
     </button>
   ),
 }));
-vi.mock("@/components/vector_store_management/VectorStoreSelector", () => ({
-  __esModule: true,
-  default: ({ onChange }: { onChange: (values: string[]) => void }) => (
-    <button type="button" onClick={() => onChange(["vs-2"])}>
-      set-vector-stores
-    </button>
-  ),
-}));
-vi.mock("@/components/mcp_server_management/MCPServerSelector", () => ({
-  __esModule: true,
-  default: ({
-    value,
-    onChange,
-  }: {
-    value?: { servers: string[]; accessGroups: string[]; toolsets?: string[] };
-    onChange: (values: { servers: string[]; accessGroups: string[]; toolsets: string[] }) => void;
-  }) => (
-    <button
-      type="button"
-      onClick={() =>
-        onChange({ servers: ["srv-2"], accessGroups: value?.accessGroups ?? [], toolsets: value?.toolsets ?? [] })
-      }
-    >
-      set-mcp
-    </button>
-  ),
-}));
 
 import type { Organization } from "@/components/networking";
 
@@ -59,12 +32,6 @@ const org: Organization = {
   teams: null,
   users: null,
   members: null,
-  object_permission: {
-    object_permission_id: "op-1",
-    mcp_servers: ["srv-1"],
-    mcp_access_groups: [],
-    vector_stores: ["vs-1"],
-  },
 };
 
 const renderForm = (overrides?: { patchOrganization?: Mock; onSaved?: () => void; org?: Organization }) => {
@@ -76,7 +43,6 @@ const renderForm = (overrides?: { patchOrganization?: Mock; onSaved?: () => void
       <OrgSettingsForm
         organizationId="org-1"
         org={overrides?.org ?? org}
-        accessToken="token"
         onCancel={vi.fn()}
         onSaved={onSaved}
         patchOrganization={patchOrganization}
@@ -143,49 +109,6 @@ describe("OrgSettingsForm", () => {
 
     await waitFor(() => expect(patchOrganization).toHaveBeenCalledTimes(1));
     expect(patchOrganization).toHaveBeenCalledWith("org-1", { models: [] });
-  });
-
-  it("wraps a vector store change in object_permission without mcp keys", async () => {
-    const user = userEvent.setup();
-    const { patchOrganization } = renderForm();
-
-    await user.click(screen.getByRole("button", { name: "set-vector-stores" }));
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-
-    await waitFor(() => expect(patchOrganization).toHaveBeenCalledTimes(1));
-    expect(patchOrganization).toHaveBeenCalledWith("org-1", {
-      object_permission: { vector_stores: ["vs-2"] },
-    });
-  });
-
-  it("wraps an mcp change in object_permission with all three mcp keys", async () => {
-    const user = userEvent.setup();
-    const { patchOrganization } = renderForm();
-
-    await user.click(screen.getByRole("button", { name: "set-mcp" }));
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-
-    await waitFor(() => expect(patchOrganization).toHaveBeenCalledTimes(1));
-    expect(patchOrganization).toHaveBeenCalledWith("org-1", {
-      object_permission: { mcp_servers: ["srv-2"], mcp_access_groups: [], mcp_toolsets: [] },
-    });
-  });
-
-  it("preserves existing toolsets when only the servers change", async () => {
-    const user = userEvent.setup();
-    const orgWithToolsets: Organization = {
-      ...org,
-      object_permission: { ...org.object_permission!, mcp_toolsets: ["ts-1"] },
-    };
-    const { patchOrganization } = renderForm({ org: orgWithToolsets });
-
-    await user.click(screen.getByRole("button", { name: "set-mcp" }));
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-
-    await waitFor(() => expect(patchOrganization).toHaveBeenCalledTimes(1));
-    expect(patchOrganization).toHaveBeenCalledWith("org-1", {
-      object_permission: { mcp_servers: ["srv-2"], mcp_access_groups: [], mcp_toolsets: ["ts-1"] },
-    });
   });
 
   it("does not send a patch when an edit is reverted to the original value", async () => {

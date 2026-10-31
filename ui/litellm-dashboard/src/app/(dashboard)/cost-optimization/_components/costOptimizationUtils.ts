@@ -1,6 +1,5 @@
 import type { KeySpendActivityRow } from "@/components/UsagePage/dailyActivityApi";
 import { DailyData, SpendMetrics } from "@/components/UsagePage/types";
-import { ToolSpendDailyEntry, ToolSpendEntry } from "@/components/networking";
 import { formatNumberWithCommas } from "@/utils/dataUtils";
 
 export const usd = (value: number): string => {
@@ -197,32 +196,6 @@ export const computeCacheLeakage = (
 
   return { rows, netSavingsPerCachedToken };
 };
-
-export interface DailyToolSpendPoint {
-  date: string;
-  [toolName: string]: string | number;
-}
-
-export const buildDailyToolSeries = (
-  daily: readonly ToolSpendDailyEntry[],
-  topToolNames: readonly string[],
-): DailyToolSpendPoint[] => {
-  const top = new Set(topToolNames);
-  const byDate = new Map<string, DailyToolSpendPoint>();
-  for (const d of daily) {
-    if (!top.has(d.tool_name)) continue;
-    const point = byDate.get(d.date) ?? seedPoint(d.date, topToolNames);
-    point[d.tool_name] = (Number(point[d.tool_name]) || 0) + d.spend;
-    byDate.set(d.date, point);
-  }
-  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-};
-
-const seedPoint = (date: string, toolNames: readonly string[]): DailyToolSpendPoint =>
-  toolNames.reduce<DailyToolSpendPoint>((p, name) => ({ ...p, [name]: 0 }), { date });
-
-export const topToolsBySpend = (byTool: readonly ToolSpendEntry[], limit = 8): ToolSpendEntry[] =>
-  [...byTool].sort((a, b) => b.spend - a.spend).slice(0, limit);
 
 export const localIsoDay = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

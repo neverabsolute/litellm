@@ -24,7 +24,6 @@ export const projectFormSchema = z
     models: z.array(z.string()),
     max_budget: z.number().nullish(),
     isBlocked: z.boolean(),
-    guardrails: z.array(z.string()).optional(),
     modelLimits: z.array(modelLimitSchema).optional(),
     metadata: z
       .array(
@@ -61,7 +60,6 @@ export const emptyProjectFormValues: ProjectFormValues = {
   models: [],
   max_budget: undefined,
   isBlocked: false,
-  guardrails: undefined,
   modelLimits: undefined,
   metadata: undefined,
 };

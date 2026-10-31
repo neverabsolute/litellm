@@ -31,7 +31,6 @@ export interface passThroughItem {
   timeout?: number;
   auth?: boolean;
   methods?: string[];
-  guardrails?: Record<string, { request_fields?: string[]; response_fields?: string[] } | null>;
   default_query_params?: Record<string, string>;
   is_from_config?: boolean;
 }

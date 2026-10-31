@@ -11,26 +11,6 @@ vi.mock("@/components/ModelSelect/ModelSelect", () => ({
     </button>
   ),
 }));
-vi.mock("@/components/vector_store_management/VectorStoreSelector", () => ({
-  __esModule: true,
-  default: ({ onChange }: { onChange: (values: string[]) => void }) => (
-    <button type="button" onClick={() => onChange(["vs-1"])}>
-      set-vector-stores
-    </button>
-  ),
-}));
-vi.mock("@/components/mcp_server_management/MCPServerSelector", () => ({
-  __esModule: true,
-  default: ({
-    onChange,
-  }: {
-    onChange: (values: { servers: string[]; accessGroups: string[]; toolsets: string[] }) => void;
-  }) => (
-    <button type="button" onClick={() => onChange({ servers: ["srv-1"], accessGroups: [], toolsets: ["ts-1"] })}>
-      set-mcp
-    </button>
-  ),
-}));
 
 import { OrgCreateDialog } from "./OrgCreateDialog";
 
@@ -41,7 +21,7 @@ const Harness = ({ createOrganization }: { createOrganization: (body: unknown) =
       <button type="button" onClick={() => setOpen(true)}>
         reopen
       </button>
-      <OrgCreateDialog open={open} onOpenChange={setOpen} accessToken="token" createOrganization={createOrganization} />
+      <OrgCreateDialog open={open} onOpenChange={setOpen} createOrganization={createOrganization} />
     </>
   );
 };
@@ -102,15 +82,13 @@ describe("OrgCreateDialog", () => {
     });
   });
 
-  it("maps selectors and limits into the create body", async () => {
+  it("maps models and limits into the create body", async () => {
     const user = userEvent.setup();
     const { createOrganization } = renderDialog();
 
     await user.type(screen.getByLabelText("Organization Name"), "new-org");
     await user.click(screen.getByRole("button", { name: "set-models" }));
     await user.type(screen.getByLabelText("Tokens per minute Limit (TPM)"), "1000");
-    await user.click(screen.getByRole("button", { name: "set-vector-stores" }));
-    await user.click(screen.getByRole("button", { name: "set-mcp" }));
     await user.click(screen.getByRole("button", { name: "Create Organization" }));
 
     await waitFor(() => expect(createOrganization).toHaveBeenCalledTimes(1));
@@ -118,11 +96,6 @@ describe("OrgCreateDialog", () => {
       organization_alias: "new-org",
       models: ["gpt-5.2"],
       tpm_limit: 1000,
-      object_permission: {
-        vector_stores: ["vs-1"],
-        mcp_servers: ["srv-1"],
-        mcp_toolsets: ["ts-1"],
-      },
     };
     expect(createOrganization.mock.calls[0][0]).toStrictEqual(expectedBody);
   });

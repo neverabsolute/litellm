@@ -14,13 +14,12 @@ describe("paletteScopeForRoute", () => {
 });
 
 describe("flattenNavItems", () => {
-  it("flattens visible leaves and skips external links", () => {
+  it("flattens visible leaves including nested children", () => {
     const groups: MenuGroup[] = [
       {
         groupLabel: "Tools",
         items: [
           { key: "search-tools", page: "search-tools", label: "Search Tools" },
-          { key: "docs", page: "docs", label: "Docs", external_url: "https://example.com" },
           { key: "tools", page: "tools", label: "Tools", children: [{ key: "logs", page: "logs", label: "Logs" }] },
         ],
       },

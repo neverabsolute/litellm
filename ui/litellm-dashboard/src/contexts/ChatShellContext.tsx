@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext } from "react";
 import { useQueryState } from "nuqs";
 import { useChatHistory } from "@/components/chat/useChatHistory";
 import type { AssistantMessageUpdate, ChatMessage, Conversation } from "@/components/chat/types";
@@ -11,8 +11,6 @@ interface ChatShellContextValue {
   userEmail: string;
   userRole: string;
   premiumUser: boolean;
-  selectedMCPServers: string[];
-  setSelectedMCPServers: (servers: string[]) => void;
   conversations: Conversation[];
   activeConversation: Conversation | null;
   activeConversationId: string | null;
@@ -54,7 +52,6 @@ export function ChatShellProvider({
   children,
 }: ChatShellProviderProps) {
   const [urlConversationId] = useQueryState("id");
-  const [selectedMCPServers, setSelectedMCPServers] = useState<string[]>([]);
 
   const {
     conversations,
@@ -78,8 +75,6 @@ export function ChatShellProvider({
         userEmail,
         userRole,
         premiumUser,
-        selectedMCPServers,
-        setSelectedMCPServers,
         conversations,
         activeConversation,
         activeConversationId: currentActiveId,

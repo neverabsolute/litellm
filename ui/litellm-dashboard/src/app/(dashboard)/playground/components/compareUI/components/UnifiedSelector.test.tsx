@@ -5,7 +5,6 @@ import { UnifiedSelector } from "./UnifiedSelector";
 import { EndpointId, ENDPOINT_CONFIGS } from "../endpoint_config";
 
 const CHAT = ENDPOINT_CONFIGS[EndpointId.CHAT_COMPLETIONS];
-const AGENTS = ENDPOINT_CONFIGS[EndpointId.A2A_AGENTS];
 
 const promptIsVisible = (text: string) =>
   screen.queryByText(text) !== null || screen.queryByPlaceholderText(text) !== null;
@@ -33,12 +32,6 @@ describe("UnifiedSelector", () => {
     render(<UnifiedSelector value="" options={[]} loading={false} config={CHAT} onChange={vi.fn()} />);
 
     expect(promptIsVisible(CHAT.selectorPlaceholder)).toBe(true);
-  });
-
-  it("prompts with the agent endpoint's copy when configured for agents", () => {
-    render(<UnifiedSelector value="" options={[]} loading={false} config={AGENTS} onChange={vi.fn()} />);
-
-    expect(promptIsVisible(AGENTS.selectorPlaceholder)).toBe(true);
   });
 
   it("swaps the prompt for a loading message while options are in flight", () => {

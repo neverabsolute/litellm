@@ -21,13 +21,7 @@ interface EditProjectModalProps {
   onSuccess?: () => void;
 }
 
-const INTERNAL_METADATA_KEYS = new Set([
-  "model_rpm_limit",
-  "model_tpm_limit",
-  "model_itpm_limit",
-  "model_otpm_limit",
-  "guardrails",
-]);
+const INTERNAL_METADATA_KEYS = new Set(["model_rpm_limit", "model_tpm_limit", "model_itpm_limit", "model_otpm_limit"]);
 
 export const toFormValues = (project: ProjectResponse): ProjectFormValues => {
   const metadataObj = (project.metadata ?? {}) as Record<string, unknown>;
@@ -35,7 +29,6 @@ export const toFormValues = (project: ProjectResponse): ProjectFormValues => {
   const tpmLimits = (metadataObj.model_tpm_limit ?? {}) as Record<string, number>;
   const itpmLimits = (metadataObj.model_itpm_limit ?? {}) as Record<string, number>;
   const otpmLimits = (metadataObj.model_otpm_limit ?? {}) as Record<string, number>;
-  const guardrails = (Array.isArray(metadataObj.guardrails) ? metadataObj.guardrails : []) as string[];
 
   const modelLimits = Array.from(
     new Set([
@@ -63,7 +56,6 @@ export const toFormValues = (project: ProjectResponse): ProjectFormValues => {
     models: project.models ?? [],
     max_budget: project.litellm_budget_table?.max_budget ?? undefined,
     isBlocked: project.blocked,
-    guardrails: guardrails.length > 0 ? guardrails : undefined,
     modelLimits: modelLimits.length > 0 ? modelLimits : undefined,
     metadata: metadata.length > 0 ? metadata : undefined,
   };
@@ -83,7 +75,7 @@ function EditProjectForm({ project, onClose, onSuccess }: Omit<EditProjectModalP
   const handleSubmit = form.handleSubmit((values) => {
     const submitted: ProjectSubmitValues = advancedEverOpened
       ? values
-      : { ...values, guardrails: undefined, modelLimits: undefined, metadata: undefined };
+      : { ...values, modelLimits: undefined, metadata: undefined };
 
     const params: ProjectUpdateParams = {
       ...buildProjectUpdateParams(submitted, project.litellm_budget_table?.max_budget),

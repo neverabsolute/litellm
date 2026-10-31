@@ -19,11 +19,7 @@ const mockTeamListCall = vi.fn();
 const mockUserGetInfoV2 = vi.fn();
 const mockTeamInfoCall = vi.fn();
 const mockUserUpdateUserCall = vi.fn();
-const mockFetchMCPServers = vi.fn();
-const mockListMCPTools = vi.fn();
 const mockUserDailyActivityAggregatedCall = vi.fn();
-
-const MCP_SERVER = { server_id: "srv-1", server_name: "GitHub MCP", alias: "GitHub MCP" };
 
 const MOCK_USER_DATA = {
   user_id: "user-123",
@@ -40,11 +36,6 @@ const MOCK_USER_DATA = {
   updated_at: "2025-01-02T00:00:00.000Z",
   sso_user_id: null,
   teams: ["team-1", "team-2"],
-  object_permission: {
-    mcp_servers: ["srv-1"],
-    mcp_access_groups: ["dev-group"],
-    mcp_tool_permissions: { "srv-1": ["list_issues"] },
-  },
 };
 
 const MOCK_USER_DATA_NO_TEAMS = {
@@ -77,21 +68,9 @@ vi.mock("@/components/networking", async (importOriginal) => {
     teamMemberAddCall: (...args: unknown[]) => mockTeamMemberAddCall(...args),
     teamMemberDeleteCall: (...args: unknown[]) => mockTeamMemberDeleteCall(...args),
     getProxyBaseUrl: () => "https://litellm.test",
-    fetchMCPServers: (...args: unknown[]) => mockFetchMCPServers(...args),
-    fetchMCPToolsets: vi.fn().mockResolvedValue([]),
-    listMCPTools: (...args: unknown[]) => mockListMCPTools(...args),
   };
 });
 
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPServers", () => ({
-  useMCPServers: () => ({ data: [MCP_SERVER], isLoading: false }),
-}));
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPAccessGroups", () => ({
-  useMCPAccessGroups: () => ({ data: ["dev-group"], isLoading: false }),
-}));
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPToolsets", () => ({
-  useMCPToolsets: () => ({ data: [], isLoading: false }),
-}));
 describe("UserInfoView add-to-team form", () => {
   const defaultProps = {
     userId: "user-123",
@@ -118,8 +97,6 @@ describe("UserInfoView add-to-team form", () => {
       { team_id: "team-3", team_alias: "Gamma Team" },
     ]);
     mockTeamMemberAddCall.mockResolvedValue({});
-    mockFetchMCPServers.mockResolvedValue([MCP_SERVER]);
-    mockListMCPTools.mockResolvedValue({ tools: [] });
   });
 
   const setup = () => userEvent.setup({ pointerEventsCheck: PointerEventsCheckLevel.Never });

@@ -5,7 +5,6 @@ import type { ChatMessage } from "./types";
 
 vi.mock("@/components/networking", () => ({ getGatewayBaseUrl: () => "https://gateway.example/v1" }));
 vi.mock("@/components/chat_ui/ReasoningContent", () => ({ default: () => null }));
-vi.mock("@/components/chat_ui/MCPEventsDisplay", () => ({ default: () => null }));
 vi.mock("@/components/chat_ui/ResponseMetrics", () => ({ default: () => null }));
 vi.mock("@/hooks/useSyntaxTheme", () => ({ useSyntaxTheme: (theme: unknown) => theme }));
 
