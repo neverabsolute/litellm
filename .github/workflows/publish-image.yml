@@ -4,13 +4,18 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker/**
+      - .github/workflows/publish-image.yml
   workflow_dispatch:
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   publish-image:
@@ -20,20 +25,51 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      IMAGE: litellm-smoke:${{ github.sha }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           persist-credentials: false
 
-      - name: Log in to GHCR
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+      - name: Build
+        run: docker build --platform linux/amd64 -t "${IMAGE}" .
 
-      - name: Build and push
+      - name: Boot against a fresh Postgres
         run: |
           set -euo pipefail
+          docker network create smoke
+          docker run -d --name pg --network smoke -e POSTGRES_PASSWORD=smoke \
+            postgres:16.6@sha256:557fea37a744d5f4c8faab304b0a90858b53ab119735a88c131fd19dab802f36
+          until docker exec pg pg_isready -U postgres >/dev/null 2>&1; do sleep 2; done
+          docker run -d --name proxy --network smoke -p 4000:4000 \
+            -e DATABASE_URL=postgresql://postgres:smoke@pg:5432/postgres \
+            -e LITELLM_MASTER_KEY=sk-smoke-master -e LITELLM_SALT_KEY=sk-smoke-salt -e STORE_MODEL_IN_DB=True \
+            "${IMAGE}"
+          for _ in $(seq 1 120); do
+            if curl -fsS http://localhost:4000/health/readiness | grep -q '"db":"connected"'; then
+              curl -fsS -o /dev/null http://localhost:4000/health/liveliness
+              test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer sk-smoke-master' \
+                http://localhost:4000/guardrails/list)" = 404
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Show proxy logs
+        if: failure()
+        run: docker logs proxy 2>&1 | tail -n 200
+
+      - name: Push
+        if: github.event_name != 'pull_request'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          docker build --platform linux/amd64 -t "${image}:sha-${GITHUB_SHA}" -t "${image}:main" .
+          docker tag "${IMAGE}" "${image}:sha-${GITHUB_SHA}"
+          docker tag "${IMAGE}" "${image}:main"
           docker push "${image}:sha-${GITHUB_SHA}"
           docker push "${image}:main"
