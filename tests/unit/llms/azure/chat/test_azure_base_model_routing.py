@@ -197,17 +197,16 @@ class TestGetOptionalParamsWithBaseModel:
         )
         assert params.get("reasoning_effort") == "low"
 
-    def test_should_reject_temperature_for_custom_deployment_with_gpt5_base_model(
+    def test_should_omit_temperature_for_custom_deployment_with_gpt5_base_model(
         self,
     ):
-        """A non-standard deployment + gpt-5 base_model should reject temperature."""
-        with pytest.raises(litellm.UnsupportedParamsError):
-            get_optional_params(
-                model="my-deployment-id",
-                custom_llm_provider="azure",
-                temperature=0.5,
-                base_model="azure/gpt-5",
-            )
+        """A non-standard deployment + gpt-5 base_model omits the temperature gpt-5 cannot take."""
+        assert "temperature" not in get_optional_params(
+            model="my-deployment-id",
+            custom_llm_provider="azure",
+            temperature=0.5,
+            base_model="azure/gpt-5",
+        )
 
 
 # ---------------------------------------------------------------------------

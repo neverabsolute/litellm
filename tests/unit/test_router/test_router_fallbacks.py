@@ -1006,3 +1006,89 @@ async def test_unknown_default_fallback_raises_after_primary_failure(
 
     assert route.call_count == 1
     assert "missing" in str(exc_info.value)
+
+
+_GEMINI_URL: Final = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
+_OPENAI_URL: Final = "https://api.openai.com/v1/chat/completions"
+_ANTHROPIC_URL: Final = "https://api.anthropic.com/v1/messages"
+
+
+def _extraction_chain_router() -> Router:
+    return Router(
+        model_list=[
+            {"model_name": "flash", "litellm_params": {"model": "gemini/gemini-3-flash-preview", "api_key": "fake"}},
+            {"model_name": "luna", "litellm_params": {"model": "openai/gpt-5.6-luna", "api_key": "fake"}},
+            {"model_name": "haiku", "litellm_params": {"model": "anthropic/claude-haiku-5-5", "api_key": "fake"}},
+        ],
+        fallbacks=[{"flash": ["luna", "haiku"]}],
+        num_retries=0,
+    )
+
+
+@pytest.fixture
+def httpx_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(litellm, "disable_aiohttp_transport", True)
+
+
+def _unavailable() -> httpx.Response:
+    return httpx.Response(503, json={"error": {"code": 503, "message": "overloaded", "status": "UNAVAILABLE"}})
+
+
+@pytest.mark.asyncio
+async def test_a_fallback_hop_sends_the_closest_settings_the_next_model_accepts(
+    respx_mock: respx.MockRouter, local_model_cost_map: None, httpx_transport: None
+) -> None:
+    """minimal reasoning with temperature 0 is what gemini-3-flash takes for cheap extraction; the GPT hop
+    must turn reasoning off (the closest it has to minimal, and the only effort it pairs with temperature 0)
+    rather than refuse the call before it reaches the provider."""
+    respx_mock.post(_GEMINI_URL).mock(return_value=_unavailable())
+    openai_route: Final = respx_mock.post(_OPENAI_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-1",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "gpt-5.6-luna",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+    )
+
+    response: Final = await _extraction_chain_router().acompletion(
+        model="flash", messages=[{"role": "user", "content": "extract"}], reasoning_effort="minimal", temperature=0
+    )
+
+    assert response.choices[0].message.content == "ok"
+    sent: Final = json.loads(openai_route.calls.last.request.content)
+    assert (sent["reasoning_effort"], sent["temperature"]) == ("none", 0)
+
+
+@pytest.mark.asyncio
+async def test_a_fallback_hop_omits_a_temperature_the_next_model_cannot_take(
+    respx_mock: respx.MockRouter, local_model_cost_map: None, httpx_transport: None
+) -> None:
+    respx_mock.post(_GEMINI_URL).mock(return_value=_unavailable())
+    respx_mock.post(_OPENAI_URL).mock(return_value=httpx.Response(503, json={"error": {"message": "overloaded"}}))
+    anthropic_route: Final = respx_mock.post(_ANTHROPIC_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-haiku-5-5",
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+    )
+
+    response: Final = await _extraction_chain_router().acompletion(
+        model="flash", messages=[{"role": "user", "content": "extract"}], reasoning_effort="minimal", temperature=0
+    )
+
+    assert response.choices[0].message.content == "ok"
+    assert "temperature" not in json.loads(anthropic_route.calls.last.request.content)

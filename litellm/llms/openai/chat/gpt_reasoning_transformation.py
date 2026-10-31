@@ -422,18 +422,9 @@ class OpenAIGPT5Config(OpenAIGPTConfig):
                 # the model merely supporting it
                 if (supports_none and self.effort_resolves_to_none(model, effective_effort)) or temperature_value == 1:
                     optional_params["temperature"] = temperature_value
-                elif litellm.drop_params or drop_params:
-                    pass
                 else:
-                    raise litellm.utils.UnsupportedParamsError(
-                        message=(
-                            f"{model} doesn't support temperature={temperature_value} while reasoning is "
-                            "active. Only temperature=1 is supported unless reasoning_effort resolves to "
-                            "'none', either set explicitly on the request or declared as the model's "
-                            "default_reasoning_effort. "
-                            "To drop unsupported params set `litellm.drop_params = True`"
-                        ),
-                        status_code=400,
+                    verbose_logger.info(
+                        "Omitting temperature for %s, which only accepts the default while reasoning is active", model
                     )
         return super()._map_openai_params(
             non_default_params=non_default_params,

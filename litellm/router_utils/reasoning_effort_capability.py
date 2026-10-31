@@ -260,6 +260,32 @@ def model_group_from_metadata(*metadata: object) -> str | None:
     return next((group for group in groups if isinstance(group, str)), None)
 
 
+def _catalog_reasoning_effort(
+    level: str, *, model: str, custom_llm_provider: str | None, rounding: ReasoningEffortRounding
+) -> str:
+    """A level the GPT reasoning gate would refuse is moved to the nearest one the model accepts, so a
+    request that one model in a fallback chain takes is not rejected by the next. Other providers remap
+    or accept these levels themselves. minimal goes to none where the model can turn reasoning off,
+    since a caller asking for minimal wants the cheapest, fastest answer and the next tier up costs
+    more than either."""
+    if level not in _OPT_OUT_EFFORTS:
+        return level
+    from litellm.llms.azure.chat.gpt_reasoning_transformation import AzureOpenAIGPT5Config
+    from litellm.llms.openai.chat.gpt_reasoning_transformation import OpenAIGPT5Config
+    from litellm.utils import ModelInfoLookupMiss, lookup_catalog_model_info
+
+    gate: Final = {"openai": OpenAIGPT5Config, "azure": AzureOpenAIGPT5Config}.get(custom_llm_provider or "")
+    if gate is None or not gate.is_model_gpt_5_model(model) or not gate.refuses_reasoning_effort_level(model, level):
+        return level
+    model_info: Final = lookup_catalog_model_info(model, custom_llm_provider)
+    if isinstance(model_info, ModelInfoLookupMiss):
+        return level
+    supported: Final = resolve_supported_reasoning_efforts(model_info, deployment_is_mapped=True) or ()
+    if level == "minimal" and "none" in supported:
+        return "none"
+    return nearest_declared_reasoning_effort(level, supported, rounding)
+
+
 @dataclass(frozen=True, slots=True)
 class DeploymentReasoningEffort:
     value: RequestedReasoningEffort
@@ -280,9 +306,22 @@ def resolve_deployment_reasoning_effort(
     if requested_level is None:
         return unchanged
     declared: Final = deployment_reasoning_effort_levels(deployment_model_info)
-    if declared is None:
-        return unchanged
     rounding: Final = _deployment_rounding(deployment_model_info)
+    if declared is None:
+        catalog_level: Final = _catalog_reasoning_effort(
+            requested_level, model=model, custom_llm_provider=custom_llm_provider, rounding=rounding
+        )
+        if catalog_level == requested_level:
+            return unchanged
+        _log_remap(
+            requested_level=requested_level,
+            sent_level=catalog_level,
+            rounding=rounding,
+            deployment_model=_provider_model(model, custom_llm_provider),
+            deployment_model_info=deployment_model_info,
+            model_group=model_group,
+        )
+        return DeploymentReasoningEffort(value=_with_level(requested, catalog_level), deployment_accepts_effort=False)
     rounded_level: Final = (
         None
         if requested_level == _DEFAULT_EFFORT

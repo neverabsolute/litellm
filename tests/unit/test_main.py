@@ -2217,7 +2217,7 @@ def test_openai_responses_bridge_sends_the_whole_reasoning_effort_dict(
         ({"effort": "minimal", "mode": "pro"}, {"reasoning_summary": "auto"}, {"mode": "pro", "summary": "auto"}),
     ],
 )
-def test_openai_responses_bridge_drops_only_a_refused_effort_under_drop_params(
+def test_openai_responses_bridge_turns_a_refused_minimal_effort_off_and_keeps_the_rest(
     reasoning_effort: dict[str, str],
     summary_alias: dict[str, str],
     expected_reasoning: dict[str, str],
@@ -2227,13 +2227,12 @@ def test_openai_responses_bridge_drops_only_a_refused_effort_under_drop_params(
         model="openai/responses/gpt-6.1-terra",
         messages=[{"role": "user", "content": "hello"}],
         reasoning_effort=reasoning_effort,
-        drop_params=True,
         api_key="fake-key",
         **summary_alias,
     )
 
     request_body: Final = json.loads(openai_responses_route.calls[0].request.content)
-    assert request_body["reasoning"] == expected_reasoning
+    assert request_body["reasoning"] == {**expected_reasoning, "effort": "none"}
 
 
 def test_openai_responses_bridge_drops_a_reasoning_effort_dict_for_a_model_without_reasoning(
@@ -10645,8 +10644,6 @@ def test_a_gpt_5_deployment_receives_a_declared_level_the_model_map_disables(
         return_value=httpx.Response(200, json=_FOUNDRY_RESPONSES_FUNCTION_CALL_BODY)
     )
 
-    with pytest.raises(litellm.exceptions.UnsupportedParamsError):
-        _gpt_5_chat_body_sent(respx_mock, model, "low", {"id": "gpt-5-pro-1"})
     _gpt_5_chat_body_sent(respx_mock, model, "low", {"reasoning_effort_levels": ["low", "high"]})
 
     assert json.loads(responses.calls.last.request.content)["reasoning"]["effort"] == "low"
