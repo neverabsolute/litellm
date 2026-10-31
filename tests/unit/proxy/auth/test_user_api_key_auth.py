@@ -20,68 +20,10 @@ from litellm.proxy.auth.user_api_key_auth import (
     UserAPIKeyAuth,
     get_api_key_from_custom_header,
 )
-from fastapi import WebSocket, HTTPException, status
+from fastapi import Request, WebSocket, HTTPException, status
 
 from litellm.proxy._types import LiteLLM_UserTable, LitellmUserRoles
 from tests._master_key import MASTER_KEY
-
-
-class Request:
-    def __init__(self, client_ip: Optional[str] = None, headers: Optional[dict] = None):
-        self.client = MagicMock()
-        self.client.host = client_ip
-        self.headers: Dict[str, str] = {}
-
-
-@pytest.mark.parametrize(
-    "allowed_ips, client_ip, expected_result",
-    [
-        (None, "127.0.0.1", True),  # No IP restrictions, should be allowed
-        (["127.0.0.1"], "127.0.0.1", True),  # IP in allowed list
-        (["192.168.1.1"], "127.0.0.1", False),  # IP not in allowed list
-        ([], "127.0.0.1", False),  # Empty allowed list, no IP should be allowed
-        (["192.168.1.1", "10.0.0.1"], "10.0.0.1", True),  # IP in allowed list
-        (
-            ["192.168.1.1"],
-            None,
-            False,
-        ),  # Request with no client IP should not be allowed
-    ],
-)
-def test_check_valid_ip(allowed_ips: Optional[List[str]], client_ip: Optional[str], expected_result: bool):
-    from litellm.proxy.auth.auth_utils import _check_valid_ip
-
-    request = Request(client_ip)
-
-    assert _check_valid_ip(allowed_ips, request)[0] == expected_result  # type: ignore
-
-
-# test x-forwarder for is used when user has opted in
-
-
-@pytest.mark.parametrize(
-    "allowed_ips, client_ip, expected_result",
-    [
-        (None, "127.0.0.1", True),  # No IP restrictions, should be allowed
-        (["127.0.0.1"], "127.0.0.1", True),  # IP in allowed list
-        (["192.168.1.1"], "127.0.0.1", False),  # IP not in allowed list
-        ([], "127.0.0.1", False),  # Empty allowed list, no IP should be allowed
-        (["192.168.1.1", "10.0.0.1"], "10.0.0.1", True),  # IP in allowed list
-        (
-            ["192.168.1.1"],
-            None,
-            False,
-        ),  # Request with no client IP should not be allowed
-    ],
-)
-def test_check_valid_ip_sent_with_x_forwarded_for(
-    allowed_ips: Optional[List[str]], client_ip: Optional[str], expected_result: bool
-):
-    from litellm.proxy.auth.auth_utils import _check_valid_ip
-
-    request = Request(client_ip, headers={"X-Forwarded-For": client_ip})
-
-    assert _check_valid_ip(allowed_ips, request, use_x_forwarded_for=True)[0] == expected_result  # type: ignore
 
 
 @pytest.mark.asyncio
@@ -2311,3 +2253,112 @@ async def test_non_object_metadata_is_served_like_unset_mappings_whatever_the_ba
     )
     assert mapped == unset
     assert mapped[1] == "usecase-deployment"
+
+
+def _chat_request_from(peer_ip: str, headers: Optional[Dict[str, str]] = None):
+    from fastapi import Request
+
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "POST",
+            "path": "/chat/completions",
+            "headers": [(k.encode(), v.encode()) for k, v in (headers or {}).items()],
+            "client": (peer_ip, 4000),
+        }
+    )
+
+    async def return_body():
+        return b'{"model": "gpt-4o"}'
+
+    request.body = return_body
+    return request
+
+
+@pytest.fixture
+def ip_restricted_proxy(monkeypatch):
+    from litellm.proxy.db.ip_activity_tracking import ip_activity_accumulator
+    from litellm.proxy.proxy_server import user_api_key_cache
+
+    monkeypatch.setattr(litellm.proxy.proxy_server, "master_key", MASTER_KEY)
+    monkeypatch.setattr(litellm.proxy.proxy_server, "prisma_client", "hello-world")
+    monkeypatch.setattr(litellm.proxy.proxy_server, "user_api_key_cache", user_api_key_cache)
+    monkeypatch.setattr(
+        litellm.proxy.proxy_server,
+        "general_settings",
+        {"trusted_proxy_ranges": ["10.0.1.0/24", "173.245.48.0/20"], "trusted_client_ip_header": "cf-connecting-ip"},
+    )
+    ip_activity_accumulator.drain()
+    yield user_api_key_cache
+    ip_activity_accumulator.drain()
+
+
+def _cloudflare_request(client_ip: str):
+    return _chat_request_from("10.0.1.5", {"x-forwarded-for": "173.245.48.10", "cf-connecting-ip": client_ip})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "client_ip, allowed",
+    [("198.51.100.23", True), ("198.51.100.200", True), ("203.0.113.9", False)],
+)
+async def test_key_allowed_ips_admit_only_addresses_inside_the_ranges(ip_restricted_proxy, client_ip, allowed):
+    from litellm.proxy._types import ProxyException
+    from litellm.proxy.db.ip_activity_tracking import ip_activity_accumulator
+    from litellm.proxy.proxy_server import hash_token
+
+    user_key = "sk-ip-restricted-1"
+    ip_restricted_proxy.set_cache(
+        key=hash_token(user_key),
+        value=UserAPIKeyAuth(token=hash_token(user_key), metadata={"allowed_ips": ["198.51.100.0/24"]}),
+    )
+    request = _cloudflare_request(client_ip)
+
+    if allowed:
+        assert (await user_api_key_auth(request=request, api_key=f"Bearer {user_key}")).token == hash_token(user_key)
+        assert ip_activity_accumulator.drain()[1] == {}
+        return
+    with pytest.raises(ProxyException) as exc_info:
+        await user_api_key_auth(request=request, api_key=f"Bearer {user_key}")
+    assert str(exc_info.value.code) == "403"
+    (denial,) = ip_activity_accumulator.drain()[1].items()
+    assert (denial[0].ip_address, denial[0].reason, denial[0].status_code, denial[0].api_key, denial[1]) == (
+        client_ip,
+        "ip_not_allowed_key",
+        403,
+        hash_token(user_key),
+        1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_global_allowed_ips_block_before_key_lookup_and_record_the_denial(ip_restricted_proxy, monkeypatch):
+    from litellm.proxy._types import ProxyException
+    from litellm.proxy.db.ip_activity_tracking import ip_activity_accumulator
+
+    monkeypatch.setitem(litellm.proxy.proxy_server.general_settings, "allowed_ips", ["192.0.2.0/24"])
+
+    with pytest.raises(ProxyException) as exc_info:
+        await user_api_key_auth(request=_cloudflare_request("203.0.113.9"), api_key="Bearer sk-never-looked-up")
+    assert str(exc_info.value.code) == "403"
+    (denial,) = ip_activity_accumulator.drain()[1]
+    assert (denial.ip_address, denial.reason, denial.api_key) == ("203.0.113.9", "ip_not_allowed_global", "")
+
+
+@pytest.mark.asyncio
+async def test_forged_cf_connecting_ip_from_outside_cloudflare_is_ignored(ip_restricted_proxy):
+    from litellm.proxy._types import ProxyException
+    from litellm.proxy.proxy_server import hash_token
+
+    user_key = "sk-ip-restricted-2"
+    ip_restricted_proxy.set_cache(
+        key=hash_token(user_key),
+        value=UserAPIKeyAuth(token=hash_token(user_key), metadata={"allowed_ips": ["198.51.100.23"]}),
+    )
+    forged: Final = _chat_request_from(
+        "10.0.1.5", {"x-forwarded-for": "203.0.113.9", "cf-connecting-ip": "198.51.100.23"}
+    )
+
+    with pytest.raises(ProxyException) as exc_info:
+        await user_api_key_auth(request=forged, api_key=f"Bearer {user_key}")
+    assert str(exc_info.value.code) == "403"

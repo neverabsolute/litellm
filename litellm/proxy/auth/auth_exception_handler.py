@@ -4,6 +4,7 @@ Handles Authentication Errors
 
 import logging
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Final
 
 from fastapi import HTTPException, Request, status
@@ -22,16 +23,20 @@ from litellm.proxy._types import (
 )
 from litellm.proxy.auth.auth_utils import (  # noqa: F401  # legacy module exports
     _get_request_ip_address,  # pyright: ignore[reportPrivateUsage,reportUnusedImport]  # backwards-compatible package export
-    get_request_ip_address,
+    get_request_ip_address,  # pyright: ignore[reportUnusedImport]  # backwards-compatible package export
     is_invalid_virtual_key_error,
     is_unauthorized_error,
     mark_invalid_virtual_key_error,
     normalize_request_route,
 )
+from litellm.proxy.auth.ip_access import IPNotAllowedError, client_ip_from_request
 from litellm.proxy.auth.model_access_denied import ModelAccessDeniedHTTPException
 from litellm.proxy.auth.resolvers.exceptions import KeyNotFoundError
 from litellm.proxy.common_utils.openai_error_payload import openai_error_param
 from litellm.proxy.db.exception_handler import PrismaDBExceptionHandler
+from litellm.proxy.db.ip_activity_tracking import ip_activity_accumulator
+from litellm.proxy.spend_tracking.spend_tracking_utils import requester_ip_address_logging_disabled
+from litellm.types.proxy.ip_activity import DenialReason, DeniedRequestKey
 from litellm.types.services import ServiceTypes
 
 # Sentinel user_id for the synthetic UserAPIKeyAuth issued during a DB
@@ -136,6 +141,44 @@ def _auth_failure_log_message(e: Exception) -> str:
     )
 
 
+def _denial_reason(e: Exception) -> DenialReason:
+    if not isinstance(e, IPNotAllowedError):
+        return "auth_error"
+    return "ip_not_allowed_key" if e.scope == "key" else "ip_not_allowed_global"
+
+
+def _route_template(request: Request, route: str) -> str:
+    """The matched path template (bounded), not the raw path a scanner can vary freely."""
+    matched: Final = request.scope.get("route")
+    template: Final = getattr(matched, "path", None)
+    return template if isinstance(template, str) else normalize_request_route(route)
+
+
+def _status_code(code: object) -> int:
+    try:
+        parsed: Final = int(str(code))
+    except ValueError:
+        return 0
+    return parsed if 100 <= parsed <= 599 else 0
+
+
+def _record_denied_request(
+    *, requester_ip: str | None, route: str, status_code: object, reason: DenialReason, api_key: str | None
+) -> None:
+    if not requester_ip or requester_ip_address_logging_disabled():
+        return
+    ip_activity_accumulator.record_denied(
+        DeniedRequestKey(
+            date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            ip_address=requester_ip,
+            route=route,
+            status_code=_status_code(status_code),
+            reason=reason,
+            api_key=api_key or "",
+        )
+    )
+
+
 class UserAPIKeyAuthExceptionHandler:
     @staticmethod
     async def handle_authentication_error(
@@ -162,7 +205,7 @@ class UserAPIKeyAuthExceptionHandler:
             - Original Exception in all other cases
         """
         from litellm.proxy.proxy_server import (
-            general_settings,
+            general_settings_view,
             proxy_logging_obj,
         )
 
@@ -195,10 +238,8 @@ class UserAPIKeyAuthExceptionHandler:
             request_mapping: Final = as_str_mapping(request_data)
             request_context: Final[dict[str, object]] = dict(request_mapping) if request_mapping is not None else {}
             # raise the exception to the caller
-            requester_ip: Final = get_request_ip_address(
-                request=request,
-                use_x_forwarded_for=general_settings.get("use_x_forwarded_for") is True,
-            )
+            requester_ip: Final = client_ip_from_request(request, general_settings_view())
+            denial_reason: Final = _denial_reason(e)
             user_agent: Final = _get_user_agent(request)
 
             # Log authentication failures before identity seeding and callbacks, so the log
@@ -272,6 +313,13 @@ class UserAPIKeyAuthExceptionHandler:
                     requester_ip,
                     extra=log_extra,
                 )
+            _record_denied_request(
+                requester_ip=requester_ip,
+                route=_route_template(request, route),
+                status_code=final_exception.code,
+                reason=denial_reason,
+                api_key=resolved_identity.token if resolved_identity is not None else None,
+            )
             raise final_exception
 
     _handle_authentication_error = handle_authentication_error

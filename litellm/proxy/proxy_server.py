@@ -626,6 +626,11 @@ from litellm.proxy.db.gateway_request_tracking import (
     GatewayRequestRedisBuffer,
     flush_gateway_requests,
 )
+from litellm.proxy.db.ip_activity_tracking import (
+    IP_ACTIVITY_JOB_NAME,
+    flush_ip_activity,
+    ip_activity_accumulator,
+)
 from litellm.proxy.db.master_key_migration import (
     count_values_encrypted_with_or_none,
     migrate_if_requested,
@@ -735,6 +740,9 @@ from litellm.proxy.management_endpoints.internal_user_endpoints import (
 )
 from litellm.proxy.management_endpoints.internal_user_endpoints import (
     user_update,
+)
+from litellm.proxy.management_endpoints.ip_analytics_endpoints import (
+    router as ip_analytics_router,
 )
 from litellm.proxy.management_endpoints.key_management_endpoints import (
     delete_verification_tokens,
@@ -1343,6 +1351,7 @@ async def _drain_audit_tasks_on_shutdown() -> None:
 async def _flush_request_accumulators(prisma: PrismaClient) -> None:
     await flush_gateway_requests(prisma, gateway_request_accumulator)
     await flush_request_errors(prisma, request_error_accumulator)
+    await flush_ip_activity(prisma, ip_activity_accumulator)
 
 
 async def proxy_shutdown_event(worker_heartbeat: ProxyWorkerHeartbeat | None = None) -> None:
@@ -7204,12 +7213,6 @@ class ProxyConfig:
 
             ## ADMIN UI ACCESS ##
             ui_access_mode = general_settings.get("ui_access_mode", "all")  # can be either ["admin_only" or "all"]
-            ### ALLOWED IP ###
-            allowed_ips: Final = general_settings.get("allowed_ips", None)
-            if allowed_ips is not None and premium_user is False:
-                raise ValueError(
-                    "allowed_ips is an Enterprise Feature. Please add a valid LITELLM_LICENSE to your envionment."
-                )
             ## BUDGET RESCHEDULER ##
             proxy_budget_rescheduler_min_time = general_settings.get(
                 "proxy_budget_rescheduler_min_time", proxy_budget_rescheduler_min_time
@@ -11409,6 +11412,17 @@ class ProxyStartupEvent:
             seconds=batch_writing_interval,
             args=(prisma_client, gateway_request_accumulator, _gateway_request_redis_buffer()),
             id="update_gateway_requests_job",
+            replace_existing=True,
+            misfire_grace_time=APSCHEDULER_MISFIRE_GRACE_TIME,
+        )
+
+        ### UPDATE PER-IP ACTIVITY AND DENIED REQUEST COUNTS ###
+        scheduler.add_job(  # pyright: ignore[reportUnknownMemberType]  # apscheduler is untyped
+            flush_ip_activity,
+            "interval",
+            seconds=batch_writing_interval,
+            args=(prisma_client, ip_activity_accumulator),
+            id=IP_ACTIVITY_JOB_NAME,
             replace_existing=True,
             misfire_grace_time=APSCHEDULER_MISFIRE_GRACE_TIME,
         )
@@ -19970,6 +19984,8 @@ _GENERAL_SETTINGS_CONFIG_LIST_FIELD_TYPES: Final[Mapping[str, str]] = MappingPro
         "mcp_allowed_clients": "TypedDictionary",
         "mcp_client_id_header": "String",
         "mcp_trusted_proxy_ranges": "List",
+        "trusted_proxy_ranges": "List",
+        "trusted_client_ip_header": "String",
         "mcp_xff_num_trusted_hops": "Integer",
         "mcp_prefer_client_id_metadata_document": "Boolean",
         "always_include_stream_usage": "Boolean",
@@ -21811,6 +21827,7 @@ app.include_router(coordination_redis_settings_router)
 app.include_router(user_agent_analytics_router)
 app.include_router(gateway_request_router)
 app.include_router(request_error_router)
+app.include_router(ip_analytics_router)
 app.include_router(telemetry_router)
 app.include_router(enterprise_router)
 app.include_router(ui_discovery_endpoints_router)

@@ -36,24 +36,50 @@ import { FormField } from "@/components/shared/form/FormField";
 import { Input } from "@/components/ui/input";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { IP_OR_CIDR_MESSAGE, isIpOrCidr } from "@/utils/ipAddress";
+import { extractErrorMessage } from "@/utils/errorUtils";
+import { unwrapProxyErrorMessage } from "@/lib/http/client";
 
 const allowedIPSchema = z.object({
-  ip: z.string().min(1, "Please enter an IP address"),
+  ip: z.string().trim().min(1, "Please enter an IP address or CIDR range").refine(isIpOrCidr, IP_OR_CIDR_MESSAGE),
 });
 
 type AllowedIPFormValues = z.infer<typeof allowedIPSchema>;
 
-const AddAllowedIPForm = ({ onSubmit }: { onSubmit: (values: AllowedIPFormValues) => Promise<void> }) => {
+const serverErrorMessage = (error: unknown): string => unwrapProxyErrorMessage(extractErrorMessage(error));
+
+const ServerError = ({ title, message }: { title: string; message: string | null }) =>
+  message === null ? null : (
+    <Alert variant="destructive">
+      <TriangleAlert />
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
+  );
+
+const AddAllowedIPForm = ({
+  onSubmit,
+  error,
+}: {
+  onSubmit: (values: AllowedIPFormValues) => Promise<void>;
+  error: string | null;
+}) => {
   const form = useZodForm(allowedIPSchema, { defaultValues: { ip: "" } });
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)}>
       <FieldGroup>
-        <FormField control={form.control} name="ip">
-          {({ ref, ...field }) => <Input ref={ref} placeholder="Enter IP address" {...field} />}
+        <FormField
+          control={form.control}
+          name="ip"
+          label="IP address or CIDR range"
+          description="A single address like 203.0.113.7, or a range like 10.0.0.0/8 or 2001:db8::/32"
+        >
+          {({ ref, ...field }) => <Input ref={ref} placeholder="e.g. 10.0.0.0/8" {...field} />}
         </FormField>
+        <ServerError title="Could not add this entry" message={error} />
         <div>
-          <Button type="submit">Add IP Address</Button>
+          <Button type="submit">Add Entry</Button>
         </div>
       </FieldGroup>
     </form>
@@ -75,6 +101,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ proxySettings }) => {
   const [isUIAccessControlModalVisible, setIsUIAccessControlModalVisible] = useState(false);
   const [allowedIPs, setAllowedIPs] = useState<string[]>([]);
   const [ipToDelete, setIPToDelete] = useState<string | null>(null);
+  const [addIPError, setAddIPError] = useState<string | null>(null);
+  const [deleteIPError, setDeleteIPError] = useState<string | null>(null);
   const [ssoConfigured, setSsoConfigured] = useState<boolean>(false);
 
   const baseUrl = useBaseUrl();
@@ -106,10 +134,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ proxySettings }) => {
 
   const handleShowAllowedIPs = async () => {
     try {
-      if (premiumUser !== true) {
-        toast.fromError("This feature is only available for premium users. Please upgrade your account.");
-        return;
-      }
       if (accessToken) {
         const data = await getAllowedIPs(accessToken);
         setAllowedIPs(data && data.length > 0 ? data : [all_ip_address_allowed]);
@@ -121,50 +145,48 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ proxySettings }) => {
       toast.fromError(`Failed to fetch allowed IPs ${error}`);
       setAllowedIPs([all_ip_address_allowed]);
     } finally {
-      if (premiumUser === true) {
-        setIsAllowedIPModalVisible(true);
-      }
+      setIsAllowedIPModalVisible(true);
     }
   };
 
-  const handleAddIP = async (values: { ip: string }) => {
+  const openAddIPModal = () => {
+    setAddIPError(null);
+    setIsAddIPModalVisible(true);
+  };
+
+  const handleAddIP = async (values: AllowedIPFormValues) => {
+    if (!accessToken) return;
     try {
-      if (accessToken) {
-        await addAllowedIP(accessToken, values.ip);
-        // Fetch the updated list of IPs
-        const updatedIPs = await getAllowedIPs(accessToken);
-        setAllowedIPs(updatedIPs);
-        toast.success("IP address added successfully");
-      }
+      await addAllowedIP(accessToken, values.ip);
     } catch (error) {
-      console.error("Error adding IP:", error);
-      toast.fromError(`Failed to add IP address ${error}`);
-    } finally {
-      setIsAddIPModalVisible(false);
+      setAddIPError(serverErrorMessage(error));
+      return;
     }
+    setIsAddIPModalVisible(false);
+    toast.success("Allowed IP entry added");
+    const updatedIPs = await getAllowedIPs(accessToken);
+    setAllowedIPs(updatedIPs && updatedIPs.length > 0 ? updatedIPs : [all_ip_address_allowed]);
   };
 
-  const handleDeleteIP = async (ip: string) => {
+  const handleDeleteIP = (ip: string) => {
     setIPToDelete(ip);
+    setDeleteIPError(null);
     setIsDeleteIPModalVisible(true);
   };
 
   const confirmDeleteIP = async () => {
-    if (ipToDelete && accessToken) {
-      try {
-        await deleteAllowedIP(accessToken, ipToDelete);
-        // Fetch the updated list of IPs
-        const updatedIPs = await getAllowedIPs(accessToken);
-        setAllowedIPs(updatedIPs.length > 0 ? updatedIPs : [all_ip_address_allowed]);
-        toast.success("IP address deleted successfully");
-      } catch (error) {
-        console.error("Error deleting IP:", error);
-        toast.fromError(`Failed to delete IP address ${error}`);
-      } finally {
-        setIsDeleteIPModalVisible(false);
-        setIPToDelete(null);
-      }
+    if (!ipToDelete || !accessToken) return;
+    try {
+      await deleteAllowedIP(accessToken, ipToDelete);
+    } catch (error) {
+      setDeleteIPError(serverErrorMessage(error));
+      return;
     }
+    setIsDeleteIPModalVisible(false);
+    setIPToDelete(null);
+    toast.success("Allowed IP entry deleted");
+    const updatedIPs = await getAllowedIPs(accessToken);
+    setAllowedIPs(updatedIPs && updatedIPs.length > 0 ? updatedIPs : [all_ip_address_allowed]);
   };
 
   const handleAddSSOOk = () => {
@@ -284,10 +306,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ proxySettings }) => {
                 <DialogHeader>
                   <DialogTitle>Manage Allowed IP Addresses</DialogTitle>
                 </DialogHeader>
+                <p className="text-sm text-muted-foreground">
+                  Only requests from these addresses or CIDR ranges can reach the proxy. Leave the list empty to allow
+                  every address.
+                </p>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>IP Address</TableHead>
+                      <TableHead>IP Address or Range</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -307,8 +333,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ proxySettings }) => {
                   </TableBody>
                 </Table>
                 <DialogFooter>
-                  <Button className="mx-1" onClick={() => setIsAddIPModalVisible(true)}>
-                    Add IP Address
+                  <Button className="mx-1" onClick={openAddIPModal}>
+                    Add IP Address or Range
                   </Button>
                   <Button onClick={() => setIsAllowedIPModalVisible(false)}>Close</Button>
                 </DialogFooter>
@@ -318,9 +344,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ proxySettings }) => {
             <Dialog open={isAddIPModalVisible} onOpenChange={(open) => !open && setIsAddIPModalVisible(false)}>
               <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Add Allowed IP Address</DialogTitle>
+                  <DialogTitle>Add Allowed IP Address or Range</DialogTitle>
                 </DialogHeader>
-                <AddAllowedIPForm onSubmit={handleAddIP} />
+                <AddAllowedIPForm onSubmit={handleAddIP} error={addIPError} />
               </DialogContent>
             </Dialog>
 
@@ -330,8 +356,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ proxySettings }) => {
                   <DialogTitle>Confirm Delete</DialogTitle>
                 </DialogHeader>
                 <span className="text-sm text-foreground">
-                  Are you sure you want to delete the IP address: {ipToDelete}?
+                  Are you sure you want to delete the allowed IP entry: {ipToDelete}?
                 </span>
+                <ServerError title="Could not delete this entry" message={deleteIPError} />
                 <DialogFooter>
                   <Button className="mx-1" onClick={() => confirmDeleteIP()}>
                     Yes

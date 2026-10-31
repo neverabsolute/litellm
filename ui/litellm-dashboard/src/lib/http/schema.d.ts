@@ -8221,6 +8221,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ip_analytics/denied": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Denied Requests
+         * @description The most denied (day, address, route, status, reason, key) buckets across every route.
+         */
+        get: operations["get_denied_requests_ip_analytics_denied_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ip_analytics/ip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ip Detail
+         * @description One caller address broken down by the keys it used, and every denial it received.
+         */
+        get: operations["get_ip_detail_ip_analytics_ip_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ip_analytics/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ip Summary
+         * @description Caller addresses ranked by traffic, with their failures, auth denials, spend and keys.
+         */
+        get: operations["get_ip_summary_ip_analytics_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jwt/key/mapping/delete": {
         parameters: {
             query?: never;
@@ -26304,6 +26364,11 @@ export interface components {
          * @enum {string}
          */
         AlertType: "llm_exceptions" | "llm_too_slow" | "llm_requests_hanging" | "budget_alerts" | "spend_reports" | "failed_tracking_spend" | "user_spend_thresholds" | "user_spend_anomalies" | "db_exceptions" | "daily_reports" | "cooldown_deployment" | "new_model_added" | "model_deprecation_warnings" | "outage_alerts" | "region_outage_alerts" | "fallback_reports" | "new_virtual_key_created" | "virtual_key_updated" | "virtual_key_deleted" | "new_team_created" | "team_updated" | "team_deleted" | "new_internal_user_created" | "internal_user_updated" | "internal_user_deleted" | "mcp_tool_description_blocked" | "mcp_pinned_tools_changed";
+        /** AllowedIPEntry */
+        AllowedIPEntry: {
+            /** Ip */
+            ip: string;
+        };
         /** AllowedVectorStoreIndexItem */
         AllowedVectorStoreIndexItem: {
             /** Index Name */
@@ -29999,6 +30064,11 @@ export interface components {
              */
             allowed_file_extensions?: string[] | null;
             /**
+             * Allowed Ips
+             * @description IP addresses and CIDR ranges allowed to call the proxy. Unset or empty admits every address. Per-key allowed_ips narrow this further. The client IP is resolved through trusted_proxy_ranges.
+             */
+            allowed_ips?: string[] | null;
+            /**
              * Allowed Routes
              * @description Proxy API Endpoints you want users to be able to access
              */
@@ -30523,8 +30593,13 @@ export interface components {
              */
             transcribe_media_buckets?: string[] | null;
             /**
+             * Trusted Client Ip Header
+             * @description Header a trusted edge proxy sets to the original client IP, e.g. 'cf-connecting-ip' behind Cloudflare. Read only when the direct peer and every X-Forwarded-For hop are in trusted_proxy_ranges, so a caller that bypasses the edge cannot forge it.
+             */
+            trusted_client_ip_header?: string | null;
+            /**
              * Trusted Proxy Ranges
-             * @description CIDR ranges of trusted reverse proxies allowed to provide identity headers for header-based auth paths such as enable_oauth2_proxy_auth and custom_ui_sso_sign_in_handler, and whose X-Forwarded-For is used to attribute Admin UI sign-in attempts to a source address. Set it to an empty list when clients connect directly, so the peer address is the source. Left unset, or containing an entry that is not an address or CIDR range, the per-source sign-in limit is off.
+             * @description CIDR ranges of trusted reverse proxies allowed to provide identity headers for header-based auth paths such as enable_oauth2_proxy_auth and custom_ui_sso_sign_in_handler, and whose X-Forwarded-For is used to attribute Admin UI sign-in attempts, the logged requester_ip_address, and allowed_ips checks to a source address. The client is the right-most X-Forwarded-For hop outside these ranges. Behind a CDN, list the CDN's published edge ranges here too. Set it to an empty list when clients connect directly, so the peer address is the source. Left unset, or containing an entry that is not an address or CIDR range, the per-source sign-in limit is off and the client IP falls back to use_x_forwarded_for.
              */
             trusted_proxy_ranges?: string[] | null;
             /**
@@ -31999,6 +32074,46 @@ export interface components {
             /** User Ids */
             user_ids: string[];
         };
+        /** DeniedRequestEntry */
+        DeniedRequestEntry: {
+            /** Api Key */
+            api_key: string;
+            /** Date */
+            date: string;
+            /** Denied Requests */
+            denied_requests: number;
+            /** Ip Address */
+            ip_address: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "ip_not_allowed_global" | "ip_not_allowed_key" | "auth_error";
+            /** Route */
+            route: string;
+            /** Status Code */
+            status_code: number;
+        };
+        /**
+         * DeniedRequestsResponse
+         * @description Response for GET /ip_analytics/denied.
+         */
+        DeniedRequestsResponse: {
+            /**
+             * Denied
+             * @default []
+             */
+            denied: components["schemas"]["DeniedRequestEntry"][];
+            /** End Date */
+            end_date: string;
+            /** Start Date */
+            start_date: string;
+        };
         /** Deployment */
         Deployment: {
             /** Blocked */
@@ -32992,6 +33107,11 @@ export interface components {
              * @default []
              */
             allowed_cache_controls: unknown[] | null;
+            /**
+             * Allowed Ips
+             * @description IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.
+             */
+            allowed_ips?: string[] | null;
             /** Allowed Passthrough Routes */
             allowed_passthrough_routes?: unknown[] | null;
             /**
@@ -33162,6 +33282,11 @@ export interface components {
              * @default []
              */
             allowed_cache_controls: unknown[] | null;
+            /**
+             * Allowed Ips
+             * @description IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.
+             */
+            allowed_ips?: string[] | null;
             /** Allowed Passthrough Routes */
             allowed_passthrough_routes?: unknown[] | null;
             /**
@@ -33682,6 +33807,103 @@ export interface components {
         IPAddress: {
             /** Ip */
             ip: string;
+        };
+        /**
+         * IPDetailResponse
+         * @description Response for GET /ip_analytics/ip.
+         */
+        IPDetailResponse: {
+            /**
+             * By Key
+             * @default []
+             */
+            by_key: components["schemas"]["IPKeyActivityEntry"][];
+            /**
+             * Denied
+             * @default []
+             */
+            denied: components["schemas"]["DeniedRequestEntry"][];
+            /** Ip Address */
+            ip_address: string;
+        };
+        /** IPKeyActivityEntry */
+        IPKeyActivityEntry: {
+            /** Api Key */
+            api_key: string;
+            /**
+             * Failed Requests
+             * @default 0
+             */
+            failed_requests: number;
+            /** Key Alias */
+            key_alias?: string | null;
+            /**
+             * Spend
+             * @default 0
+             */
+            spend: number;
+            /**
+             * Successful Requests
+             * @default 0
+             */
+            successful_requests: number;
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
+        };
+        /** IPSummaryEntry */
+        IPSummaryEntry: {
+            /**
+             * Denied Requests
+             * @default 0
+             */
+            denied_requests: number;
+            /**
+             * Distinct Keys
+             * @default 0
+             */
+            distinct_keys: number;
+            /**
+             * Failed Requests
+             * @default 0
+             */
+            failed_requests: number;
+            /** Ip Address */
+            ip_address: string;
+            /** Last Seen At */
+            last_seen_at?: string | null;
+            /**
+             * Spend
+             * @default 0
+             */
+            spend: number;
+            /**
+             * Successful Requests
+             * @default 0
+             */
+            successful_requests: number;
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
+        };
+        /**
+         * IPSummaryResponse
+         * @description Response for GET /ip_analytics/summary.
+         */
+        IPSummaryResponse: {
+            /** End Date */
+            end_date: string;
+            /**
+             * Ips
+             * @default []
+             */
+            ips: components["schemas"]["IPSummaryEntry"][];
+            /** Start Date */
+            start_date: string;
         };
         /**
          * ImageGeneration
@@ -39829,6 +40051,11 @@ export interface components {
              * @default []
              */
             allowed_cache_controls: unknown[] | null;
+            /**
+             * Allowed Ips
+             * @description IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.
+             */
+            allowed_ips?: string[] | null;
             /** Allowed Passthrough Routes */
             allowed_passthrough_routes?: unknown[] | null;
             /**
@@ -42400,6 +42627,11 @@ export interface components {
              * @default []
              */
             allowed_cache_controls: unknown[] | null;
+            /**
+             * Allowed Ips
+             * @description IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.
+             */
+            allowed_ips?: string[] | null;
             /** Allowed Passthrough Routes */
             allowed_passthrough_routes?: unknown[] | null;
             /**
@@ -48627,6 +48859,11 @@ export interface components {
              * @default []
              */
             allowed_cache_controls: unknown[] | null;
+            /**
+             * Allowed Ips
+             * @description IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.
+             */
+            allowed_ips?: string[] | null;
             /** Allowed Passthrough Routes */
             allowed_passthrough_routes?: unknown[] | null;
             /**
@@ -52320,7 +52557,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IPAddress"];
+                "application/json": components["schemas"]["AllowedIPEntry"];
             };
         };
         responses: {
@@ -63355,6 +63592,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvitationModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_denied_requests_ip_analytics_denied_get: {
+        parameters: {
+            query?: {
+                /** @description Start date (YYYY-MM-DD), defaults to 7 days ago */
+                start_date?: string | null;
+                /** @description End date (YYYY-MM-DD), defaults to today */
+                end_date?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeniedRequestsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_detail_ip_analytics_ip_get: {
+        parameters: {
+            query: {
+                ip_address: string;
+                /** @description Start date (YYYY-MM-DD), defaults to 7 days ago */
+                start_date?: string | null;
+                /** @description End date (YYYY-MM-DD), defaults to today */
+                end_date?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_summary_ip_analytics_summary_get: {
+        parameters: {
+            query?: {
+                /** @description Start date (YYYY-MM-DD), defaults to 7 days ago */
+                start_date?: string | null;
+                /** @description End date (YYYY-MM-DD), defaults to today */
+                end_date?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPSummaryResponse"];
                 };
             };
             /** @description Validation Error */

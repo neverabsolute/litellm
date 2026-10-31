@@ -117,3 +117,42 @@ def test_network_context_captures_host_and_proxy_flag():
     assert ctx.client_ip == "203.0.113.9"
     assert ctx.host == "proxy.litellm.ai"
     assert ctx.via_trusted_proxy is True
+
+
+CLOUDFLARE_BEHIND_TRAEFIK = TrustedProxyConfig(
+    use_forwarded_for=True,
+    trusted_proxy_cidrs=["10.0.1.0/24", "173.245.48.0/20"],
+    client_ip_header="cf-connecting-ip",
+)
+
+
+def test_vouched_header_used_when_every_hop_is_a_trusted_proxy():
+    request = make_request(
+        headers={"x-forwarded-for": "173.245.48.10", "cf-connecting-ip": "198.51.100.23"},
+        client=("10.0.1.5", 1),
+    )
+    assert resolve_client_ip(request, CLOUDFLARE_BEHIND_TRAEFIK) == ("198.51.100.23", True)
+
+
+def test_vouched_header_ignored_when_edge_was_bypassed():
+    request = make_request(
+        headers={"x-forwarded-for": "203.0.113.66", "cf-connecting-ip": "198.51.100.23"},
+        client=("10.0.1.5", 1),
+    )
+    assert resolve_client_ip(request, CLOUDFLARE_BEHIND_TRAEFIK) == ("203.0.113.66", True)
+
+
+def test_vouched_header_ignored_from_untrusted_peer():
+    request = make_request(
+        headers={"cf-connecting-ip": "198.51.100.23"},
+        client=("203.0.113.66", 1),
+    )
+    assert resolve_client_ip(request, CLOUDFLARE_BEHIND_TRAEFIK) == ("203.0.113.66", False)
+
+
+def test_invalid_vouched_header_falls_back_to_peer():
+    request = make_request(
+        headers={"x-forwarded-for": "173.245.48.10", "cf-connecting-ip": "not-an-ip"},
+        client=("10.0.1.5", 1),
+    )
+    assert resolve_client_ip(request, CLOUDFLARE_BEHIND_TRAEFIK) == ("10.0.1.5", True)

@@ -75,6 +75,7 @@ from litellm.proxy.db.db_transaction_queue.window_spend_update_queue import (
     WindowSpendUpdateQueue,
 )
 from litellm.proxy.db.exception_handler import PrismaDBExceptionHandler, db_write_failure_is_requeue_safe
+from litellm.proxy.db.ip_activity_tracking import ip_activity_accumulator
 from litellm.proxy.db.model_usage_rollup import build_model_usage_transaction
 from litellm.proxy.db.request_error_tracking import request_error_accumulator
 from litellm.proxy.db.rollup_lock_timeout import apply_rollup_lock_timeout
@@ -91,6 +92,7 @@ from litellm.proxy.spend_tracking.savings import (
 from litellm.proxy.spend_tracking.spend_log_error_logger import spend_log_error
 from litellm.repositories.prisma_protocols import BatchTable
 from litellm.responses.streaming_iterator import spawn_logging_task
+from litellm.types.proxy.ip_activity import IPActivityCounts, IPActivityKey
 from litellm.types.utils import CallTypes
 
 if TYPE_CHECKING:
@@ -1235,6 +1237,10 @@ class DBSpendUpdateWriter:
             self._record_request_error(payload=payload_copy, prisma_client=prisma_client)
         except Exception as e:  # noqa: BLE001  # the rollup must never skip the sibling spend writes
             _report_spend_update_step_failure("_record_request_error", payload=payload_copy, exc=e)
+        try:
+            self._record_ip_activity(payload=payload_copy, prisma_client=prisma_client)
+        except Exception as e:  # noqa: BLE001  # the rollup must never skip the sibling spend writes
+            _report_spend_update_step_failure("_record_ip_activity", payload=payload_copy, exc=e)
         await self._run_spend_update_step(
             "add_spend_log_transaction_to_daily_org_transaction",
             self.add_spend_log_transaction_to_daily_org_transaction(
@@ -2816,6 +2822,27 @@ class DBSpendUpdateWriter:
             request_status=prisma_client.get_request_status(payload),  # pyright: ignore[reportUnknownMemberType]  # legacy payload union; this caller supplies a typed spend payload
             date=date.split("T")[0],
             is_internal_call=internal_origin or _is_billed_retry_attempt(metadata),
+        )
+
+    @staticmethod
+    def _record_ip_activity(*, payload: SpendLogsPayload, prisma_client: PrismaClient | None) -> None:
+        ip_address: Final = payload["requester_ip_address"]
+        start_time: Final = payload["startTime"]
+        date: Final = start_time.isoformat() if isinstance(start_time, datetime) else str(start_time or "")
+        if prisma_client is None or not ip_address or not date:
+            return
+        metadata: Final = _parse_spend_log_metadata(payload)
+        if metadata.get(INTERNAL_CALL_ORIGIN_METADATA_KEY) or _is_billed_retry_attempt(metadata):  # pyright: ignore[reportUnknownMemberType]  # TypedDict.get overloads carry Any defaults
+            return
+        succeeded: Final = prisma_client.get_request_status(payload) == "success"  # pyright: ignore[reportUnknownMemberType]  # legacy payload union; this caller supplies a typed spend payload
+        ip_activity_accumulator.record_activity(
+            IPActivityKey(date=date.split("T")[0], ip_address=ip_address, api_key=payload["api_key"] or ""),
+            IPActivityCounts(
+                successful_requests=int(succeeded),
+                failed_requests=int(not succeeded),
+                spend=payload["spend"] or 0.0,
+                total_tokens=payload["total_tokens"] or 0,
+            ),
         )
 
     async def _common_add_spend_log_transaction_to_daily_transaction(

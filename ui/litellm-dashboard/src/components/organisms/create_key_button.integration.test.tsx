@@ -156,6 +156,7 @@ const OPTIONAL_OPEN_PAYLOAD = {
   prompts: undefined,
   access_group_ids: undefined,
   allowed_passthrough_routes: undefined,
+  allowed_ips: undefined,
   allowed_vector_store_ids: undefined,
   tags: undefined,
 };
@@ -482,6 +483,36 @@ describe("CreateKey", () => {
       await submit();
 
       expect((await createdPayload()).tags).toStrictEqual(["production"]);
+    });
+
+    it("routes typed IP addresses and CIDR ranges into allowed_ips", async () => {
+      await openModal();
+      await nameTheKey();
+      await openSection(/Optional Settings/i);
+      await userEvent.type(await screen.findByLabelText(/Allowed IPs/), "203.0.113.7,10.0.0.0/8{Enter}");
+      await submit();
+
+      expect((await createdPayload()).allowed_ips).toStrictEqual(["203.0.113.7", "10.0.0.0/8"]);
+    });
+
+    it("blocks the submit and names the entry when an allowed IP is not an address or range", async () => {
+      await openModal();
+      await nameTheKey();
+      await openSection(/Optional Settings/i);
+      await userEvent.type(await screen.findByLabelText(/Allowed IPs/), "10.0.0.0/8,office-vpn{Enter}");
+      await submit();
+
+      expect(await screen.findByText("Not an IP address or CIDR range: office-vpn")).toBeInTheDocument();
+      expect(vi.mocked(keyCreateCall)).not.toHaveBeenCalled();
+    });
+
+    it("hides the allowed IPs field from a non-admin", async () => {
+      state.authorized = { ...state.authorized, userRole: "Internal User" };
+      await openModal();
+      await openSection(/Optional Settings/i);
+      await screen.findByLabelText("Tags");
+
+      expect(screen.queryByLabelText(/Allowed IPs/)).not.toBeInTheDocument();
     });
 
     it("routes a chosen access group into access_group_ids", async () => {

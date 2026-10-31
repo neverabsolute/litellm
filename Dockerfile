@@ -141,8 +141,9 @@ USER root
 # https://github.com/BerriAI/litellm/issues/33518
 RUN echo "https://packages.wolfi.dev/os" >> /etc/apk/repositories
 
-# node (without npm) is required by the prisma CLI at runtime
-RUN apk add --no-cache bash openssl libssl3 tzdata nodejs python-3.13 libsndfile libevent
+# node (without npm) is required by the prisma CLI at runtime. curl and wget
+# are there for container-level healthchecks (e.g. Coolify), which shell out to one of them
+RUN apk add --no-cache bash openssl libssl3 tzdata nodejs python-3.13 libsndfile libevent curl wget
 COPY --from=pgbouncer-builder /usr/local/bin/pgbouncer /usr/local/bin/pgbouncer
 
 WORKDIR /app

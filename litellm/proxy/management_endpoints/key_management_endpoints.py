@@ -90,6 +90,7 @@ from litellm.proxy.management_endpoints.common_utils import (  # noqa: F401  # l
     _set_object_metadata_field,  # pyright: ignore[reportPrivateUsage,reportUnusedImport]  # backwards-compatible package export
     _team_member_has_permission,  # pyright: ignore[reportPrivateUsage,reportUnusedImport]  # backwards-compatible package export
     _user_has_admin_view,  # pyright: ignore[reportPrivateUsage,reportUnusedImport]  # backwards-compatible package export
+    check_allowed_ips_caller_permission,
     check_allowed_passthrough_routes_caller_permission,
     check_denied_passthrough_routes_caller_permission,
     check_disable_global_guardrails_caller_permission,
@@ -2487,6 +2488,7 @@ async def generate_key_fn(
             data=data,
             user_api_key_dict=user_api_key_dict,
         )
+        check_allowed_ips_caller_permission(data, user_api_key_dict)
 
         # For non-admin internal users: auto-assign caller's user_id if not provided
         # This prevents creating unbound keys with no user association (LIT-1884)
@@ -2661,6 +2663,7 @@ async def generate_service_account_key_fn(
         data=data,
         user_api_key_dict=user_api_key_dict,
     )
+    check_allowed_ips_caller_permission(data, user_api_key_dict)
 
     await validate_team_id_used_in_service_account_request(
         team_id=data.team_id,
@@ -3348,6 +3351,11 @@ async def _process_single_key_update(
         user_api_key_dict,
         existing_metadata=existing_key_row.metadata,  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]  # LiteLLM_VerificationToken.metadata is a bare dict
     )
+    check_allowed_ips_caller_permission(
+        update_key_request,
+        user_api_key_dict,
+        existing_metadata=existing_key_row.metadata,  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]  # LiteLLM_VerificationToken.metadata is a bare dict
+    )
 
     # Custom key update hook
     if user_custom_key_update is not None:
@@ -3890,6 +3898,11 @@ async def _validate_update_key_data(
         user_api_key_cache=user_api_key_cache,
     )
     check_denied_passthrough_routes_caller_permission(
+        data,
+        user_api_key_dict,
+        existing_metadata=existing_key_row.metadata,  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]  # LiteLLM_VerificationToken.metadata is a bare dict
+    )
+    check_allowed_ips_caller_permission(
         data,
         user_api_key_dict,
         existing_metadata=existing_key_row.metadata,  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]  # LiteLLM_VerificationToken.metadata is a bare dict
@@ -6671,6 +6684,11 @@ async def regenerate_key_fn(
                 detail={"error": "You are not authorized to regenerate this key"},
             )
         check_denied_passthrough_routes_caller_permission(
+            data,
+            user_api_key_dict,
+            existing_metadata=_key_in_db.metadata,  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]  # LiteLLM_VerificationToken.metadata is a bare dict
+        )
+        check_allowed_ips_caller_permission(
             data,
             user_api_key_dict,
             existing_metadata=_key_in_db.metadata,  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]  # LiteLLM_VerificationToken.metadata is a bare dict

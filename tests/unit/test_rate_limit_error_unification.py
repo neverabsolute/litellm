@@ -1558,7 +1558,7 @@ class TestBudgetExceededErrorLlmProviderEnrichment:
                 {"use_x_forwarded_for": False},
             ),
             patch(
-                "litellm.proxy.auth.auth_exception_handler.get_request_ip_address",
+                "litellm.proxy.auth.auth_exception_handler.client_ip_from_request",
                 return_value="127.0.0.1",
             ),
         ):

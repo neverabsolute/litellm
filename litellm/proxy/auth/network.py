@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import ipaddress
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from functools import lru_cache
 from typing import Final
 
 from fastapi import Request
@@ -19,9 +20,18 @@ class NetworkContext(LiteLLMBaseModel):
     via_trusted_proxy: bool = False
 
 
+TRUSTED_CLIENT_IP_HEADER_KEY: Final = "trusted_client_ip_header"
+
+
+def trusted_client_ip_header(general_settings: Mapping[str, object]) -> str | None:
+    header: Final = general_settings.get(TRUSTED_CLIENT_IP_HEADER_KEY)
+    return header.strip() if isinstance(header, str) and header.strip() else None
+
+
 class TrustedProxyConfig(LiteLLMBaseModel):
     use_forwarded_for: bool = False
     trusted_proxy_cidrs: Sequence[str] = Field(default_factory=tuple)
+    client_ip_header: str | None = None
 
 
 def normalize_cidr_ranges(configured_ranges: object, *, setting_name: str = "trusted_proxy_cidrs") -> list[str]:
@@ -51,13 +61,18 @@ def parse_trusted_proxy_ranges(
     return networks
 
 
+@lru_cache(maxsize=64)
+def parse_cidr_ranges_cached(cidrs: tuple[str, ...], setting_name: str) -> tuple[TrustedProxyNetwork, ...]:
+    return tuple(parse_trusted_proxy_ranges(cidrs, setting_name=setting_name))
+
+
 def _unmapped(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
     if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
         return addr.ipv4_mapped
     return addr
 
 
-def ip_in_networks(client_ip: str | None, networks: list[TrustedProxyNetwork]) -> bool:
+def ip_in_networks(client_ip: str | None, networks: Sequence[TrustedProxyNetwork]) -> bool:
     if not client_ip or not networks:
         return False
     try:
@@ -80,9 +95,10 @@ def resolve_client_ip(request: Request, config: TrustedProxyConfig) -> tuple[str
     """Resolve the real client IP, trusting X-Forwarded-For only when the direct
     peer is itself a configured trusted proxy. Walks the header right-to-left and
     returns the first hop that is not a trusted proxy, so a forged left-most entry
-    cannot spoof the client."""
+    cannot spoof the client. When every hop is a trusted proxy, the outermost one
+    (e.g. a CDN edge) vouches for ``client_ip_header`` such as CF-Connecting-IP."""
     peer: Final = request.client.host if request.client else None
-    networks: Final = parse_trusted_proxy_ranges(config.trusted_proxy_cidrs)
+    networks: Final = parse_cidr_ranges_cached(tuple(config.trusted_proxy_cidrs), "trusted_proxy_cidrs")
     if not config.use_forwarded_for or not ip_in_networks(peer, networks):
         return peer, False
     forwarded: Final = request.headers.get("x-forwarded-for", "")
@@ -90,6 +106,9 @@ def resolve_client_ip(request: Request, config: TrustedProxyConfig) -> tuple[str
     for hop in reversed(hops):
         if _is_valid_ip(hop) and not ip_in_networks(hop, networks):
             return hop, True
+    vouched: Final = (request.headers.get(config.client_ip_header) or "").strip() if config.client_ip_header else ""
+    if vouched and _is_valid_ip(vouched):
+        return vouched, True
     return peer, True
 
 

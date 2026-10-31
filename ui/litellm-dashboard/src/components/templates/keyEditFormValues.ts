@@ -7,6 +7,8 @@ import { extractLoggingSettings, formatMetadataForDisplay, stripTagsFromMetadata
 import { mapInternalToDisplayNames } from "../callback_info_helpers";
 import { estimateChecks, estimateFields } from "./estimatedOutputTokens";
 import { canonicalBudgetDuration, keyOrganizationId } from "./keyEditFieldNormalizers";
+import { storedAllowedIps, withoutAllowedIps } from "./keyAllowedIps";
+import { ipEntriesError } from "@/utils/ipAddress";
 
 export interface McpServersAndGroups {
   servers: string[];
@@ -45,6 +47,7 @@ export interface KeyEditFormValues {
   prompts?: string[];
   access_group_ids?: string[];
   allowed_passthrough_routes?: string[];
+  allowed_ips?: string[];
   vector_stores?: string[];
   mcp_servers_and_groups?: McpServersAndGroups;
   mcp_tool_permissions?: Record<string, string[]>;
@@ -97,6 +100,7 @@ export const toKeyEditFormValues = (keyData: KeyResponse): KeyEditFormValues => 
   prompts: readMetadata(keyData, "prompts") as string[] | undefined,
   access_group_ids: keyData.access_group_ids || [],
   allowed_passthrough_routes: (keyData as { allowed_passthrough_routes?: string[] }).allowed_passthrough_routes,
+  allowed_ips: storedAllowedIps(keyData.metadata),
   vector_stores: keyData.object_permission?.vector_stores || [],
   mcp_servers_and_groups: {
     servers: keyData.object_permission?.mcp_servers || [],
@@ -113,7 +117,7 @@ export const toKeyEditFormValues = (keyData: KeyResponse): KeyEditFormValues => 
   team_id: keyData.team_id,
   project_id: keyData.project_id,
   logging_settings: extractLoggingSettings(keyData.metadata),
-  metadata: formatMetadataForDisplay(stripTagsFromMetadata(keyData.metadata)),
+  metadata: formatMetadataForDisplay(withoutAllowedIps(stripTagsFromMetadata(keyData.metadata))),
   duration: (keyData as { duration?: string }).duration ?? "",
   token: keyData.token || keyData.token_id,
   disabled_callbacks: Array.isArray(readMetadata(keyData, "litellm_disabled_callbacks"))
@@ -155,6 +159,13 @@ export const keyEditFormSchema = z.object({
   prompts: z.custom<string[] | undefined>().optional(),
   access_group_ids: z.custom<string[] | undefined>().optional(),
   allowed_passthrough_routes: z.custom<string[] | undefined>().optional(),
+  allowed_ips: z
+    .custom<string[] | undefined>()
+    .superRefine((value, ctx) => {
+      const message = ipEntriesError(value);
+      if (message !== undefined) ctx.addIssue({ code: "custom", message });
+    })
+    .optional(),
   vector_stores: z.custom<string[] | undefined>().optional(),
   mcp_servers_and_groups: z.custom<McpServersAndGroups | undefined>().optional(),
   mcp_tool_permissions: z.custom<Record<string, string[]> | undefined>().optional(),
@@ -206,6 +217,7 @@ export const toSubmittedValues = (
   ...(canViewPrompts ? { prompts: values.prompts } : {}),
   access_group_ids: values.access_group_ids,
   allowed_passthrough_routes: values.allowed_passthrough_routes,
+  allowed_ips: values.allowed_ips,
   vector_stores: values.vector_stores,
   mcp_servers_and_groups: values.mcp_servers_and_groups,
   mcp_tool_permissions: values.mcp_tool_permissions,

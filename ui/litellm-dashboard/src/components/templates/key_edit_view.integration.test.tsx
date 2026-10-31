@@ -400,6 +400,62 @@ describe("KeyEditView", () => {
     testQueryClient.removeQueries({ queryKey: ["uiSettings"] });
   });
 
+  describe("allowed IPs", () => {
+    const KEY_WITH_IPS: KeyResponse = {
+      ...MOCK_KEY_DATA,
+      metadata: { ...MOCK_KEY_DATA.metadata, allowed_ips: ["10.0.0.0/8"], team: "research" },
+    };
+
+    const renderAs = (userRole: string, onSubmit = vi.fn().mockResolvedValue(undefined)) => {
+      renderWithProviders(
+        <KeyEditView
+          keyData={KEY_WITH_IPS}
+          onCancel={() => {}}
+          onSubmit={onSubmit}
+          accessToken="test-token"
+          userID="user-123"
+          userRole={userRole}
+          premiumUser={true}
+        />,
+      );
+      return onSubmit;
+    };
+
+    it("loads the stored list into the field and submits a typed addition", async () => {
+      const onSubmit = renderAs("proxy_admin");
+
+      expect(await screen.findByText("10.0.0.0/8")).toBeInTheDocument();
+      await userEvent.type(screen.getByLabelText(/Allowed IPs/), "2001:db8::/32{Enter}");
+      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      expect(onSubmit.mock.calls[0][0].allowed_ips).toEqual(["10.0.0.0/8", "2001:db8::/32"]);
+    });
+
+    it("blocks the save and names the entry that is not an address or range", async () => {
+      const onSubmit = renderAs("proxy_admin");
+
+      await userEvent.type(await screen.findByLabelText(/Allowed IPs/), "office{Enter}");
+      await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+      expect(await screen.findByText("Not an IP address or CIDR range: office")).toBeInTheDocument();
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it("keeps the list out of the metadata JSON so the two editors cannot disagree", async () => {
+      renderAs("proxy_admin");
+
+      expect(await screen.findByLabelText("Metadata")).toHaveValue('{\n  "team": "research"\n}');
+    });
+
+    it("hides the field from a role that cannot change it", async () => {
+      renderAs("internal_user");
+
+      await screen.findByLabelText("Metadata");
+      expect(screen.queryByLabelText(/Allowed IPs/)).not.toBeInTheDocument();
+    });
+  });
+
   describe("policy and prompt fields", () => {
     const renderAs = (userRole: string) =>
       renderWithProviders(
@@ -2575,6 +2631,7 @@ describe("KeyEditView", () => {
     prompts: undefined,
     access_group_ids: [],
     allowed_passthrough_routes: undefined,
+    allowed_ips: [],
     vector_stores: [],
     mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: [] },
     mcp_tool_permissions: {},
