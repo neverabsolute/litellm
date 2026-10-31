@@ -32,10 +32,6 @@ describe("CodeSnippets", () => {
     apiKey: "1234567890",
     chatHistory: [],
     selectedTags: [],
-    selectedVectorStores: [],
-    selectedGuardrails: [],
-    selectedPolicies: [],
-    selectedMCPServers: [],
     selectedSdk: "openai" as const,
     selectedVoice: "alloy",
   };

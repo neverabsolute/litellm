@@ -4,11 +4,8 @@ import { makeOpenAIChatCompletionRequest } from "@/components/llm_calls/chat_com
 import type { CustomHeaders } from "@/components/llm_calls/request_headers";
 import type { ResponseHeadersListener } from "@/lib/http/observeResponseHeaders";
 import { makeOpenAIResponsesRequest } from "@/components/llm_calls/responses_api";
-import type { MCPServer, MCPToolset } from "@/components/mcp_tools/types";
-import { callMCPTool } from "@/components/networking";
 import type { UseChatHistoryReturn } from "../../hooks/useChatHistory";
 import type { UseCodeInterpreterReturn } from "../../hooks/useCodeInterpreter";
-import { makeA2ASendMessageRequest } from "../../llm_calls/a2a_send_message";
 import { makeAnthropicMessagesRequest } from "../../llm_calls/anthropic_messages";
 import { makeOpenAIAudioSpeechRequest } from "../../llm_calls/audio_speech";
 import { makeOpenAIAudioTranscriptionRequest } from "../../llm_calls/audio_transcriptions";
@@ -20,8 +17,6 @@ import type { PlaygroundSettings } from "./playgroundSettings";
 
 type ApiMessage = { role: string; content: string | any[] };
 
-export type DirectToolCall = Readonly<{ serverId: string; tool: string; arguments: Record<string, unknown> }>;
-
 export type DispatchContext = Readonly<{
   settings: PlaygroundSettings;
   apiKey: string;
@@ -32,18 +27,13 @@ export type DispatchContext = Readonly<{
   signal: AbortSignal;
   files: readonly File[];
   customHeaders: CustomHeaders;
-  mcpServers: readonly MCPServer[];
-  mcpToolsets: readonly MCPToolset[];
-  directCall: DirectToolCall | null;
   chat: UseChatHistoryReturn;
   codeInterpreter: UseCodeInterpreterReturn;
   onHeaders: ResponseHeadersListener;
   onResponseId: (responseId: string) => void;
 }>;
 
-const optional = (values: readonly string[]): string[] | undefined => (values.length > 0 ? [...values] : undefined);
-
-const NON_TEXT_FLAGS = ["isImage", "isAudio", "isEmbeddings", "isError", "mcpToolCall"] as const;
+const NON_TEXT_FLAGS = ["isImage", "isAudio", "isEmbeddings", "isError"] as const;
 
 const isText = (message: MessageType): boolean => NON_TEXT_FLAGS.every((flag) => !message[flag]);
 
@@ -63,30 +53,12 @@ const inExchange = (history: readonly MessageType[], index: number): boolean =>
 export const textHistory = (history: readonly MessageType[]): ApiMessage[] =>
   history.filter((_, index) => inExchange(history, index)).map(({ role, content }) => ({ role, content }));
 
-const toolResultText = (result: { content?: { type: string; text?: string }[] } | null): string => {
-  if (result?.content && result.content.length > 0) {
-    return JSON.stringify(
-      result.content.map((item) => (item.type === "text" ? item.text : item)).filter(Boolean),
-      null,
-      2,
-    );
-  }
-  return JSON.stringify(result, null, 2) || "Tool executed successfully.";
-};
-
 export async function dispatchRequest(context: DispatchContext): Promise<void> {
   const { settings, apiKey, text, userMessage, history, traceId, signal, chat, onHeaders } = context;
   const model = settings.model ?? "";
   const tags = [...settings.tags];
   const baseUrl = settings.proxyBaseUrl || undefined;
   const headers = context.customHeaders;
-  const vectorStores = optional(settings.vectorStores);
-  const guardrails = optional(settings.guardrails);
-  const policies = optional(settings.policies);
-  const mcpSelection = [...settings.mcpSelection];
-  const mcpServers = [...context.mcpServers];
-  const toolLimits = Object.fromEntries(Object.entries(settings.toolLimits).map(([key, tools]) => [key, [...tools]]));
-  const mcpToolsets = [...context.mcpToolsets];
 
   switch (settings.endpoint) {
     case EndpointType.CHAT:
@@ -107,21 +79,12 @@ export async function dispatchRequest(context: DispatchContext): Promise<void> {
         chat.updateTimingData,
         chat.updateUsageData,
         traceId,
-        vectorStores,
-        guardrails,
-        policies,
-        mcpSelection,
         chat.updateChatImageUI,
-        chat.updateSearchResults,
         settings.temperature ?? undefined,
         settings.maxTokens ?? undefined,
         chat.updateTotalLatency,
         baseUrl,
-        mcpServers,
-        toolLimits,
-        chat.handleMCPEvent,
         settings.simulateFallback,
-        mcpToolsets,
         settings.stream,
         headers,
         onHeaders,
@@ -139,19 +102,11 @@ export async function dispatchRequest(context: DispatchContext): Promise<void> {
         chat.updateTimingData,
         chat.updateUsageData,
         traceId,
-        vectorStores,
-        guardrails,
-        policies,
-        mcpSelection,
         chat.useApiSessionManagement ? chat.responsesSessionId : null,
         context.onResponseId,
-        chat.handleMCPEvent,
         context.codeInterpreter.enabled,
         context.codeInterpreter.setResult,
         baseUrl,
-        mcpServers,
-        toolLimits,
-        mcpToolsets,
         settings.stream,
         chat.updateTotalLatency,
         headers,
@@ -170,14 +125,7 @@ export async function dispatchRequest(context: DispatchContext): Promise<void> {
         chat.updateTimingData,
         chat.updateUsageData,
         traceId,
-        vectorStores,
-        guardrails,
-        policies,
-        mcpSelection,
         baseUrl,
-        mcpServers,
-        toolLimits,
-        mcpToolsets,
         settings.stream,
         headers,
         onHeaders,
@@ -262,32 +210,6 @@ export async function dispatchRequest(context: DispatchContext): Promise<void> {
         headers,
         onHeaders,
       );
-    case EndpointType.A2A_AGENTS:
-      return makeA2ASendMessageRequest(
-        settings.agent ?? "",
-        text,
-        (chunk, servedModel) => chat.updateTextUI("assistant", chunk, servedModel),
-        apiKey,
-        signal,
-        chat.updateTimingData,
-        chat.updateTotalLatency,
-        chat.updateA2AMetadata,
-        baseUrl,
-        guardrails,
-        headers,
-      );
-    case EndpointType.MCP: {
-      if (!context.directCall) return;
-      const result = await callMCPTool(
-        apiKey,
-        context.directCall.serverId,
-        context.directCall.tool,
-        context.directCall.arguments,
-        { ...(guardrails ? { guardrails } : {}), customHeaders: { ...headers } },
-      );
-      chat.updateTextUI("assistant", toolResultText(result));
-      return;
-    }
     case EndpointType.REALTIME:
     case EndpointType.VIDEO:
       return;

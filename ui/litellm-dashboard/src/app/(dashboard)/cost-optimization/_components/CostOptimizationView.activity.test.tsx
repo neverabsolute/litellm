@@ -4,9 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const mockDailyActivityAggregatedCall = vi.fn();
-const { useAuthorizedMock, mockToolSpendResponse } = vi.hoisted(() => ({
+const { useAuthorizedMock } = vi.hoisted(() => ({
   useAuthorizedMock: vi.fn(),
-  mockToolSpendResponse: { by_tool: [], daily: [], start_date: null, end_date: null },
 }));
 
 vi.mock("@/app/(dashboard)/hooks/useAuthorized", () => ({
@@ -16,7 +15,6 @@ vi.mock("@/app/(dashboard)/hooks/useAuthorized", () => ({
 vi.mock("@/components/networking", () => ({
   dailyActivityAggregatedCall: (...args: unknown[]) => mockDailyActivityAggregatedCall(...args),
   cacheLeakageKeysCall: vi.fn().mockResolvedValue({ api_keys: [] }),
-  getToolSpend: vi.fn().mockResolvedValue(mockToolSpendResponse),
   getGeneralSettingsCall: vi.fn().mockResolvedValue([]),
   organizationListCall: vi.fn().mockResolvedValue([]),
 }));
@@ -40,7 +38,6 @@ vi.mock("@/app/(dashboard)/router-settings/_components/general_settings", () => 
   PromptCachingPanel: () => <div data-testid="caching-settings" />,
 }));
 
-vi.mock("./PromptCompressionTab", () => ({ __esModule: true, default: () => <div /> }));
 vi.mock("./PromptCachingRequestsTable", () => ({ default: () => <div /> }));
 
 import CostOptimizationView from "./CostOptimizationView";

@@ -131,7 +131,7 @@ describe("Chat layout product navigation", () => {
 
   it.each([
     { pathname: "/ui/chat", root: "/", gateway: "/ui/" },
-    { pathname: "/gateway/ui/chat/models/", root: "/gateway", gateway: "/gateway/ui/" },
+    { pathname: "/gateway/ui/chat/logs/", root: "/gateway", gateway: "/gateway/ui/" },
   ])(
     "should render Chat at $pathname and clear a saved plugin when returning to AI Gateway",
     async ({ pathname, root, gateway }) => {

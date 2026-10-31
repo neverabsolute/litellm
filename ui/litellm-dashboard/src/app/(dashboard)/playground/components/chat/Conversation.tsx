@@ -14,14 +14,11 @@ import {
   Repeat,
   ScanSearch,
   Timer,
-  Wrench,
 } from "lucide-react";
 import { EndpointType } from "@/components/chat_ui/mode_endpoint_mapping";
-import MCPEventsDisplay from "@/components/chat_ui/MCPEventsDisplay";
 import ReasoningContent from "@/components/chat_ui/ReasoningContent";
 import type { MessageAttachment, MessageType } from "@/components/chat_ui/types";
 import type { CodeInterpreterResult } from "@/components/llm_calls/code_interpreter_handler";
-import type { MCPEvent } from "@/components/mcp_tools/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Attachment,
@@ -47,9 +44,7 @@ import {
 } from "@/components/ui/message-scroller";
 import { Spinner } from "@/components/ui/spinner";
 import { Toggle } from "@/components/ui/toggle";
-import A2AMetrics from "../chat_ui/A2AMetrics";
 import CodeInterpreterOutput from "../chat_ui/CodeInterpreterOutput";
-import { SearchResultsDisplay } from "../chat_ui/SearchResultsDisplay";
 import { formatBytes } from "./composerFiles";
 import { CopyIconButton, FallbackBadge, LongValue } from "./ModelName";
 import { ReplyBody } from "./ReplyContent";
@@ -58,8 +53,6 @@ export const formatSeconds = (ms: number): string => `${(ms / 1000).toFixed(2)}s
 
 export const formatCost = (cost: number): string =>
   `$${cost < 0.0001 && cost > 0 ? cost.toPrecision(2) : cost.toFixed(4)}`;
-
-const MCP_EVENT_ENDPOINTS: readonly EndpointType[] = [EndpointType.CHAT, EndpointType.RESPONSES];
 
 const textOf = (message: MessageType): string => (typeof message.content === "string" ? message.content : "");
 
@@ -113,7 +106,6 @@ function ReplyMetrics({ message }: { message: MessageType }) {
         <Metric icon={<DatabaseZap />} value={String(usage.cacheReadTokens)} label="cached" />
       ) : null}
       {cost !== undefined && <Metric icon={<Coins />} value={formatCost(cost)} />}
-      {message.toolName && <Metric icon={<Wrench />} value={message.toolName} />}
       {cached && <Badge variant="secondary">Cached response</Badge>}
     </div>
   );
@@ -147,19 +139,6 @@ function UserTurn({ message }: { message: MessageType }) {
             ))}
           </AttachmentGroup>
         )}
-        {message.mcpToolCall && (
-          <Bubble variant="muted" align="end">
-            <BubbleContent className="flex flex-col gap-1">
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Wrench className="size-3.5" />
-                Called <span className="font-mono text-foreground">{message.mcpToolCall.tool}</span>
-              </span>
-              <pre className="font-mono text-xs whitespace-pre-wrap">
-                {JSON.stringify(message.mcpToolCall.arguments, null, 2)}
-              </pre>
-            </BubbleContent>
-          </Bubble>
-        )}
         {text && (
           <Bubble variant="muted" align="end">
             <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
@@ -172,7 +151,6 @@ function UserTurn({ message }: { message: MessageType }) {
 
 export type LastReplyExtras = Readonly<{
   endpoint: EndpointType;
-  mcpEvents: readonly MCPEvent[];
   codeInterpreter: CodeInterpreterResult | null;
   accessToken: string;
 }>;
@@ -191,7 +169,6 @@ function AssistantReply({
   onInspect: () => void;
 }) {
   const model = replyModel(message);
-  const showMcpEvents = isLast && extras.mcpEvents.length > 0 && MCP_EVENT_ENDPOINTS.includes(extras.endpoint);
   const showCode = isLast && extras.codeInterpreter && extras.endpoint === EndpointType.RESPONSES;
   return (
     <Message>
@@ -208,8 +185,6 @@ function AssistantReply({
           </MessageHeader>
         )}
         {message.reasoningContent && <ReasoningContent reasoningContent={message.reasoningContent} />}
-        {showMcpEvents && <MCPEventsDisplay events={[...extras.mcpEvents]} />}
-        {message.searchResults && <SearchResultsDisplay searchResults={message.searchResults} />}
         {showCode && extras.codeInterpreter && (
           <CodeInterpreterOutput
             code={extras.codeInterpreter.code}
@@ -228,15 +203,7 @@ function AssistantReply({
         )}
         <MessageFooter className="items-center gap-2 px-0 font-normal">
           <div className="min-w-0 flex-1">
-            {message.a2aMetadata ? (
-              <A2AMetrics
-                a2aMetadata={message.a2aMetadata}
-                timeToFirstToken={message.timeToFirstToken}
-                totalLatency={message.totalLatency}
-              />
-            ) : (
-              <ReplyMetrics message={message} />
-            )}
+            <ReplyMetrics message={message} />
           </div>
           <span className="flex shrink-0 items-center gap-0.5">
             {!message.isImage && !message.isAudio && <CopyIconButton value={textOf(message)} label="reply" />}

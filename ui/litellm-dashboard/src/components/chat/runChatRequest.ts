@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { makeOpenAIResponsesRequest } from "@/components/llm_calls/responses_api";
 import { generateChatImages } from "./imageHelpers";
 import { toResponsesMessages } from "./attachmentHelpers";
-import type { AssistantMessageUpdate, ChatMessage, MCPEvent } from "./types";
+import type { AssistantMessageUpdate, ChatMessage } from "./types";
 
 interface ChatRequestOptions {
   model: string;
@@ -10,12 +10,8 @@ interface ChatRequestOptions {
   prompt: string;
   accessToken: string;
   signal: AbortSignal;
-  messages: Pick<
-    ChatMessage,
-    "role" | "content" | "attachments" | "generatedImages" | "imageGeneration" | "mcpEvents"
-  >[];
+  messages: Pick<ChatMessage, "role" | "content" | "attachments" | "generatedImages" | "imageGeneration">[];
   previousResponseId?: string | null;
-  mcpServers?: string[];
   onResponseId: (id: string | null) => void;
   onUpdate: (update: AssistantMessageUpdate) => void;
 }
@@ -43,13 +39,11 @@ export async function runChatRequest({
   signal,
   messages,
   previousResponseId,
-  mcpServers,
   onResponseId,
   onUpdate,
 }: ChatRequestOptions): Promise<void> {
   let content = "";
   let reasoningContent = "";
-  const mcpEvents: MCPEvent[] = [];
 
   try {
     signal.throwIfAborted();
@@ -77,18 +71,10 @@ export async function runChatRequest({
       (timeToFirstToken) => onUpdate({ timeToFirstToken }),
       (usage) => onUpdate({ usage }),
       undefined,
-      undefined,
-      undefined,
-      undefined,
-      mcpServers?.length ? mcpServers : undefined,
       previousResponseId,
       (id) => {
         if (!signal.aborted) onResponseId(id);
       },
-      (event) => mcpEvents.push(event),
-      undefined,
-      undefined,
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -101,7 +87,5 @@ export async function runChatRequest({
     const stopped = signal.aborted || (error instanceof Error && error.name === "AbortError");
     const errorMessage = requestErrorMessage(error, messages, mode);
     onUpdate({ content: stopped ? content + " [stopped]" : content || errorMessage });
-  } finally {
-    if (mcpEvents.length) onUpdate({ mcpEvents });
   }
 }

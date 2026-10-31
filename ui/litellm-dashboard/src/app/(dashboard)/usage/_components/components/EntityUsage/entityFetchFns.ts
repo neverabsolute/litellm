@@ -47,6 +47,5 @@ export const ENTITY_API: Record<EntityType, EntityApi> = {
   team: entityApi("team", { excludeEntityIds: ["litellm-dashboard"] }),
   organization: entityApi("organization"),
   customer: entityApi("customer"),
-  agent: entityApi("agent"),
   user: entityApi("user"),
 };

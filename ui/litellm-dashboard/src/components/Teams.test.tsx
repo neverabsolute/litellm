@@ -8,44 +8,9 @@ import { useTeamMetadataSchema } from "@/app/(dashboard)/hooks/teams/useTeamMeta
 import { toast } from "@/lib/toast";
 import { fetchAvailableModelsForTeamOrKey } from "./key_team_helpers/fetch_available_models_team_key";
 import { MODEL_MAX_BUDGET_PREMIUM_HINT } from "./key_team_helpers/ModelMaxBudgetEditor";
-import {
-  fetchMCPAccessGroups,
-  getDefaultTeamSettings,
-  getGuardrailsList,
-  getPoliciesList,
-  teamCreateCall,
-} from "./networking";
+import { getDefaultTeamSettings, teamCreateCall } from "./networking";
 import Teams from "./Teams";
 import { chooseSelectOption } from "../../tests/test-utils";
-
-vi.mock("./mcp_server_management/MCPServerSelector", () => ({
-  default: ({
-    onChange,
-  }: {
-    onChange: (selection: { servers: string[]; accessGroups: string[]; toolsets: string[] }) => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="select-mcp-toolset"
-      onClick={() => onChange({ servers: [], accessGroups: [], toolsets: ["ts-1"] })}
-    >
-      Select MCP toolset
-    </button>
-  ),
-}));
-
-vi.mock("./skills/SkillSelector", () => ({
-  default: ({ onChange }: { onChange: (selected: string[]) => void }) => (
-    <button type="button" data-testid="select-private-skill" onClick={() => onChange(["private-skill"])}>
-      Select private skill
-    </button>
-  ),
-}));
-
-const can = vi.fn();
-vi.mock("@/app/(dashboard)/hooks/useCan", () => ({
-  default: (...args: unknown[]) => can(...args),
-}));
 
 const mockTeamInfoView = vi.fn();
 const mockUseOrganizations = vi.fn();
@@ -63,9 +28,6 @@ vi.mock("./TeamsPage/TeamsTable", () => ({
 vi.mock("./networking", () => ({
   teamCreateCall: vi.fn(),
   teamDeleteCall: vi.fn(),
-  fetchMCPAccessGroups: vi.fn(),
-  getGuardrailsList: vi.fn().mockResolvedValue({ guardrails: [] }),
-  getPoliciesList: vi.fn().mockResolvedValue({ policies: [] }),
   getDefaultTeamSettings: vi.fn().mockResolvedValue({ values: {} }),
 }));
 
@@ -141,27 +103,6 @@ vi.mock("@/app/(dashboard)/hooks/organizations/useOrganizations", () => ({
   useOrganizations: () => mockUseOrganizations(),
 }));
 
-vi.mock("@/app/(dashboard)/hooks/accessGroups/useAccessGroups", () => ({
-  useAccessGroups: vi.fn().mockReturnValue({
-    data: [
-      { access_group_id: "ag-1", access_group_name: "Group 1" },
-      { access_group_id: "ag-2", access_group_name: "Group 2" },
-    ],
-    isLoading: false,
-    isError: false,
-  }),
-}));
-
-vi.mock("./common_components/AccessGroupSelector", () => ({
-  default: ({ value = [], onChange }: { value?: string[]; onChange?: (v: string[]) => void }) => (
-    <input
-      data-testid="access-group-selector"
-      value={Array.isArray(value) ? value.join(",") : ""}
-      onChange={(e) => onChange?.(e.target.value ? e.target.value.split(",").map((s) => s.trim()) : [])}
-    />
-  ),
-}));
-
 const baseTableTeam = {
   team_id: "1",
   team_alias: "Test Team",
@@ -202,7 +143,6 @@ const renderWithQueryClient = (
 // Re-establish safe defaults before every test (clearAllMocks keeps return values, so restore them here).
 beforeEach(() => {
   mockTeamsTableProps = null;
-  can.mockReturnValue(true);
 });
 
 describe("Teams - handleCreate organization handling", () => {
@@ -211,8 +151,6 @@ describe("Teams - handleCreate organization handling", () => {
     mockTeamInfoView.mockClear();
     mockTeamsTableProps = null;
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue([]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
     mockUseOrganizations.mockReturnValue({ data: null });
   });
 
@@ -463,8 +401,6 @@ describe("Teams - premium props", () => {
     vi.clearAllMocks();
     mockTeamInfoView.mockClear();
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue([]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
     mockUseOrganizations.mockReturnValue({ data: [] });
   });
 
@@ -485,8 +421,6 @@ describe("Teams - team detail deep link (?team=)", () => {
     vi.clearAllMocks();
     mockTeamInfoView.mockClear();
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue([]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
     mockUseOrganizations.mockReturnValue({ data: [] });
   });
 
@@ -560,7 +494,7 @@ describe("Teams - Create Team CTA is grouped with the tabs on the left", () => {
     await screen.findByLabelText(/team name/i);
     fireEvent.click(screen.getByText("Additional Settings"));
 
-    expect(screen.getByRole("switch", { name: /Disable Global Guardrails/i })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Team ID")).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: /Require Trace ID/i })).not.toBeInTheDocument();
   });
 });
@@ -592,13 +526,11 @@ describe("Teams - Default Team Settings tab visibility", () => {
   });
 });
 
-describe("Teams - access_group_ids in team create", () => {
+describe("Teams - models in team create", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockTeamInfoView.mockClear();
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue(["gpt-4", "gpt-3.5-turbo"]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
     vi.mocked(teamCreateCall).mockResolvedValue({
       team_id: "new-team-1",
       team_alias: "Test Team",
@@ -610,44 +542,6 @@ describe("Teams - access_group_ids in team create", () => {
     });
     mockUseOrganizations.mockReturnValue({
       data: [{ organization_id: "org-1", organization_alias: "Org 1", models: [], members: [] }],
-    });
-  });
-
-  it("should pass access_group_ids to teamCreateCall when creating team", async () => {
-    renderWithQueryClient(<Teams accessToken="test-token" userID="user-123" userRole="Admin" />);
-
-    const createButton = screen.getAllByRole("button", { name: /create team/i })[0];
-    act(() => {
-      fireEvent.click(createButton);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByLabelText(/team name/i)).toBeInTheDocument();
-    });
-
-    fireEvent.change(screen.getByLabelText(/team name/i), { target: { value: "Test Team" } });
-    fireEvent.change(screen.getByTestId("create-team-models-select"), { target: { value: "gpt-4" } });
-
-    fireEvent.click(screen.getByText("Additional Settings"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("access-group-selector")).toBeInTheDocument();
-    });
-
-    fireEvent.change(screen.getByTestId("access-group-selector"), { target: { value: "ag-1,ag-2" } });
-
-    const createTeamSubmitButtons = screen.getAllByRole("button", { name: /create team/i });
-    fireEvent.click(createTeamSubmitButtons[createTeamSubmitButtons.length - 1]);
-
-    await waitFor(() => {
-      expect(teamCreateCall).toHaveBeenCalledWith(
-        "test-token",
-        expect.objectContaining({
-          team_alias: "Test Team",
-          models: ["gpt-4"],
-          access_group_ids: ["ag-1", "ag-2"],
-        }),
-      );
     });
   });
 
@@ -685,8 +579,6 @@ describe("Teams - Reset Budget in team create", () => {
     vi.clearAllMocks();
     mockTeamInfoView.mockClear();
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue(["gpt-4"]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
     vi.mocked(getDefaultTeamSettings).mockResolvedValue({ values: { budget_duration: "30d" } });
     vi.mocked(teamCreateCall).mockResolvedValue({
       team_id: "new-team-1",
@@ -787,8 +679,6 @@ describe("Teams - metadata key-value pairs in team create", () => {
     vi.clearAllMocks();
     mockTeamInfoView.mockClear();
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue(["gpt-4"]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
     vi.mocked(teamCreateCall).mockResolvedValue({
       team_id: "new-team-1",
       team_alias: "Test Team",
@@ -875,8 +765,6 @@ describe("Teams - schema-declared metadata fields in team create", () => {
     vi.clearAllMocks();
     mockTeamInfoView.mockClear();
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue(["gpt-4"]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
     vi.mocked(teamCreateCall).mockResolvedValue({
       team_id: "new-team-1",
       team_alias: "Test Team",
@@ -1045,8 +933,6 @@ describe("Teams - LIT-2530 organization stays optional for proxy admin with a si
     vi.clearAllMocks();
     mockTeamInfoView.mockClear();
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue(["gpt-4"]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
     vi.mocked(teamCreateCall).mockResolvedValue({
       team_id: "new-team-1",
       team_alias: "No Org Team",
@@ -1088,61 +974,11 @@ describe("Teams - LIT-2530 organization stays optional for proxy admin with a si
   });
 });
 
-describe("Teams - policies field is gated on the viewPolicies capability", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockTeamInfoView.mockClear();
-    vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue(["gpt-4"]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
-    vi.mocked(getPoliciesList).mockResolvedValue({ policies: [] });
-    mockUseOrganizations.mockReturnValue({ data: null });
-  });
-
-  const openAdditionalSettings = async () => {
-    renderWithQueryClient(<Teams accessToken="test-token" userID="user-123" userRole="Admin" />);
-
-    act(() => {
-      fireEvent.click(screen.getAllByRole("button", { name: /create team/i })[0]);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByLabelText(/team name/i)).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("Additional Settings"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("access-group-selector")).toBeInTheDocument();
-    });
-  };
-
-  it("should render the policies field and load it when the capability is present", async () => {
-    await openAdditionalSettings();
-
-    expect(can).toHaveBeenCalledWith("viewPolicies");
-    expect(getPoliciesList).toHaveBeenCalledWith("test-token");
-    expect(screen.getByText("Policies")).toBeInTheDocument();
-  });
-
-  it("should omit the policies field and skip the admin-only list without the capability", async () => {
-    can.mockReturnValue(false);
-
-    await openAdditionalSettings();
-
-    expect(getPoliciesList).not.toHaveBeenCalled();
-    expect(screen.queryByText("Policies")).not.toBeInTheDocument();
-  });
-});
-
 describe("Teams - which fields reach the create payload depends on the open sections", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockTeamInfoView.mockClear();
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue(["gpt-4"]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
-    vi.mocked(getPoliciesList).mockResolvedValue({ policies: [] });
     vi.mocked(getDefaultTeamSettings).mockResolvedValue({ values: {} });
     vi.mocked(teamCreateCall).mockResolvedValue({ team_id: "new-team-1" });
     mockUseOrganizations.mockReturnValue({ data: null });
@@ -1205,7 +1041,7 @@ describe("Teams - which fields reach the create payload depends on the open sect
     expect(payload.team_id).toBe("tid-open");
     expect(payload.team_member_budget).toBe(12.5);
     expect(Object.keys(payload)).toEqual(
-      expect.arrayContaining(["access_group_ids", "guardrails", "secret_manager_settings", "team_member_key_duration"]),
+      expect.arrayContaining(["secret_manager_settings", "team_member_key_duration"]),
     );
   });
 
@@ -1256,11 +1092,7 @@ describe("Teams - which fields reach the create payload depends on the open sect
 describe("Teams - the exact bytes the create call sends", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    can.mockReturnValue(true);
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue(["gpt-4"]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
-    vi.mocked(getPoliciesList).mockResolvedValue({ policies: [] });
     vi.mocked(getDefaultTeamSettings).mockResolvedValue({ values: {} });
     vi.mocked(teamCreateCall).mockResolvedValue({ team_id: "new-team-1" });
     vi.mocked(useTeamMetadataSchema).mockReturnValue({ data: [], isLoading: false } as any);
@@ -1325,9 +1157,6 @@ describe("Teams - the exact bytes the create call sends", () => {
     await openCreateModal();
 
     await openSection("Additional Settings", /Team Member Key Duration/);
-    await openSection("MCP Settings", /Allowed MCP Servers/);
-    await openSection("Agent Settings", /Allowed Agents/);
-    await openSection("Search Tool Settings", /Allowed Search Tools/);
 
     const payload = await submit();
 
@@ -1347,67 +1176,13 @@ describe("Teams - the exact bytes the create call sends", () => {
       team_member_rpm_limit: undefined,
       team_member_tpm_limit: undefined,
       secret_manager_settings: undefined,
-      guardrails: undefined,
-      disable_global_guardrails: undefined,
-      policies: undefined,
-      access_group_ids: undefined,
-      allowed_vector_store_ids: undefined,
       allowed_passthrough_routes: undefined,
-      allowed_mcp_servers_and_groups: undefined,
-      mcp_tool_permissions: {},
-      allowed_agents_and_groups: undefined,
-      object_permission_search_tools: undefined,
     });
     expect(wireBody(payload)).toStrictEqual({
       team_alias: "Byte Contract Team",
       organization_id: null,
       models: ["no-default-models"],
-      mcp_tool_permissions: {},
     });
-  });
-
-  it("puts the selected skills into object_permission.skills and drops the form key", async () => {
-    await openCreateModal();
-    await openSection("Skill Settings", /Allowed Skills/);
-    fireEvent.click(screen.getByTestId("select-private-skill"));
-
-    const payload = await submit();
-
-    expect(payload.object_permission).toStrictEqual({ skills: ["private-skill"] });
-    expect(payload).not.toHaveProperty("object_permission_skills");
-  });
-
-  it("sends no object_permission when Skill Settings is opened but nothing is selected", async () => {
-    await openCreateModal();
-    await openSection("Skill Settings", /Allowed Skills/);
-
-    const payload = await submit();
-
-    expect(payload).not.toHaveProperty("object_permission");
-    expect(payload).not.toHaveProperty("object_permission_skills");
-  });
-
-  it("includes selected MCP toolsets in the create object permission", async () => {
-    await openCreateModal();
-    await openSection("MCP Settings", /Allowed MCP Servers/);
-    fireEvent.click(screen.getByTestId("select-mcp-toolset"));
-
-    const payload = await submit();
-
-    expect(payload.object_permission).toStrictEqual({ mcp_toolsets: ["ts-1"] });
-  });
-
-  it.each([
-    ["MCP Settings", /Allowed MCP Servers/, ["allowed_mcp_servers_and_groups", "mcp_tool_permissions"]],
-    ["Agent Settings", /Allowed Agents/, ["allowed_agents_and_groups"]],
-    ["Search Tool Settings", /Allowed Search Tools/, ["object_permission_search_tools"]],
-  ])("registers %s fields only while that one section is open", async (title, probe, keys) => {
-    await openCreateModal();
-
-    const closedPayload = await submit();
-    for (const key of keys as string[]) {
-      expect(closedPayload).not.toHaveProperty(key);
-    }
   });
 
   it("carries every typed value to the payload at the type antd sends today", async () => {
@@ -1455,75 +1230,6 @@ describe("Teams - the exact bytes the create call sends", () => {
     });
     expect(teamCreateCall).not.toHaveBeenCalled();
     expect(screen.queryByText("Please enter valid JSON")).not.toBeInTheDocument();
-  });
-
-  it("turns the disable-global-guardrails switch into a boolean for a premium user", async () => {
-    await openCreateModal({ premiumUser: true });
-    await openSection("Additional Settings", /Team Member Key Duration/);
-
-    fireEvent.click(screen.getByRole("switch", { name: /Disable Global Guardrails/i }));
-
-    const payload = await submit();
-
-    expect(payload.disable_global_guardrails).toBe(true);
-  });
-
-  it("leaves the disable-global-guardrails switch inert for a non-premium user", async () => {
-    await openCreateModal();
-    await openSection("Additional Settings", /Team Member Key Duration/);
-
-    fireEvent.click(screen.getByRole("switch", { name: /Disable Global Guardrails/i }));
-
-    const payload = await submit();
-
-    expect(payload.disable_global_guardrails).toBeUndefined();
-  });
-
-  it.each([
-    ["MCP Settings", /Allowed MCP Servers/, ["allowed_mcp_servers_and_groups", "mcp_tool_permissions"]],
-    ["Agent Settings", /Allowed Agents/, ["allowed_agents_and_groups"]],
-    ["Search Tool Settings", /Allowed Search Tools/, ["object_permission_search_tools"]],
-  ])("adds the %s keys as soon as that one section is opened", async (title, probe, keys) => {
-    await openCreateModal();
-
-    await openSection(title as string, probe as RegExp);
-    const payload = await submit();
-
-    for (const key of keys as string[]) {
-      expect(payload).toHaveProperty(key);
-    }
-  });
-
-  it("leaves policies out of the request body for a caller without the viewPolicies capability", async () => {
-    can.mockReturnValue(false);
-
-    await openCreateModal();
-    await openSection("Additional Settings", /Team Member Key Duration/);
-
-    const payload = await submit();
-
-    expect(payload).toStrictEqual({
-      team_alias: "Byte Contract Team",
-      organization_id: null,
-      models: ["no-default-models"],
-      max_budget: undefined,
-      budget_duration: undefined,
-      tpm_limit: undefined,
-      rpm_limit: undefined,
-      tpd_limit: undefined,
-      metadata: undefined,
-      team_id: undefined,
-      team_member_budget: undefined,
-      team_member_key_duration: undefined,
-      team_member_rpm_limit: undefined,
-      team_member_tpm_limit: undefined,
-      secret_manager_settings: undefined,
-      guardrails: undefined,
-      disable_global_guardrails: undefined,
-      access_group_ids: undefined,
-      allowed_vector_store_ids: undefined,
-      allowed_passthrough_routes: undefined,
-    });
   });
 
   it("blocks the create on an empty team name and names the rule", async () => {
@@ -1593,8 +1299,6 @@ describe("Teams - the create form keeps the organization and models picks while 
     vi.clearAllMocks();
     mockTeamInfoView.mockClear();
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue(["gpt-4", "gpt-3.5-turbo"]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
     vi.mocked(getDefaultTeamSettings).mockResolvedValue({ values: {} });
     mockUseOrganizations.mockReturnValue({ data: ORGS });
   });
@@ -1774,7 +1478,7 @@ describe("Teams - the create form keeps the organization and models picks while 
   });
 });
 
-describe("Teams - disable_global_guardrails switch gating", () => {
+describe("Teams - require_trace_id switch gating", () => {
   const openCreateModal = async () => {
     act(() => {
       fireEvent.click(screen.getAllByRole("button", { name: /create team/i })[0]);
@@ -1786,13 +1490,11 @@ describe("Teams - disable_global_guardrails switch gating", () => {
     vi.clearAllMocks();
     mockTeamInfoView.mockClear();
     vi.mocked(fetchAvailableModelsForTeamOrKey).mockResolvedValue(["gpt-4"]);
-    vi.mocked(fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(getGuardrailsList).mockResolvedValue({ guardrails: [] });
     vi.mocked(getDefaultTeamSettings).mockResolvedValue({ values: {} });
     mockUseOrganizations.mockReturnValue({ data: null });
   });
 
-  it("hides the Disable Global Guardrails switch from a non-admin", async () => {
+  it("hides the Require Trace ID switch from a non-admin", async () => {
     mockUseOrganizations.mockReturnValue({
       data: [
         {
@@ -1808,17 +1510,8 @@ describe("Teams - disable_global_guardrails switch gating", () => {
 
     fireEvent.click(screen.getByText("Additional Settings"));
 
-    expect(screen.queryByRole("switch", { name: /Disable Global Guardrails/i })).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("Team ID")).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: /Require Trace ID/i })).not.toBeInTheDocument();
-  });
-
-  it("shows the Disable Global Guardrails switch to a proxy admin", async () => {
-    renderWithQueryClient(<Teams accessToken="test-token" userID="user-123" userRole="Admin" />);
-    await openCreateModal();
-
-    fireEvent.click(screen.getByText("Additional Settings"));
-
-    expect(await screen.findByRole("switch", { name: /Disable Global Guardrails/i })).toBeInTheDocument();
   });
 
   it("sends require_trace_id when a proxy admin enables it during team creation", async () => {

@@ -14,7 +14,6 @@ import { passThroughItem } from "./PassThroughSettings/PassThroughSettings";
 import RoutePreview from "./route_preview";
 import { toast } from "@/lib/toast";
 import PassThroughSecuritySection from "./common_components/PassThroughSecuritySection";
-import PassThroughGuardrailsSection from "./common_components/PassThroughGuardrailsSection";
 import { FormField } from "@/components/shared/form/FormField";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -28,8 +27,6 @@ import { useZodForm } from "@/lib/forms/useZodForm";
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
 const HTTP_METHOD_OPTIONS = HTTP_METHODS.map((method) => ({ label: method, value: method }));
-
-type GuardrailSettings = Record<string, { request_fields?: string[]; response_fields?: string[] } | null>;
 
 const keyValuePairsSchema = z.array(z.tuple([z.string(), z.string()]));
 
@@ -95,7 +92,6 @@ const AddPassThroughEndpoint: React.FC<AddFallbacksProps> = ({
 }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [guardrails, setGuardrails] = useState<GuardrailSettings>({});
   const form = useZodForm(passThroughFormSchema, { defaultValues: emptyFormValues });
 
   const pathValue = useWatch({ control: form.control, name: "path" });
@@ -105,7 +101,6 @@ const AddPassThroughEndpoint: React.FC<AddFallbacksProps> = ({
 
   const handleCancel = () => {
     form.reset(emptyFormValues);
-    setGuardrails({});
     setIsModalVisible(false);
   };
 
@@ -122,7 +117,6 @@ const AddPassThroughEndpoint: React.FC<AddFallbacksProps> = ({
         auth: values.auth,
         timeout: values.timeout,
         cost_per_request: values.cost_per_request,
-        ...(Object.keys(guardrails).length > 0 ? { guardrails } : {}),
       };
 
       const response = await createPassThroughEndpoint(accessToken, formValues);
@@ -132,7 +126,6 @@ const AddPassThroughEndpoint: React.FC<AddFallbacksProps> = ({
 
       toast.success("Pass-through endpoint created successfully");
       form.reset(emptyFormValues);
-      setGuardrails({});
       setIsModalVisible(false);
     } catch (error) {
       toast.fromError("Error creating pass-through endpoint: " + error);
@@ -309,8 +302,6 @@ const AddPassThroughEndpoint: React.FC<AddFallbacksProps> = ({
                 <FormField control={form.control} name="auth">
                   {({ value, onChange }) => <PassThroughSecuritySection authEnabled={value} onAuthChange={onChange} />}
                 </FormField>
-
-                <PassThroughGuardrailsSection accessToken={accessToken} value={guardrails} onChange={setGuardrails} />
 
                 <Card className="block p-6">
                   <h3 className="mb-2 text-lg font-semibold text-foreground">Performance</h3>

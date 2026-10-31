@@ -8,7 +8,6 @@ const createPassThroughEndpoint = vi.fn();
 vi.mock("./networking", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./networking")>()),
   createPassThroughEndpoint: (...args: unknown[]) => createPassThroughEndpoint(...args),
-  getGuardrailsList: vi.fn().mockResolvedValue({ guardrails: [] }),
 }));
 
 vi.mock("@/lib/toast", () => ({

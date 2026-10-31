@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Plus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import {
   Combobox,
   ComboboxCollection,
@@ -71,63 +70,6 @@ function CustomItem({ value }: { value: string }) {
         <span className="font-sans">Use</span> {value}
       </span>
     </ComboboxItem>
-  );
-}
-
-function CountBadge({ count }: { count: number }) {
-  if (count === 0) return null;
-  return (
-    <Badge variant="secondary" className="h-4 min-w-4 px-1 tabular-nums">
-      {count}
-    </Badge>
-  );
-}
-
-export function ChecklistMenu({
-  label,
-  icon,
-  groups,
-  value,
-  onValueChange,
-  isLoading,
-  emptyText,
-  defaultOpen = false,
-}: {
-  label: string;
-  icon: ReactNode;
-  groups: readonly OptionGroup[];
-  value: readonly string[];
-  onValueChange: (value: readonly string[]) => void;
-  isLoading: boolean;
-  emptyText: string;
-  defaultOpen?: boolean;
-}) {
-  const index = optionIndex(groups);
-  const items = toItems(groups);
-  return (
-    <Combobox
-      items={items}
-      multiple
-      value={[...value]}
-      onValueChange={(next: string[]) => onValueChange(next)}
-      itemToStringLabel={(item: string) => index.get(item)?.label ?? item}
-      defaultOpen={defaultOpen}
-      autoHighlight
-    >
-      <ComboboxTrigger render={<InputGroupButton size="xs" aria-label={label} />}>
-        {icon}
-        {label}
-        <CountBadge count={value.length} />
-      </ComboboxTrigger>
-      <ComboboxContent side="top" className="w-72">
-        <ComboboxInput showTrigger={false} placeholder={`Search ${label.toLowerCase()}`} />
-        <ComboboxEmpty>
-          {isLoading ? <Spinner className="size-3.5" /> : items.length === 0 && emptyText}
-          {!isLoading && items.length > 0 && "Nothing matches"}
-        </ComboboxEmpty>
-        <GroupedOptions index={index} />
-      </ComboboxContent>
-    </Combobox>
   );
 }
 

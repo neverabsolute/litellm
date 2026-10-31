@@ -1,7 +1,7 @@
 import type { components } from "@/lib/http/schema";
 import type { BreakdownMetrics, DailyData, KeyMetadata, KeyMetricWithMetadata, MetricWithMetadata } from "./types";
 
-export type DailyActivityEntity = "user" | "team" | "tag" | "organization" | "customer" | "agent";
+export type DailyActivityEntity = "user" | "team" | "tag" | "organization" | "customer";
 export type DailyActivityAggregatedResponse = components["schemas"]["SpendAnalyticsPaginatedResponse"];
 export type DailyActivityMetadata = components["schemas"]["DailySpendMetadata"];
 export type ExportType = components["schemas"]["ExportType"];

@@ -1,13 +1,9 @@
 import { MessageType } from "./types";
 import { EndpointType } from "./mode_endpoint_mapping";
-import { MCPServer } from "@/components/mcp_tools/types";
 import type { CustomHeaders } from "@/components/llm_calls/request_headers";
 
 interface CodeGenMetadata {
   tags?: string[];
-  vector_stores?: string[];
-  guardrails?: string[];
-  policies?: string[];
 }
 
 interface GenerateCodeParams {
@@ -17,12 +13,6 @@ interface GenerateCodeParams {
   inputMessage: string;
   chatHistory: MessageType[];
   selectedTags: string[];
-  selectedVectorStores: string[];
-  selectedGuardrails: string[];
-  selectedPolicies: string[];
-  selectedMCPServers: string[];
-  mcpServers?: MCPServer[];
-  mcpServerToolRestrictions?: Record<string, string[]>;
   selectedVoice?: string;
   endpointType: string;
   selectedModel: string | undefined;
@@ -42,9 +32,6 @@ export const generateCodeSnippet = (params: GenerateCodeParams): string => {
     inputMessage,
     chatHistory,
     selectedTags,
-    selectedVectorStores,
-    selectedGuardrails,
-    selectedPolicies,
     selectedVoice,
     endpointType,
     selectedModel,
@@ -73,9 +60,6 @@ export const generateCodeSnippet = (params: GenerateCodeParams): string => {
 
   const metadata: CodeGenMetadata = {};
   if (selectedTags.length > 0) metadata.tags = selectedTags;
-  if (selectedVectorStores.length > 0) metadata.vector_stores = selectedVectorStores;
-  if (selectedGuardrails.length > 0) metadata.guardrails = selectedGuardrails;
-  if (selectedPolicies.length > 0) metadata.policies = selectedPolicies;
 
   const modelNameForCode = selectedModel || "your-model-name";
 

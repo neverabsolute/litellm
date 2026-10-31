@@ -18,13 +18,11 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { useAgents } from "@/app/(dashboard)/hooks/agents/useAgents";
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import useIsOrgAdmin from "@/app/(dashboard)/hooks/useIsOrgAdmin";
 import { useCurrentUser } from "@/app/(dashboard)/hooks/users/useCurrentUser";
 import { useOrganizations } from "@/app/(dashboard)/hooks/organizations/useOrganizations";
 import { toast } from "@/lib/toast";
-import { hasCapability } from "@/utils/capabilities";
 import { copyToClipboard } from "@/utils/dataUtils";
 import { hasProxyWideSpendView, internalUserRoles, isProxyAdminRole } from "@/utils/roles";
 import { ActivityMetrics, processActivityData } from "@/components/activity_metrics";
@@ -138,12 +136,10 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations, teamsLoadin
     clientStartTime?.getTime() === dateValue.from?.getTime() && clientEndTime?.getTime() === dateValue.to?.getTime();
 
   const [fetchedTags, setFetchedTags] = useState<FetchedForRange<EntityList[]> | null>(null);
-  const { data: agentsResponse } = useAgents();
   const { data: currentUser } = useCurrentUser();
   const isAdmin = hasProxyWideSpendView(userRole);
   const canViewTagUsage = isAdmin || internalUserRoles.includes(userRole || "");
   const isOrgAdmin = useIsOrgAdmin();
-  const canViewAgentUsage = hasCapability(userRole, "viewAgentUsage");
   const allowedViews = useMemo(
     () => allowedUsageOptions(userRole, canViewTagUsage, isOrgAdmin),
     [userRole, canViewTagUsage, isOrgAdmin],
@@ -762,20 +758,6 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations, teamsLoadin
                 dateValue={dateValue}
               />
             </>
-          )}
-          {usageView === "agent" && canViewAgentUsage && (
-            <EntityUsage
-              accessToken={accessToken}
-              entityType="agent"
-              {...entitySelection("agent")}
-              userID={userID}
-              userRole={userRole}
-              entityList={
-                agentsResponse?.agents?.map((agent) => ({ label: agent.agent_name, value: agent.agent_id })) || null
-              }
-              premiumUser={premiumUser}
-              dateValue={dateValue}
-            />
           )}
           {/* User Usage Panel */}
           {usageView === "user" && (

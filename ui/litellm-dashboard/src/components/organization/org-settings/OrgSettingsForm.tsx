@@ -5,7 +5,6 @@ import * as React from "react";
 
 import { organizationKeys } from "@/app/(dashboard)/hooks/organizations/useOrganizations";
 import { ModelSelect } from "@/components/ModelSelect/ModelSelect";
-import MCPServerSelector from "@/components/mcp_server_management/MCPServerSelector";
 import { toast } from "@/lib/toast";
 import type { Organization } from "@/components/networking";
 import { FieldGroup } from "@/components/ui/field";
@@ -14,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import VectorStoreSelector from "@/components/vector_store_management/VectorStoreSelector";
 import { pickDirty } from "@/lib/forms/pickDirty";
 import { useZodForm } from "@/lib/forms/useZodForm";
 import { fetchClient } from "@/lib/http/api";
@@ -42,7 +40,6 @@ const defaultPatchOrganization = async (organizationId: string, body: OrgPatchBo
 interface OrgSettingsFormProps {
   organizationId: string;
   org: Organization;
-  accessToken: string;
   onCancel: () => void;
   onSaved: () => void;
   patchOrganization?: (organizationId: string, body: OrgPatchBody) => Promise<unknown>;
@@ -51,7 +48,6 @@ interface OrgSettingsFormProps {
 export const OrgSettingsForm = ({
   organizationId,
   org,
-  accessToken,
   onCancel,
   onSaved,
   patchOrganization = defaultPatchOrganization,
@@ -124,28 +120,6 @@ export const OrgSettingsForm = ({
 
         <FormField control={form.control} name="rpm_limit" label="Requests per minute Limit (RPM)">
           {({ ref, ...field }) => <Input {...field} ref={ref} type="number" step={1} min={0} />}
-        </FormField>
-
-        <FormField control={form.control} name="vector_stores" label="Vector Stores">
-          {(field) => (
-            <VectorStoreSelector
-              value={field.value}
-              onChange={field.onChange}
-              accessToken={accessToken}
-              placeholder="Select vector stores"
-            />
-          )}
-        </FormField>
-
-        <FormField control={form.control} name="mcp" label="MCP Servers & Access Groups">
-          {(field) => (
-            <MCPServerSelector
-              value={field.value}
-              onChange={field.onChange}
-              accessToken={accessToken}
-              placeholder="Select MCP servers and access groups"
-            />
-          )}
         </FormField>
 
         <FormField control={form.control} name="metadata" label="Metadata">

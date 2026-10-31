@@ -2042,49 +2042,6 @@ def test_non_proxy_admin_wildcard_allowed_routes():
     )
 
 
-def test_proxy_admin_viewer_can_access_global_spend_tags():
-    """
-    Test that proxy_admin_viewer can access /global/spend/tags endpoint.
-
-    This test verifies the fix for the issue where proxy_admin_viewer was getting
-    403 errors when trying to access /global/spend/tags endpoint.
-
-    Related: Slack thread from 10/9/2025 - Erik Kristensen reported this issue.
-    proxy_admin_viewer role should have access to "view all spend" endpoints.
-    """
-
-    # Create a proxy admin viewer user object
-    user_obj = LiteLLM_UserTable(
-        user_id="viewer_user",
-        user_email="viewer@example.com",
-        user_role=LitellmUserRoles.PROXY_ADMIN_VIEW_ONLY.value,
-    )
-
-    # Create a proxy admin viewer user API key auth
-    valid_token = UserAPIKeyAuth(
-        user_id="viewer_user",
-        user_role=LitellmUserRoles.PROXY_ADMIN_VIEW_ONLY.value,
-    )
-
-    # Create a mock request
-    request = MagicMock(spec=Request)
-    request.query_params = {"start_date": "2025-05-12", "end_date": "2025-10-09"}
-
-    # Test that calling /global/spend/tags route does NOT raise an exception
-    try:
-        RouteChecks.non_proxy_admin_allowed_routes_check(
-            user_obj=user_obj,
-            _user_role=LitellmUserRoles.PROXY_ADMIN_VIEW_ONLY.value,
-            route="/global/spend/tags",
-            request=request,
-            valid_token=valid_token,
-            request_data={},
-        )
-        # If no exception is raised, the test passes
-    except Exception as e:
-        pytest.fail(f"proxy_admin_viewer should be able to access /global/spend/tags route. Got error: {e!s}")
-
-
 # Routes returning proxy-wide spend across every team / customer / api_key.
 # Sourced from `LiteLLMRoutes.global_spend_tracking_routes` so any future
 # additions to that list are exercised by these tests automatically.
@@ -2598,26 +2555,6 @@ def test_proxy_admin_viewer_post_blocked_outside_allowlists(route):
             request_data={},
         )
     assert exc_info.value.status_code == 403
-
-
-@pytest.mark.parametrize("route", ("/lens/traces/findings", "/lens/example/runs"), ids=("read", "write"))
-def test_admin_viewer_delegates_lens_authorization_to_service(route: str) -> None:
-    request: Final = Request({"type": "http", "method": "POST", "path": route, "query_string": b""})
-    auth: Final = UserAPIKeyAuth(user_id="viewer", user_role=LitellmUserRoles.PROXY_ADMIN_VIEW_ONLY)
-
-    assert not RouteChecks.is_llm_api_route(route)
-
-    assert (
-        RouteChecks.non_proxy_admin_allowed_routes_check(
-            user_obj=LiteLLM_UserTable(user_id="viewer", user_role=LitellmUserRoles.PROXY_ADMIN_VIEW_ONLY),
-            _user_role=LitellmUserRoles.PROXY_ADMIN_VIEW_ONLY.value,
-            route=route,
-            request=request,
-            valid_token=auth,
-            request_data={},
-        )
-        is None
-    )
 
 
 # ── Admin Viewer: management_routes write endpoints stay blocked ─────────────
@@ -3536,37 +3473,6 @@ def test_internal_user_blocked_from_search_tool_writes(route):
     assert "Only proxy admin" in str(exc_info.value)
     assert f"Route={route}" in str(exc_info.value)
     assert "Your role=internal_user" in str(exc_info.value)
-
-
-@pytest.mark.parametrize(
-    "user_role",
-    [
-        LitellmUserRoles.INTERNAL_USER.value,
-        LitellmUserRoles.INTERNAL_USER_VIEW_ONLY.value,
-    ],
-)
-def test_non_admin_can_open_vector_store_details(user_role):
-    """Regression for LIT-7132: the dashboard lists a vector store via /vector_store/list
-    (an LLM API route) but opened it via /vector_store/info, which no non-admin allowlist
-    granted, so the route gate 401'd before the handler's per-store access check ran."""
-    user_obj = LiteLLM_UserTable(
-        user_id="test_user",
-        user_email="user@example.com",
-        user_role=user_role,
-    )
-    valid_token = UserAPIKeyAuth(user_id="test_user", user_role=user_role)
-    request = MagicMock(spec=Request)
-    request.query_params = {}
-
-    granted = RouteChecks.non_proxy_admin_allowed_routes_check(
-        user_obj=user_obj,
-        _user_role=user_role,
-        route="/vector_store/info",
-        request=request,
-        valid_token=valid_token,
-        request_data={},
-    )
-    assert granted is None
 
 
 @pytest.mark.parametrize(

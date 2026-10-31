@@ -21,13 +21,11 @@ import { Restricted, restrictedBy } from "./TierRestrictions";
 import EscalationKeywords from "./EscalationKeywords";
 import KeywordTierRules, { type KeywordTierRule } from "./KeywordTierRules";
 import SemanticKeywordMatching from "./SemanticKeywordMatching";
-import CompressionControls from "./CompressionControls";
 import PlanModeOverrideControls from "./PlanModeOverrideControls";
 import { AffinityControls } from "./AffinityControls";
 import { ModalityRoutingControls } from "./ModalityRoutingControls";
 import HousekeepingRoutingControls from "./HousekeepingRoutingControls";
 import ReminderMarkers from "./ReminderMarkers";
-import type { AutoRouterCompressionState } from "./buildAutoRouterCompression";
 import { activeTierName, type TierRow } from "./tier_rows";
 
 interface ComplexityRouterAdvancedSectionsProps {
@@ -52,8 +50,6 @@ interface ComplexityRouterAdvancedSectionsProps {
   onMatchThresholdChange: (threshold: number) => void;
   escalationKeywords: string[];
   onEscalationKeywordsChange?: (keywords: string[]) => void;
-  autoRouterCompression: AutoRouterCompressionState;
-  onAutoRouterCompressionChange?: (state: AutoRouterCompressionState) => void;
   modelInfo: ModelGroup[];
   tierRows: TierRow[];
   customTierSet: ComplexityRouterConfigValue["custom_tier_set"];
@@ -81,8 +77,6 @@ const ComplexityRouterAdvancedSections: React.FC<ComplexityRouterAdvancedSection
   onMatchThresholdChange,
   escalationKeywords,
   onEscalationKeywordsChange,
-  autoRouterCompression,
-  onAutoRouterCompressionChange,
   modelInfo,
   tierRows,
   customTierSet,
@@ -208,15 +202,6 @@ const ComplexityRouterAdvancedSections: React.FC<ComplexityRouterAdvancedSection
           },
         ]
       : []),
-    ...(onAutoRouterCompressionChange
-      ? [
-          {
-            key: "compression",
-            label: <strong className="text-foreground font-semibold">Compression</strong>,
-            children: <CompressionControls value={autoRouterCompression} onChange={onAutoRouterCompressionChange} />,
-          },
-        ]
-      : []),
     ...(onKeywordTierRulesChange || onSemanticMatchingEnabledChange
       ? [
           {
@@ -268,7 +253,7 @@ const ComplexityRouterAdvancedSections: React.FC<ComplexityRouterAdvancedSection
         "keyword-semantic",
       ],
     },
-    { label: "Sessions and efficiency", keys: ["affinity", "adaptive", "cache-aware", "compression"] },
+    { label: "Sessions and efficiency", keys: ["affinity", "adaptive", "cache-aware"] },
     { label: "Compatibility", keys: ["response"] },
   ].filter(
     (group) =>

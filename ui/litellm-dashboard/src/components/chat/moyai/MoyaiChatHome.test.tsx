@@ -18,7 +18,7 @@ function homeProps(overrides: Partial<ComponentProps<typeof MoyaiChatHome>> = {}
 }
 
 function conversation(id: string, updatedAt: number): Conversation {
-  return { id, title: `Chat ${id}`, model: "chat-model", messages: [], mcpServerNames: [], createdAt: 1, updatedAt };
+  return { id, title: `Chat ${id}`, model: "chat-model", messages: [], createdAt: 1, updatedAt };
 }
 
 describe("MoyaiChatHome", () => {

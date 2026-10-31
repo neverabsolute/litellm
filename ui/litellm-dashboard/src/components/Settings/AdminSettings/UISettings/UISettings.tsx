@@ -60,16 +60,11 @@ export default function UISettings() {
   const schema = data?.field_schema;
   const property = schema?.properties?.disable_model_add_for_internal_users;
   const disableTeamAdminDeleteProperty = schema?.properties?.disable_team_admin_delete_team_user;
-  const requireAuthForPublicAIHubProperty = schema?.properties?.require_auth_for_public_ai_hub;
   const forwardClientHeadersProperty = schema?.properties?.forward_client_headers_to_llm_api;
   const forwardLLMProviderAuthHeadersProperty = schema?.properties?.forward_llm_provider_auth_headers;
   const enableProjectsUIProperty = schema?.properties?.enable_projects_ui;
   const enableChatUIProperty = schema?.properties?.enable_chat_ui;
   const enabledPagesProperty = schema?.properties?.enabled_ui_pages_internal_users;
-  const disableAgentsProperty = schema?.properties?.disable_agents_for_internal_users;
-  const allowAgentsTeamAdminsProperty = schema?.properties?.allow_agents_for_team_admins;
-  const disableVectorStoresProperty = schema?.properties?.disable_vector_stores_for_internal_users;
-  const allowVectorStoresTeamAdminsProperty = schema?.properties?.allow_vector_stores_for_team_admins;
   const scopeUserSearchProperty = schema?.properties?.scope_user_search_to_org;
   const disableCustomApiKeysProperty = schema?.properties?.disable_custom_api_keys;
   const values = data?.values ?? {};
@@ -80,8 +75,6 @@ export default function UISettings() {
   const moyaiUrl = (values.moyai_url as string | undefined) ?? null;
   const isDisabledForInternalUsers = Boolean(values.disable_model_add_for_internal_users);
   const isDisabledTeamAdminDeleteTeamUser = Boolean(values.disable_team_admin_delete_team_user);
-  const isAgentsDisabled = Boolean(values.disable_agents_for_internal_users);
-  const isVectorStoresDisabled = Boolean(values.disable_vector_stores_for_internal_users);
 
   const handleToggle = (checked: boolean) => {
     updateSettings(
@@ -172,76 +165,6 @@ export default function UISettings() {
         onSuccess: () => {
           toast.success("UI settings updated successfully. Refreshing page...");
           setTimeout(() => window.location.reload(), 1000);
-        },
-        onError: (error) => {
-          toast.fromError(error);
-        },
-      },
-    );
-  };
-
-  const handleToggleRequireAuthForPublicAIHub = (checked: boolean) => {
-    updateSettings(
-      { require_auth_for_public_ai_hub: checked },
-      {
-        onSuccess: () => {
-          toast.success("UI settings updated successfully");
-        },
-        onError: (error) => {
-          toast.fromError(error);
-        },
-      },
-    );
-  };
-
-  const handleToggleDisableAgents = (checked: boolean) => {
-    updateSettings(
-      { disable_agents_for_internal_users: checked },
-      {
-        onSuccess: () => {
-          toast.success("UI settings updated successfully");
-        },
-        onError: (error) => {
-          toast.fromError(error);
-        },
-      },
-    );
-  };
-
-  const handleToggleAllowAgentsTeamAdmins = (checked: boolean) => {
-    updateSettings(
-      { allow_agents_for_team_admins: checked },
-      {
-        onSuccess: () => {
-          toast.success("UI settings updated successfully");
-        },
-        onError: (error) => {
-          toast.fromError(error);
-        },
-      },
-    );
-  };
-
-  const handleToggleDisableVectorStores = (checked: boolean) => {
-    updateSettings(
-      { disable_vector_stores_for_internal_users: checked },
-      {
-        onSuccess: () => {
-          toast.success("UI settings updated successfully");
-        },
-        onError: (error) => {
-          toast.fromError(error);
-        },
-      },
-    );
-  };
-
-  const handleToggleAllowVectorStoresTeamAdmins = (checked: boolean) => {
-    updateSettings(
-      { allow_vector_stores_for_team_admins: checked },
-      {
-        onSuccess: () => {
-          toast.success("UI settings updated successfully");
         },
         onError: (error) => {
           toast.fromError(error);
@@ -378,18 +301,6 @@ export default function UISettings() {
               description={disableTeamAdminDeleteProperty?.description}
             />
             <SettingRow
-              checked={Boolean(values.require_auth_for_public_ai_hub)}
-              disabled={isUpdating}
-              onCheckedChange={handleToggleRequireAuthForPublicAIHub}
-              ariaLabel={term(
-                requireAuthForPublicAIHubProperty?.description ?? "Require authentication for public AI Hub",
-              )}
-              label={term("Require authentication for public AI Hub")}
-              description={
-                requireAuthForPublicAIHubProperty?.description && term(requireAuthForPublicAIHubProperty.description)
-              }
-            />
-            <SettingRow
               checked={Boolean(values.forward_client_headers_to_llm_api)}
               disabled={isUpdating}
               onCheckedChange={handleToggleForwardClientHeaders}
@@ -432,7 +343,7 @@ export default function UISettings() {
               label="[BETA] Enable Chat page (page will refresh)"
               description={
                 enableChatUIProperty?.description ??
-                "If enabled, shows the Chat page in the UI sidebar, letting users chat with an LLM and connect their own MCP server credentials via OAuth."
+                "If enabled, shows the Chat page in the UI sidebar, letting users chat with an LLM."
               }
             />
 
@@ -454,46 +365,6 @@ export default function UISettings() {
                 </a>
               )}
             </div>
-
-            <Separator />
-            <SettingRow
-              checked={isAgentsDisabled}
-              disabled={isUpdating}
-              onCheckedChange={handleToggleDisableAgents}
-              ariaLabel={disableAgentsProperty?.description ?? "Disable agents for internal users"}
-              label="Disable agents for internal users"
-              description={disableAgentsProperty?.description}
-            />
-            <SettingRow
-              checked={Boolean(values.allow_agents_for_team_admins)}
-              disabled={isUpdating || !isAgentsDisabled}
-              onCheckedChange={handleToggleAllowAgentsTeamAdmins}
-              ariaLabel={allowAgentsTeamAdminsProperty?.description ?? "Allow agents for team admins"}
-              label="Allow agents for team admins"
-              description={allowAgentsTeamAdminsProperty?.description}
-              indented
-              muted={!isAgentsDisabled}
-            />
-
-            <Separator />
-            <SettingRow
-              checked={isVectorStoresDisabled}
-              disabled={isUpdating}
-              onCheckedChange={handleToggleDisableVectorStores}
-              ariaLabel={disableVectorStoresProperty?.description ?? "Disable vector stores for internal users"}
-              label="Disable vector stores for internal users"
-              description={disableVectorStoresProperty?.description}
-            />
-            <SettingRow
-              checked={Boolean(values.allow_vector_stores_for_team_admins)}
-              disabled={isUpdating || !isVectorStoresDisabled}
-              onCheckedChange={handleToggleAllowVectorStoresTeamAdmins}
-              ariaLabel={allowVectorStoresTeamAdminsProperty?.description ?? "Allow vector stores for team admins"}
-              label="Allow vector stores for team admins"
-              description={allowVectorStoresTeamAdminsProperty?.description}
-              indented
-              muted={!isVectorStoresDisabled}
-            />
 
             <Separator />
             <SettingRow

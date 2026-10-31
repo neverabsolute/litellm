@@ -12,15 +12,12 @@ describe("tpd_limit round trip", () => {
   });
 
   it("submits tpd_limit next to the minute limits", () => {
-    const submitted = toSubmittedValues(toKeyEditFormValues(keyData), { canViewPolicies: true, canViewPrompts: true });
+    const submitted = toSubmittedValues(toKeyEditFormValues(keyData), { canViewPrompts: true });
     expect(submitted).toMatchObject({ rpm_limit: 5, tpd_limit: 250000 });
   });
 
   it("submits null when the operator cleared tpd_limit", () => {
-    const submitted = toSubmittedValues(
-      { ...toKeyEditFormValues(keyData), tpd_limit: null },
-      { canViewPolicies: true, canViewPrompts: true },
-    );
+    const submitted = toSubmittedValues({ ...toKeyEditFormValues(keyData), tpd_limit: null }, { canViewPrompts: true });
     expect(submitted.tpd_limit).toBeNull();
   });
 });
@@ -55,8 +52,7 @@ describe("keyEditFormSchema", () => {
 });
 
 describe("duration submission", () => {
-  const submit = (duration: string | null) =>
-    toSubmittedValues({ duration }, { canViewPolicies: false, canViewPrompts: false });
+  const submit = (duration: string | null) => toSubmittedValues({ duration }, { canViewPrompts: false });
 
   it.each(["", "  "])("omits a blank duration value %j", (duration) => {
     expect(submit(duration)).not.toHaveProperty("duration");

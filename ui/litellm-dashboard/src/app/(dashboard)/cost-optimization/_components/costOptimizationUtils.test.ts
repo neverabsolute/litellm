@@ -1,19 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import type { DailyData, SpendMetrics } from "@/components/UsagePage/types";
-import type { ToolSpendDailyEntry, ToolSpendEntry } from "@/components/networking";
 import {
   SAVINGS_COLORS,
   SAVINGS_DRIVERS,
   SAVINGS_SERIES,
-  buildDailyToolSeries,
   classificationRatePer1kTurns,
   computeCacheLeakage,
   formatRangeLabel,
   localIsoDay,
   savingsSeriesOf,
   toCumulative,
-  topToolsBySpend,
   usd,
   withStartAnchor,
 } from "./costOptimizationUtils";
@@ -291,46 +288,6 @@ describe("computeCacheLeakage by model", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].uncachedPromptTokens).toBe(3000);
     expect(rows[0].cacheHitRatio).toBeCloseTo(500 / 3500, 6);
-  });
-});
-
-describe("buildDailyToolSeries", () => {
-  const daily: ToolSpendDailyEntry[] = [
-    { date: "2026-07-01", tool_name: "search", spend: 1.0, call_count: 1 },
-    { date: "2026-07-01", tool_name: "read", spend: 0.5, call_count: 1 },
-    { date: "2026-07-02", tool_name: "search", spend: 2.0, call_count: 1 },
-    { date: "2026-07-01", tool_name: "excluded", spend: 9.0, call_count: 1 },
-  ];
-
-  it("pivots to per-date points keyed by the selected tools, dropping others", () => {
-    const series = buildDailyToolSeries(daily, ["search", "read"]);
-    expect(series).toEqual([
-      { date: "2026-07-01", search: 1.0, read: 0.5 },
-      { date: "2026-07-02", search: 2.0, read: 0 },
-    ]);
-  });
-
-  it("sums repeated (date, tool) rows", () => {
-    const series = buildDailyToolSeries(
-      [
-        { date: "2026-07-01", tool_name: "search", spend: 1.0, call_count: 1 },
-        { date: "2026-07-01", tool_name: "search", spend: 2.5, call_count: 1 },
-      ],
-      ["search"],
-    );
-    expect(series[0].search).toBe(3.5);
-  });
-});
-
-describe("topToolsBySpend", () => {
-  const byTool: ToolSpendEntry[] = [
-    { tool_name: "a", spend: 1, call_count: 1, total_tokens: 1 },
-    { tool_name: "b", spend: 5, call_count: 1, total_tokens: 1 },
-    { tool_name: "c", spend: 3, call_count: 1, total_tokens: 1 },
-  ];
-
-  it("sorts by spend descending and truncates to the limit", () => {
-    expect(topToolsBySpend(byTool, 2).map((t) => t.tool_name)).toEqual(["b", "c"]);
   });
 });
 

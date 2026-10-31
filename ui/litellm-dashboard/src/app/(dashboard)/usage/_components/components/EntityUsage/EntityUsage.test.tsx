@@ -175,14 +175,12 @@ describe("EntityUsage", () => {
   const mockTeamDailyActivityCall = vi.fn();
   const mockOrganizationDailyActivityCall = vi.fn();
   const mockCustomerDailyActivityCall = vi.fn();
-  const mockAgentDailyActivityCall = vi.fn();
   const mockUserDailyActivityCall = vi.fn();
   const entityMocks: Record<string, ReturnType<typeof vi.fn>> = {
     tag: mockTagDailyActivityCall,
     team: mockTeamDailyActivityCall,
     organization: mockOrganizationDailyActivityCall,
     customer: mockCustomerDailyActivityCall,
-    agent: mockAgentDailyActivityCall,
     user: mockUserDailyActivityCall,
   };
   const mockUseInfiniteUsers = vi.mocked(useInfiniteUsers);
@@ -260,208 +258,6 @@ describe("EntityUsage", () => {
     },
   };
 
-  const mockAgentSpendData = {
-    results: [
-      {
-        date: "2025-01-01",
-        metrics: {
-          spend: 245.8,
-          api_requests: 3200,
-          successful_requests: 3100,
-          failed_requests: 100,
-          total_tokens: 1250000,
-          prompt_tokens: 850000,
-          completion_tokens: 400000,
-          cache_read_input_tokens: 50000,
-          cache_creation_input_tokens: 10000,
-        },
-        breakdown: {
-          entities: {
-            "agent-code-review": {
-              metrics: {
-                spend: 120.4,
-                api_requests: 1500,
-                successful_requests: 1450,
-                failed_requests: 50,
-                total_tokens: 620000,
-                prompt_tokens: 420000,
-                completion_tokens: 200000,
-                cache_read_input_tokens: 30000,
-                cache_creation_input_tokens: 5000,
-              },
-              metadata: { agent_name: "Code Review Agent" },
-              api_key_breakdown: {},
-            },
-            "agent-customer-support": {
-              metrics: {
-                spend: 85.2,
-                api_requests: 1200,
-                successful_requests: 1170,
-                failed_requests: 30,
-                total_tokens: 430000,
-                prompt_tokens: 290000,
-                completion_tokens: 140000,
-                cache_read_input_tokens: 15000,
-                cache_creation_input_tokens: 3000,
-              },
-              metadata: { agent_name: "Customer Support Agent" },
-              api_key_breakdown: {},
-            },
-            "agent-data-analyst": {
-              metrics: {
-                spend: 40.2,
-                api_requests: 500,
-                successful_requests: 480,
-                failed_requests: 20,
-                total_tokens: 200000,
-                prompt_tokens: 140000,
-                completion_tokens: 60000,
-                cache_read_input_tokens: 5000,
-                cache_creation_input_tokens: 2000,
-              },
-              metadata: { agent_name: "Data Analyst Agent" },
-              api_key_breakdown: {},
-            },
-          },
-          models: {
-            "gpt-4o": {
-              metrics: {
-                spend: 180.0,
-                api_requests: 2000,
-                successful_requests: 1950,
-                failed_requests: 50,
-                total_tokens: 900000,
-                prompt_tokens: 600000,
-                completion_tokens: 300000,
-                cache_read_input_tokens: 40000,
-                cache_creation_input_tokens: 8000,
-              },
-              metadata: {},
-              api_key_breakdown: {},
-            },
-            "claude-sonnet-4-20250514": {
-              metrics: {
-                spend: 65.8,
-                api_requests: 1200,
-                successful_requests: 1150,
-                failed_requests: 50,
-                total_tokens: 350000,
-                prompt_tokens: 250000,
-                completion_tokens: 100000,
-                cache_read_input_tokens: 10000,
-                cache_creation_input_tokens: 2000,
-              },
-              metadata: {},
-              api_key_breakdown: {},
-            },
-          },
-          api_keys: {},
-          providers: {
-            openai: {
-              metrics: {
-                spend: 180.0,
-                api_requests: 2000,
-                successful_requests: 1950,
-                failed_requests: 50,
-                total_tokens: 900000,
-                prompt_tokens: 600000,
-                completion_tokens: 300000,
-                cache_read_input_tokens: 40000,
-                cache_creation_input_tokens: 8000,
-              },
-            },
-            anthropic: {
-              metrics: {
-                spend: 65.8,
-                api_requests: 1200,
-                successful_requests: 1150,
-                failed_requests: 50,
-                total_tokens: 350000,
-                prompt_tokens: 250000,
-                completion_tokens: 100000,
-                cache_read_input_tokens: 10000,
-                cache_creation_input_tokens: 2000,
-              },
-            },
-          },
-        },
-      },
-      {
-        date: "2025-01-02",
-        metrics: {
-          spend: 198.5,
-          api_requests: 2800,
-          successful_requests: 2720,
-          failed_requests: 80,
-          total_tokens: 980000,
-          prompt_tokens: 670000,
-          completion_tokens: 310000,
-          cache_read_input_tokens: 42000,
-          cache_creation_input_tokens: 9000,
-        },
-        breakdown: {
-          entities: {
-            "agent-code-review": {
-              metrics: {
-                spend: 95.3,
-                api_requests: 1300,
-                successful_requests: 1270,
-                failed_requests: 30,
-                total_tokens: 510000,
-                prompt_tokens: 350000,
-                completion_tokens: 160000,
-                cache_read_input_tokens: 25000,
-                cache_creation_input_tokens: 4000,
-              },
-              metadata: { agent_name: "Code Review Agent" },
-              api_key_breakdown: {},
-            },
-            "agent-customer-support": {
-              metrics: {
-                spend: 68.7,
-                api_requests: 1000,
-                successful_requests: 970,
-                failed_requests: 30,
-                total_tokens: 320000,
-                prompt_tokens: 220000,
-                completion_tokens: 100000,
-                cache_read_input_tokens: 12000,
-                cache_creation_input_tokens: 3000,
-              },
-              metadata: { agent_name: "Customer Support Agent" },
-              api_key_breakdown: {},
-            },
-            "agent-data-analyst": {
-              metrics: {
-                spend: 34.5,
-                api_requests: 500,
-                successful_requests: 480,
-                failed_requests: 20,
-                total_tokens: 150000,
-                prompt_tokens: 100000,
-                completion_tokens: 50000,
-                cache_read_input_tokens: 5000,
-                cache_creation_input_tokens: 2000,
-              },
-              metadata: { agent_name: "Data Analyst Agent" },
-              api_key_breakdown: {},
-            },
-          },
-          models: {},
-          api_keys: {},
-          providers: {},
-        },
-      },
-    ],
-    metadata: {
-      total_spend: 444.3,
-      total_api_requests: 6000,
-      total_successful_requests: 5820,
-      total_failed_requests: 180,
-      total_tokens: 2230000,
-    },
-  };
-
   const defaultProps = {
     accessToken: "test-token",
     entityType: "tag" as const,
@@ -501,7 +297,6 @@ describe("EntityUsage", () => {
     mockTeamDailyActivityCall.mockResolvedValue(mockSpendData);
     mockOrganizationDailyActivityCall.mockResolvedValue(mockSpendData);
     mockCustomerDailyActivityCall.mockResolvedValue(mockSpendData);
-    mockAgentDailyActivityCall.mockResolvedValue(mockAgentSpendData);
     mockUserDailyActivityCall.mockResolvedValue(mockSpendData);
     mockUseInfiniteUsers.mockClear();
     mockUseInfiniteUsers.mockReturnValue(
@@ -646,21 +441,6 @@ describe("EntityUsage", () => {
     });
   });
 
-  it("should render with agent entity type and call agent API", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="agent" />);
-
-    await waitFor(() => {
-      expect(mockAgentDailyActivityCall).toHaveBeenCalled();
-    });
-
-    expect(screen.getByText("Agent Spend Overview")).toBeInTheDocument();
-
-    await waitFor(() => {
-      const spendElements = screen.getAllByText("$444.30");
-      expect(spendElements.length).toBeGreaterThan(0);
-    });
-  });
-
   it("should render with user entity type and call user API", async () => {
     render(<StatefulEntityUsage {...defaultProps} entityType="user" />);
 
@@ -776,7 +556,6 @@ describe("EntityUsage", () => {
   const TEAM_PANELS: [string, string][] = [
     ["Cost", "Team Spend Overview"],
     ["Model Activity", "metrics-source:model_groups"],
-    ["Agent Activity", "metrics-source:entities"],
     ["Key Activity", "Overall Usage"],
     ["Endpoint Activity", "Endpoint Usage Panel"],
   ];
@@ -826,7 +605,7 @@ describe("EntityUsage", () => {
     expect(within(costTab).getAllByText("0")[0]).toBeInTheDocument();
   });
 
-  it("should display Model Activity tab for non-agent entity types", async () => {
+  it("should display the Model Activity tab", async () => {
     render(<StatefulEntityUsage {...defaultProps} entityType="tag" />);
 
     await waitFor(() => {
@@ -836,17 +615,7 @@ describe("EntityUsage", () => {
     expect(screen.getByText("Model Activity")).toBeInTheDocument();
   });
 
-  it("should display Request / Token Consumption tab for agent entity type", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="agent" />);
-
-    await waitFor(() => {
-      expect(mockAgentDailyActivityCall).toHaveBeenCalled();
-    });
-
-    expect(screen.getByText("Request / Token Consumption")).toBeInTheDocument();
-  });
-
-  it("should display Top Public Model Names title for non-agent entity types", async () => {
+  it("should display the Top Public Model Names title", async () => {
     render(<StatefulEntityUsage {...defaultProps} entityType="tag" />);
 
     await waitFor(() => {
@@ -880,16 +649,6 @@ describe("EntityUsage", () => {
     });
 
     expect(showingCount("metrics-source:model_groups")).toBeGreaterThan(0);
-  });
-
-  it("should display Top Agents title for agent entity type", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="agent" />);
-
-    await waitFor(() => {
-      expect(mockAgentDailyActivityCall).toHaveBeenCalled();
-    });
-
-    expect(screen.getByText("Top Agents")).toBeInTheDocument();
   });
 
   it("should use entityList label when entityList is provided and entity exists", async () => {
@@ -985,55 +744,7 @@ describe("EntityUsage", () => {
     expect(screen.getByText("show-filters:false")).toBeInTheDocument();
   });
 
-  it("should display Agent Activity tab for team entity type", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="team" />);
-
-    await waitFor(() => {
-      expect(mockTeamDailyActivityCall).toHaveBeenCalled();
-    });
-
-    expect(screen.getByText("Agent Activity")).toBeInTheDocument();
-  });
-
-  it("should not display Agent Activity tab for non-team entity types", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="tag" />);
-
-    await waitFor(() => {
-      expect(mockTagDailyActivityCall).toHaveBeenCalled();
-    });
-
-    expect(screen.queryByText("Agent Activity")).not.toBeInTheDocument();
-  });
-
-  it("should display Top Agents Driving Spend card for team entity type", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="team" />);
-
-    await waitFor(() => {
-      expect(mockTeamDailyActivityCall).toHaveBeenCalled();
-    });
-
-    expect(screen.getByText("Top Agents Driving Spend")).toBeInTheDocument();
-  });
-
-  it("should not display Top Agents Driving Spend card for non-team entity types", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="tag" />);
-
-    await waitFor(() => {
-      expect(mockTagDailyActivityCall).toHaveBeenCalled();
-    });
-
-    expect(screen.queryByText("Top Agents Driving Spend")).not.toBeInTheDocument();
-  });
-
-  it("should fetch agent activity data when entity type is team", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="team" />);
-
-    await waitFor(() => {
-      expect(mockAgentDailyActivityCall).toHaveBeenCalledWith(expect.objectContaining({ accessToken: "test-token" }));
-    });
-  });
-
-  it("offers per-model top keys in Model Activity but not in the agent breakdown", async () => {
+  it("offers per-model top keys in Model Activity", async () => {
     render(<StatefulEntityUsage {...defaultProps} entityType="team" />);
 
     await waitFor(() => {
@@ -1044,12 +755,6 @@ describe("EntityUsage", () => {
       fireEvent.click(screen.getByText("Model Activity"));
     });
     expect(showingCount("top-keys-fetcher:model_groups")).toBeGreaterThan(0);
-
-    act(() => {
-      fireEvent.click(screen.getByText("Agent Activity"));
-    });
-    expect(showingCount("metrics-source:entities")).toBeGreaterThan(0);
-    expect(screen.queryByText("top-keys-fetcher:entities")).not.toBeInTheDocument();
   });
 
   it("shows a loader instead of zero totals while the aggregate is in flight", async () => {
@@ -1077,33 +782,6 @@ describe("EntityUsage", () => {
     expect(screen.getByText("Overall Usage")).toBeInTheDocument();
     expect(screen.getByText("Total Spend")).toBeInTheDocument();
     expect(screen.getAllByText("$100.50").length).toBeGreaterThan(0);
-  });
-
-  it("should not fetch agent activity data for non-team entity types", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="tag" />);
-
-    await waitFor(() => {
-      expect(mockTagDailyActivityCall).toHaveBeenCalled();
-    });
-
-    expect(mockAgentDailyActivityCall).not.toHaveBeenCalled();
-  });
-
-  it("should switch to Agent Activity tab for team entity type", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="team" />);
-
-    await waitFor(() => {
-      expect(mockTeamDailyActivityCall).toHaveBeenCalled();
-    });
-
-    const agentActivityTab = screen.getByText("Agent Activity");
-    act(() => {
-      fireEvent.click(agentActivityTab);
-    });
-
-    await waitFor(() => {
-      expect(screen.getAllByText("Activity Metrics").length).toBeGreaterThan(0);
-    });
   });
 
   it("should fallback to entity value when no entityList and no team_alias", async () => {
@@ -1231,56 +909,44 @@ describe("EntityUsage", () => {
   });
 
   describe("capability gating", () => {
-    it.each([
-      ["organization", () => mockOrganizationDailyActivityCall, "Organization Spend Overview"],
-      ["agent", () => mockAgentDailyActivityCall, "Agent Spend Overview"],
-    ] as const)("fetches %s activity for an admin but not for an internal user", async (entityType, call, heading) => {
-      render(<StatefulEntityUsage {...defaultProps} entityType={entityType} />);
-      await waitFor(() => {
-        expect(call()).toHaveBeenCalled();
-      });
+    it.each([["organization", () => mockOrganizationDailyActivityCall, "Organization Spend Overview"]] as const)(
+      "fetches %s activity for an admin but not for an internal user",
+      async (entityType, call, heading) => {
+        render(<StatefulEntityUsage {...defaultProps} entityType={entityType} />);
+        await waitFor(() => {
+          expect(call()).toHaveBeenCalled();
+        });
 
-      cleanup();
-      call().mockClear();
+        cleanup();
+        call().mockClear();
 
-      render(<StatefulEntityUsage {...defaultProps} entityType={entityType} userRole="Internal User" />);
-      expect(await screen.findByText(heading)).toBeInTheDocument();
-      expect(call()).not.toHaveBeenCalled();
-    });
+        render(<StatefulEntityUsage {...defaultProps} entityType={entityType} userRole="Internal User" />);
+        expect(await screen.findByText(heading)).toBeInTheDocument();
+        expect(call()).not.toHaveBeenCalled();
+      },
+    );
 
     // An org admin's session role is "Internal User", so the row above cannot
     // distinguish them. Gating the fetch on the session role alone left the
     // Organization Usage panel rendered but permanently empty, because the
     // request was never issued even though the proxy would have served it.
-    it.each([
-      ["organization", () => mockOrganizationDailyActivityCall, true],
-      ["agent", () => mockAgentDailyActivityCall, false],
-    ] as const)("fetches %s activity for an org admin: %s", async (entityType, call, expected) => {
+    it("fetches organization activity for an org admin", async () => {
       render(
-        <StatefulEntityUsage {...defaultProps} entityType={entityType} userRole="Internal User" isOrgAdmin={true} />,
+        <StatefulEntityUsage {...defaultProps} entityType="organization" userRole="Internal User" isOrgAdmin={true} />,
       );
 
-      if (expected) {
-        await waitFor(() => {
-          expect(call()).toHaveBeenCalled();
-        });
-      } else {
-        expect(await screen.findByText("Agent Spend Overview")).toBeInTheDocument();
-        expect(call()).not.toHaveBeenCalled();
-      }
+      await waitFor(() => {
+        expect(mockOrganizationDailyActivityCall).toHaveBeenCalled();
+      });
     });
 
-    it("keeps the team breakdown but drops its agent sub-fetch for an internal user", async () => {
+    it("keeps the team breakdown for an internal user", async () => {
       render(<StatefulEntityUsage {...defaultProps} entityType="team" userRole="Internal User" />);
 
       await waitFor(() => {
         expect(mockTeamDailyActivityCall).toHaveBeenCalled();
       });
       expect(screen.getByText("Team Spend Overview")).toBeInTheDocument();
-
-      expect(mockAgentDailyActivityCall).not.toHaveBeenCalled();
-      expect(screen.queryByText("Agent Activity")).not.toBeInTheDocument();
-      expect(screen.queryByText("Top Agents Driving Spend")).not.toBeInTheDocument();
     });
 
     it("keeps the tag breakdown for an internal user", async () => {
@@ -1319,7 +985,7 @@ describe("EntityUsage", () => {
     expect(screen.getByText("z")).toBeInTheDocument();
   });
 
-  it("feeds the key, model and agent tables from their own breakdowns", async () => {
+  it("feeds the key and model tables from their own breakdowns", async () => {
     const usageMetrics = {
       spend: 30.75,
       api_requests: 300,
@@ -1356,7 +1022,6 @@ describe("EntityUsage", () => {
       expect(screen.getByText("top-keys:sk-abc=30.75=alice@example.com")).toBeInTheDocument();
     });
     expect(screen.getByText("top-models:gpt-4o=70.25")).toBeInTheDocument();
-    expect(screen.getByText(/^top-models:Code Review Agent=/)).toBeInTheDocument();
   });
 
   it("uses the aggregated team endpoint and makes a single bounded request", async () => {
@@ -1370,49 +1035,6 @@ describe("EntityUsage", () => {
     await waitFor(() => {
       expect(screen.getAllByText("$100.50").length).toBeGreaterThan(0);
     });
-  });
-
-  it("does not scope the agent breakdown by the selected team ids", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="team" />);
-
-    await waitFor(() => {
-      expect(mockTeamDailyActivityCall).toHaveBeenCalled();
-      expect(mockAgentDailyActivityCall).toHaveBeenCalled();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Team Multi Select" }));
-
-    await waitFor(() => {
-      const teamRequests = mockDailyActivityAggregatedCall.mock.calls.filter((call) => call[0] === "team");
-      expect(teamRequests.some((call) => call[1].entityIds?.includes("team-1"))).toBe(true);
-    });
-
-    const agentRequests = mockDailyActivityAggregatedCall.mock.calls.filter((call) => call[0] === "agent");
-    expect(agentRequests.length).toBeGreaterThan(0);
-    agentRequests.forEach((call) => {
-      expect(call[1].entityIds).toBeNull();
-    });
-  });
-
-  it("does not refetch agent activity when the team selection changes", async () => {
-    render(<StatefulEntityUsage {...defaultProps} entityType="team" />);
-
-    await waitFor(() => {
-      expect(mockAgentDailyActivityCall).toHaveBeenCalled();
-    });
-    const agentCallsBefore = mockDailyActivityAggregatedCall.mock.calls.filter((call) => call[0] === "agent").length;
-    const teamCallsBefore = mockDailyActivityAggregatedCall.mock.calls.filter((call) => call[0] === "team").length;
-
-    fireEvent.click(screen.getByRole("button", { name: "Team Multi Select" }));
-
-    await waitFor(() => {
-      expect(mockDailyActivityAggregatedCall.mock.calls.filter((call) => call[0] === "team").length).toBeGreaterThan(
-        teamCallsBefore,
-      );
-    });
-    expect(mockDailyActivityAggregatedCall.mock.calls.filter((call) => call[0] === "agent")).toHaveLength(
-      agentCallsBefore,
-    );
   });
 
   it("surfaces a failure alert when the aggregated call fails instead of retrying other routes", async () => {

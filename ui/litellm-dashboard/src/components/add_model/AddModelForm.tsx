@@ -1,5 +1,4 @@
 import { useProviderFields } from "@/app/(dashboard)/hooks/providers/useProviderFields";
-import { useGuardrails } from "@/app/(dashboard)/hooks/guardrails/useGuardrails";
 import { useTags } from "@/app/(dashboard)/hooks/tags/useTags";
 import { all_admin_roles, isUserTeamAdminForAnyTeam } from "@/utils/roles";
 import { modelCreationScope } from "@/utils/modelPermissions";
@@ -99,8 +98,6 @@ const AddModelForm: React.FC<AddModelFormProps> = ({
     isLoading: isProviderMetadataLoading,
     error: providerMetadataError,
   } = useProviderFields();
-  const { data: guardrailsData } = useGuardrails();
-  const guardrailsList = guardrailsData?.guardrails.map((g) => g.guardrail_name);
   const { data: tagsList } = useTags();
   const selectedCredentialName = useWatch({ control: form.control, name: "litellm_credential_name" });
   const pickedProvider = useWatch({ control: form.control, name: "custom_llm_provider" });
@@ -479,9 +476,7 @@ const AddModelForm: React.FC<AddModelFormProps> = ({
                         showAdvancedSettings={showAdvancedSettings}
                         setShowAdvancedSettings={setShowAdvancedSettings}
                         teams={teams}
-                        guardrailsList={guardrailsList || []}
                         tagsList={tagsList || {}}
-                        accessToken={accessToken || ""}
                       />
                     </>
                   )}

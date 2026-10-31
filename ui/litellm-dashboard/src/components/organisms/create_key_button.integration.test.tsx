@@ -18,7 +18,6 @@ const state = vi.hoisted(() => ({
   tags: {} as Record<string, { name: string }>,
   teams: [] as { team_id: string; team_alias: string; models: string[]; organization_id?: string }[],
   organizations: [] as { organization_id: string; organization_alias: string }[],
-  accessGroups: [] as { access_group_id: string; access_group_name: string }[],
   projects: [] as { project_id: string; project_alias: string; team_id?: string; models?: string[] }[],
 }));
 
@@ -62,43 +61,18 @@ vi.mock("@/app/(dashboard)/hooks/teams/useTeams", () => ({
     isLoading: false,
   }),
 }));
-vi.mock("@/app/(dashboard)/hooks/accessGroups/useAccessGroups", () => ({
-  useAccessGroups: () => ({ data: state.accessGroups, isLoading: false, isError: false }),
-}));
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPServers", () => ({
-  useMCPServers: () => ({ data: [], isLoading: false }),
-}));
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPAccessGroups", () => ({
-  useMCPAccessGroups: () => ({ data: [], isLoading: false }),
-}));
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPToolsets", () => ({
-  useMCPToolsets: () => ({ data: [], isLoading: false }),
-}));
 
 vi.mock("../networking", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../networking")>();
-  const emptyMcpTools = { tools: [], error: null, message: null, stack_trace: null };
   return {
     ...actual,
     keyCreateCall: vi.fn().mockResolvedValue({ key: "sk-created", soft_budget: null }),
     keyCreateServiceAccountCall: vi.fn().mockResolvedValue({ key: "sk-service-account", soft_budget: null }),
     modelAvailableCall: vi.fn().mockResolvedValue({ data: [{ id: "gpt-4" }] }),
-    getGuardrailsList: vi.fn().mockResolvedValue({ guardrails: [] }),
-    getPoliciesList: vi.fn().mockResolvedValue({ policies: [] }),
     getPromptsList: vi.fn().mockResolvedValue({ prompts: [] }),
     getPossibleUserRoles: vi.fn().mockResolvedValue({}),
     userFilterUICall: vi.fn().mockResolvedValue([]),
-    getAgentsList: vi.fn().mockResolvedValue({ agents: [] }),
-    getClaudeCodePluginsList: vi.fn().mockResolvedValue({
-      plugins: [
-        { name: "public-skill", enabled: true },
-        { name: "private-skill", enabled: false },
-      ],
-      count: 2,
-    }),
     getPassThroughEndpointsCall: vi.fn().mockResolvedValue({ endpoints: [] }),
-    vectorStoreListCall: vi.fn().mockResolvedValue({ data: [] }),
-    listMCPTools: vi.fn().mockResolvedValue(emptyMcpTools),
     getRouterSettingsCall: vi.fn().mockResolvedValue({ router_settings: {} }),
   };
 });
@@ -119,9 +93,6 @@ const OPENAPI_SCHEMA = {
 };
 
 const SECTIONS = {
-  mcp: /MCP Settings/i,
-  agent: /Agent Settings/i,
-  skill: /Skill Settings/i,
   logging: /Logging Settings/i,
   router: /Router Settings/i,
   aliases: /Model Aliases/i,
@@ -151,13 +122,9 @@ const OPTIONAL_OPEN_PAYLOAD = {
   tpd_limit: undefined,
   throttle_on_budget_exceeded: undefined,
   enable_prompt_caching: undefined,
-  guardrails: undefined,
-  policies: undefined,
   prompts: undefined,
-  access_group_ids: undefined,
   allowed_passthrough_routes: undefined,
   allowed_ips: undefined,
-  allowed_vector_store_ids: undefined,
   tags: undefined,
 };
 
@@ -177,9 +144,6 @@ const ROUTER_SETTINGS_DEFAULT = {
 };
 
 const SECTION_PAYLOAD_ADDITIONS: Record<keyof typeof SECTIONS, Record<string, unknown>> = {
-  mcp: { allowed_mcp_servers_and_groups: { servers: [], accessGroups: [] } },
-  agent: { allowed_agents_and_groups: undefined },
-  skill: {},
   logging: {},
   router: { router_settings: ROUTER_SETTINGS_DEFAULT },
   aliases: {},
@@ -189,8 +153,6 @@ const SECTION_PAYLOAD_ADDITIONS: Record<keyof typeof SECTIONS, Record<string, un
 
 const ALL_OPEN_PAYLOAD = {
   ...OPTIONAL_OPEN_PAYLOAD,
-  ...SECTION_PAYLOAD_ADDITIONS.mcp,
-  ...SECTION_PAYLOAD_ADDITIONS.agent,
   ...SECTION_PAYLOAD_ADDITIONS.router,
   ...SECTION_PAYLOAD_ADDITIONS.advanced,
 };
@@ -237,7 +199,6 @@ describe("CreateKey", () => {
     state.teams = [];
     state.organizations = [];
     state.projects = [];
-    state.accessGroups = [];
     vi.mocked(keyCreateCall).mockClear().mockResolvedValue({ key: "sk-created", soft_budget: null });
     vi.mocked(keyCreateServiceAccountCall)
       .mockClear()
@@ -344,21 +305,6 @@ describe("CreateKey", () => {
 
       const serialised = JSON.parse(JSON.stringify(await createdPayload())) as Record<string, unknown>;
       expect(Object.keys(serialised).sort()).toStrictEqual([...wireKeys].sort());
-    });
-
-    it("moves a picked private skill under object_permission.skills and off the top level", async () => {
-      await openModal();
-      await nameTheKey();
-      await openSection(/Optional Settings/i);
-      await openSection(SECTIONS.skill);
-      await userEvent.click(await screen.findByRole("combobox", { name: "Select skills (optional)" }));
-      await userEvent.click(await screen.findByRole("option", { name: "private-skill (private)" }));
-      await userEvent.keyboard("{Escape}");
-      await submit();
-
-      const payload = await createdPayload();
-      expect(payload.object_permission).toStrictEqual({ skills: ["private-skill"] });
-      expect(payload).not.toHaveProperty("allowed_skills");
     });
 
     it("omits a budget typed into a section the user closed again, rather than sending it as null", async () => {
@@ -515,20 +461,6 @@ describe("CreateKey", () => {
       expect(screen.queryByLabelText(/Allowed IPs/)).not.toBeInTheDocument();
     });
 
-    it("routes a chosen access group into access_group_ids", async () => {
-      state.accessGroups = [{ access_group_id: "ag-1", access_group_name: "Group One" }];
-      await openModal();
-      await nameTheKey();
-      await openSection(/Optional Settings/i);
-
-      await userEvent.click(await screen.findByLabelText("Select access groups (optional)"));
-      await userEvent.click(await screen.findByRole("option", { name: /Group One/ }));
-      await userEvent.keyboard("{Escape}");
-      await submit();
-
-      expect((await createdPayload()).access_group_ids).toStrictEqual(["ag-1"]);
-    });
-
     it("moves the schema-driven Advanced Settings fields onto the payload under their own keys", async () => {
       await openModal();
       await nameTheKey();
@@ -556,17 +488,16 @@ describe("CreateKey", () => {
       expect(payload).toHaveProperty("soft_budget");
     });
 
-    it("drops the policy and prompt keys entirely for a role that cannot see those fields", async () => {
-      state.can = { viewPolicies: false, viewPrompts: false };
+    it("drops the prompt key entirely for a role that cannot see that field", async () => {
+      state.can = { viewPrompts: false };
       await openModal();
       await nameTheKey();
       await openSection(/Optional Settings/i);
       await submit();
 
       const payload = await createdPayload();
-      expect(payload).not.toHaveProperty("policies");
       expect(payload).not.toHaveProperty("prompts");
-      expect(payload).toHaveProperty("guardrails");
+      expect(payload).toHaveProperty("tags");
     });
 
     it("adds project_id only when the projects UI is enabled", async () => {
@@ -576,41 +507,6 @@ describe("CreateKey", () => {
       await submit();
 
       expect(await createdPayload()).toStrictEqual({ ...ALL_CLOSED_PAYLOAD, project_id: undefined });
-    });
-
-    it("keeps disable_global_guardrails out of the payload while the switch is off", async () => {
-      await openModal();
-      await nameTheKey();
-      await openSection(/Optional Settings/i);
-      await submit();
-
-      expect(await createdPayload()).not.toHaveProperty("disable_global_guardrails");
-    });
-
-    it("sends disable_global_guardrails once the switch is on", async () => {
-      state.authorized = { ...state.authorized, premiumUser: true };
-      await openModal();
-      await nameTheKey();
-      await openSection(/Optional Settings/i);
-      await userEvent.click(await screen.findByRole("switch", { name: /Disable Global Guardrails/ }));
-      await submit();
-
-      expect((await createdPayload()).disable_global_guardrails).toBe(true);
-    });
-
-    it("hides the disable_global_guardrails switch from a non-admin", async () => {
-      state.authorized = { ...state.authorized, userRole: "Internal User" };
-      await openModal();
-      await openSection(/Optional Settings/i);
-
-      expect(screen.queryByRole("switch", { name: /Disable Global Guardrails/i })).not.toBeInTheDocument();
-    });
-
-    it("shows the disable_global_guardrails switch to a proxy admin", async () => {
-      await openModal();
-      await openSection(/Optional Settings/i);
-
-      expect(await screen.findByRole("switch", { name: /Disable Global Guardrails/i })).toBeInTheDocument();
     });
 
     it("folds a metadata JSON string back through JSON.stringify", async () => {
@@ -997,22 +893,20 @@ describe("CreateKey", () => {
     });
   });
 
-  describe("policy and prompt fields", () => {
-    it("loads and offers both selectors for a role that can see them", async () => {
+  describe("prompt field", () => {
+    it("offers the prompt selector to a role that can see it", async () => {
       await openModal();
       await openSection(/Optional Settings/i);
 
-      expect(await screen.findByLabelText("Policies")).toBeInTheDocument();
       expect(await screen.findByLabelText("Prompts")).toBeInTheDocument();
     });
 
-    it("omits both selectors for a role that cannot see them", async () => {
-      state.can = { viewPolicies: false, viewPrompts: false };
+    it("omits the prompt selector for a role that cannot see it", async () => {
+      state.can = { viewPrompts: false };
       await openModal();
       await openSection(/Optional Settings/i);
 
-      await screen.findByLabelText("Guardrails");
-      expect(screen.queryByLabelText("Policies")).not.toBeInTheDocument();
+      await screen.findByLabelText("Tags");
       expect(screen.queryByLabelText("Prompts")).not.toBeInTheDocument();
     });
   });
@@ -1317,18 +1211,6 @@ describe("CreateKey", () => {
   });
 
   describe("mount-gate liveness", () => {
-    it("keeps the MCP tool permissions key out of the payload even with its section open", async () => {
-      await openModal();
-      await nameTheKey();
-      await openSection(/Optional Settings/i);
-      await openSection(SECTIONS.mcp);
-      await submit();
-
-      const payload = await createdPayload();
-      expect(payload).not.toHaveProperty("mcp_tool_permissions");
-      expect(payload).toHaveProperty("allowed_mcp_servers_and_groups");
-    });
-
     it("registers no Optional Settings field while a team choice is still required", async () => {
       vi.mocked(modelAvailableCall).mockResolvedValue({ data: [{ id: "no-default-models" }] });
       renderCreateKey();

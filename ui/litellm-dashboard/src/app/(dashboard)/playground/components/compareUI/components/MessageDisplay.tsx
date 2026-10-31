@@ -8,7 +8,6 @@ import { useSyntaxTheme } from "@/hooks/useSyntaxTheme";
 import ChatImageRenderer from "../../chat_ui/ChatImageRenderer";
 import ReasoningContent from "@/components/chat_ui/ReasoningContent";
 import ResponseMetrics from "@/components/chat_ui/ResponseMetrics";
-import { SearchResultsDisplay } from "../../chat_ui/SearchResultsDisplay";
 import type { MessageType } from "@/components/chat_ui/types";
 
 interface MessageDisplayProps {
@@ -127,20 +126,10 @@ export function MessageDisplay({ messages, isLoading }: MessageDisplayProps) {
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                     <Bot size={16} />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-foreground">{displayModel}</span>
-                    {assistantMessage.toolName && (
-                      <span className="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                        {assistantMessage.toolName}
-                      </span>
-                    )}
-                  </div>
+                  <span className="text-sm font-semibold text-foreground">{displayModel}</span>
                 </div>
                 {assistantMessage.reasoningContent && (
                   <ReasoningContent reasoningContent={assistantMessage.reasoningContent} />
-                )}
-                {assistantMessage.searchResults && (
-                  <SearchResultsDisplay searchResults={assistantMessage.searchResults} />
                 )}
                 {renderMessageBody(assistantMessage)}
                 {(assistantMessage.timeToFirstToken || assistantMessage.totalLatency || assistantMessage.usage) && (
@@ -148,7 +137,6 @@ export function MessageDisplay({ messages, isLoading }: MessageDisplayProps) {
                     timeToFirstToken={assistantMessage.timeToFirstToken}
                     totalLatency={assistantMessage.totalLatency}
                     usage={assistantMessage.usage}
-                    toolName={assistantMessage.toolName}
                   />
                 )}
               </div>

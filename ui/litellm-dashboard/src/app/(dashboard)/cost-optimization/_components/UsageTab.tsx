@@ -1,15 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 
-import { AreaChart, BarChart, CustomLegend, DonutChart, SEQUENTIAL_COLOR_RAMP } from "@/components/shared/charts";
+import { AreaChart, BarChart, CustomLegend, DonutChart } from "@/components/shared/charts";
 import AdvancedDatePicker from "@/components/shared/advanced_date_picker";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import useCan from "@/app/(dashboard)/hooks/useCan";
-import { getToolSpend, ToolSpendResponse } from "@/components/networking";
 import {
-  buildDailyToolSeries,
   formatRangeLabel,
   localIsoDay,
   MAX_POINTS_WITH_DOTS,
@@ -22,7 +19,6 @@ import {
   shortDate,
   sumOverDays,
   toCumulative,
-  topToolsBySpend,
   usd,
   withStartAnchor,
 } from "./costOptimizationUtils";
@@ -30,47 +26,14 @@ import SavingsTiles from "@/components/shared/SavingsTiles";
 import { DailyActivityRange } from "./useDailyActivityRange";
 
 interface UsageTabProps {
-  accessToken: string | null;
   activity: DailyActivityRange;
 }
 
-const EMPTY_TOOL_SPEND: ToolSpendResponse = {
-  by_tool: [],
-  daily: [],
-  start_date: null,
-  end_date: null,
-};
-
-const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
-
-const UsageTab: React.FC<UsageTabProps> = ({ accessToken, activity }) => {
+const UsageTab: React.FC<UsageTabProps> = ({ activity }) => {
   const { dateValue, onDateChange, results, loading } = activity;
 
   const startTime = dateValue.from ?? null;
   const endTime = dateValue.to ?? null;
-
-  const canViewProxyWideCostData = useCan("viewProxyWideCostData");
-  const toolSpendEnabled = canViewProxyWideCostData && !!accessToken && !!startTime && !!endTime;
-  const rangeKey = startTime && endTime ? `${isoDay(startTime)}|${isoDay(endTime)}` : "";
-  const [toolSpendState, setToolSpendState] = useState<{ key: string; data: ToolSpendResponse } | null>(null);
-
-  useEffect(() => {
-    if (!canViewProxyWideCostData || !accessToken || !startTime || !endTime) return;
-    let cancelled = false;
-    getToolSpend(accessToken, isoDay(startTime), isoDay(endTime))
-      .then((res) => {
-        if (!cancelled) setToolSpendState({ key: rangeKey, data: res });
-      })
-      .catch(() => {
-        if (!cancelled) setToolSpendState({ key: rangeKey, data: EMPTY_TOOL_SPEND });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canViewProxyWideCostData, accessToken, startTime, endTime, rangeKey]);
-
-  const toolSpend = toolSpendState?.key === rangeKey ? toolSpendState.data : null;
-  const toolSpendLoading = toolSpendEnabled && toolSpend === null;
 
   const [accumulation, setAccumulation] = useState<SavingsAccumulation>("cumulative");
 
@@ -106,22 +69,6 @@ const UsageTab: React.FC<UsageTabProps> = ({ accessToken, activity }) => {
     [results],
   );
   const plottedDriverTotal = useMemo(() => byDriver.reduce((sum, d) => sum + d.usd, 0), [byDriver]);
-
-  const topTools = useMemo(() => topToolsBySpend(toolSpend?.by_tool ?? []), [toolSpend]);
-  const topToolNames = useMemo(() => topTools.map((t) => t.tool_name), [topTools]);
-  const topToolsChart = useMemo<Record<string, string | number>[]>(
-    () => topTools.map((t) => ({ tool_name: t.tool_name, spend: t.spend })),
-    [topTools],
-  );
-  const dailyToolSeries = useMemo(
-    () =>
-      buildDailyToolSeries(toolSpend?.daily ?? [], topToolNames).map((point) => ({
-        ...point,
-        date: shortDate(String(point.date)),
-      })),
-    [toolSpend, topToolNames],
-  );
-  const toolColors = useMemo(() => SEQUENTIAL_COLOR_RAMP.slice(0, Math.max(topToolNames.length, 1)), [topToolNames]);
 
   return (
     <div className="w-full space-y-6">
@@ -195,58 +142,6 @@ const UsageTab: React.FC<UsageTabProps> = ({ accessToken, activity }) => {
           </CardContent>
         </Card>
       </div>
-
-      {canViewProxyWideCostData && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Spend by tool</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Spend on requests that invoked each tool (MCP and client-side tools); declaring a tool without invoking it
-              does not count. A request that invoked multiple tools counts its full spend toward each, so this
-              attributes rather than partitions spend.
-            </p>
-          </CardHeader>
-          <CardContent>
-            {topTools.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                {toolSpendLoading ? "Loading..." : "No tool usage in this range."}
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div>
-                  <p className="mb-2 text-sm font-medium text-muted-foreground">Total by tool</p>
-                  <BarChart
-                    data={topToolsChart}
-                    index="tool_name"
-                    categories={["spend"]}
-                    colors={toolColors}
-                    colorByDatum
-                    layout="vertical"
-                    yAxisWidth={140}
-                    maxBarSize={64}
-                    showLegend={false}
-                    valueFormatter={usd}
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 text-sm font-medium text-muted-foreground">Daily spend by tool</p>
-                  <CustomLegend categories={topToolNames} colors={toolColors} />
-                  <BarChart
-                    data={dailyToolSeries}
-                    index="date"
-                    categories={topToolNames}
-                    colors={toolColors}
-                    stack
-                    maxBarSize={64}
-                    valueFormatter={usd}
-                    showLegend={false}
-                  />
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

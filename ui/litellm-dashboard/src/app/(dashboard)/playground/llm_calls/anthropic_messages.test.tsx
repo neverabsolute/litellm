@@ -19,14 +19,7 @@ vi.mock("@anthropic-ai/sdk", () => ({
 
 const NON_STREAMING_ARGS = [
   undefined, // traceId
-  undefined, // vector_store_ids
-  undefined, // guardrails
-  undefined, // policies
-  undefined, // selectedMCPServers
   undefined, // customBaseUrl
-  undefined, // mcpServers
-  undefined, // mcpServerToolRestrictions
-  undefined, // mcpToolsets
   false, // streamingEnabled
 ] as const;
 

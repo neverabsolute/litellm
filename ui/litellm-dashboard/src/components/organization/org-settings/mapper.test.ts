@@ -20,13 +20,6 @@ const org: Organization = {
   teams: null,
   users: null,
   members: null,
-  object_permission: {
-    object_permission_id: "op-1",
-    mcp_servers: ["srv-1"],
-    mcp_access_groups: ["group-1"],
-    mcp_toolsets: ["ts-1"],
-    vector_stores: ["vs-1"],
-  },
 };
 
 describe("orgToForm", () => {
@@ -38,18 +31,15 @@ describe("orgToForm", () => {
       budget_duration: "30d",
       tpm_limit: "1000",
       rpm_limit: "50",
-      vector_stores: ["vs-1"],
-      mcp: { servers: ["srv-1"], accessGroups: ["group-1"], toolsets: ["ts-1"] },
       metadata: JSON.stringify({ cost_center: "eng" }, null, 2),
     });
   });
 
-  it("maps missing budget values and permissions to empty widget state", () => {
+  it("maps missing budget values to empty widget state", () => {
     const bare: Organization = {
       ...org,
       metadata: {},
       litellm_budget_table: { max_budget: null, budget_duration: null, tpm_limit: null, rpm_limit: null },
-      object_permission: undefined,
     };
 
     expect(orgToForm(bare)).toEqual({
@@ -59,8 +49,6 @@ describe("orgToForm", () => {
       budget_duration: "",
       tpm_limit: "",
       rpm_limit: "",
-      vector_stores: [],
-      mcp: { servers: [], accessGroups: [], toolsets: [] },
       metadata: "",
     });
   });
@@ -90,19 +78,5 @@ describe("buildOrgPatch", () => {
   it("clears metadata with null and parses non-empty metadata JSON", () => {
     expect(buildOrgPatch({ metadata: "" })).toEqual({ metadata: null });
     expect(buildOrgPatch({ metadata: '{"a": 1}' })).toEqual({ metadata: { a: 1 } });
-  });
-
-  it("builds object_permission from vector stores alone without touching mcp keys", () => {
-    expect(buildOrgPatch({ vector_stores: [] })).toEqual({ object_permission: { vector_stores: [] } });
-  });
-
-  it("builds object_permission from mcp alone, keeping empty arrays as clears", () => {
-    expect(buildOrgPatch({ mcp: { servers: [], accessGroups: [], toolsets: ["ts-2"] } })).toEqual({
-      object_permission: { mcp_servers: [], mcp_access_groups: [], mcp_toolsets: ["ts-2"] },
-    });
-  });
-
-  it("omits object_permission entirely when neither permission field is dirty", () => {
-    expect(buildOrgPatch({ organization_alias: "acme-2" })).toEqual({ organization_alias: "acme-2" });
   });
 });

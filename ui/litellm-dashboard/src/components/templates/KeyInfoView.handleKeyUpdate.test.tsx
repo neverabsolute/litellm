@@ -99,13 +99,7 @@ vi.mock("../organisms/RegenerateKeyModal", () => {
   (RegenerateKeyModal as any).displayName = "RegenerateKeyModal";
   return { RegenerateKeyModal };
 });
-vi.mock("../object_permissions_view", () => {
-  function ObjectPermissionsView() {
-    return null;
-  }
-  (ObjectPermissionsView as any).displayName = "ObjectPermissionsView";
-  return { __esModule: true, default: ObjectPermissionsView };
-});
+
 vi.mock("../logging_settings_view", () => {
   function LoggingSettingsView() {
     return null;
@@ -149,15 +143,6 @@ vi.mock("@/app/(dashboard)/hooks/projects/useProjects", () => ({
 // Mock useUISettings hook
 vi.mock("@/app/(dashboard)/hooks/uiSettings/useUISettings", () => ({
   useUISettings: vi.fn().mockReturnValue({ data: { values: {} }, isLoading: false }),
-}));
-
-// Mock useMCPServers hook (requires QueryClientProvider which is not available in this test)
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPServers", () => ({
-  useMCPServers: vi.fn().mockReturnValue({ data: [] }),
-}));
-
-vi.mock("@/app/(dashboard)/hooks/mcpServers/useMCPToolsets", () => ({
-  useMCPToolsets: vi.fn().mockReturnValue({ data: [] }),
 }));
 
 // Mock useResetKeySpend hook (requires QueryClientProvider which is not available in this test)
@@ -259,8 +244,8 @@ beforeEach(() => {
 });
 
 // ---- Tests ----
-describe("KeyInfoView handleKeyUpdate guardrails guard", () => {
-  it("should remove guardrails & prompts for non-premium key owner without write access role", async () => {
+describe("KeyInfoView handleKeyUpdate prompts guard", () => {
+  it("should remove prompts for non-premium key owner without write access role", async () => {
     const keyDataWithOwner = { ...baseKeyData, user_id: "user_1" };
     mockUseAuthorized.mockReturnValue({
       accessToken: "access_abc",
@@ -287,7 +272,6 @@ describe("KeyInfoView handleKeyUpdate guardrails guard", () => {
     fireEvent.click(screen.getByText("Edit Settings"));
     (globalThis as any).__TEST_FORM_VALUES = {
       token: "tok_123",
-      guardrails: ["gr-1", "gr-2"],
       prompts: ["fast", "safe"],
       metadata: {},
     };
@@ -299,20 +283,17 @@ describe("KeyInfoView handleKeyUpdate guardrails guard", () => {
     const [sentAccessToken, sentPayload] = keyUpdateCallMock.mock.calls[0];
     expect(sentAccessToken).toBe("access_abc");
 
-    expect("guardrails" in sentPayload).toBe(false);
     expect("prompts" in sentPayload).toBe(false);
-    expect(sentPayload.metadata?.guardrails).toBeUndefined();
     expect(sentPayload.key).toBe("tok_123");
   });
 
-  it("should preserve guardrails & prompts for non-premium users with write access role (e.g. Admin)", async () => {
+  it("should preserve prompts for non-premium users with write access role (e.g. Admin)", async () => {
     renderView(false); // premiumUser = false, userRole = "Admin"
 
     fireEvent.click(screen.getByText("Settings"));
     fireEvent.click(screen.getByText("Edit Settings"));
     (globalThis as any).__TEST_FORM_VALUES = {
       token: "tok_123",
-      guardrails: ["gr-1"],
       prompts: ["fast"],
       metadata: {},
     };
@@ -323,20 +304,17 @@ describe("KeyInfoView handleKeyUpdate guardrails guard", () => {
 
     const [, sentPayload] = keyUpdateCallMock.mock.calls[0];
 
-    expect(sentPayload.guardrails).toEqual(["gr-1"]);
     expect(sentPayload.prompts).toEqual(["fast"]);
-    expect(sentPayload.metadata?.guardrails).toEqual(["gr-1"]);
     expect(sentPayload.key).toBe("tok_123");
   });
 
-  it("should preserve guardrails & prompts for premium users and includes metadata.guardrails", async () => {
+  it("should preserve prompts for premium users", async () => {
     renderView(true); // premiumUser = true
 
     fireEvent.click(screen.getByText("Settings"));
     fireEvent.click(screen.getByText("Edit Settings"));
     (globalThis as any).__TEST_FORM_VALUES = {
       token: "tok_123",
-      guardrails: ["gr-1"],
       prompts: ["fast"],
       metadata: {},
     };
@@ -347,39 +325,15 @@ describe("KeyInfoView handleKeyUpdate guardrails guard", () => {
 
     const [, sentPayload] = keyUpdateCallMock.mock.calls[0];
 
-    expect(sentPayload.guardrails).toEqual(["gr-1"]);
     expect(sentPayload.prompts).toEqual(["fast"]);
-    expect(sentPayload.metadata?.guardrails).toEqual(["gr-1"]);
     expect(sentPayload.key).toBe("tok_123");
-  });
-});
-
-describe("KeyInfoView handleKeyUpdate mcp_toolsets", () => {
-  it("should forward the toolsets the edit form supplies into object_permission", async () => {
-    renderView(true);
-
-    fireEvent.click(screen.getByText("Settings"));
-    fireEvent.click(screen.getByText("Edit Settings"));
-    (globalThis as any).__TEST_FORM_VALUES = {
-      token: "tok_123",
-      max_budget: 40000,
-      mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: ["ts-1"] },
-    };
-
-    fireEvent.click(screen.getByText("Mock Submit"));
-
-    await waitFor(() => expect(keyUpdateCallMock).toHaveBeenCalled());
-
-    const [, sentPayload] = keyUpdateCallMock.mock.calls[0];
-    expect(sentPayload.object_permission.mcp_toolsets).toEqual(["ts-1"]);
-    expect(sentPayload.max_budget).toBe(40000);
   });
 });
 
 describe("KeyInfoView handleKeyUpdate cache sync", () => {
   it("should invalidate every cached key query so the list and detail views re-read the saved key", async () => {
     keyUpdateCallMock.mockResolvedValueOnce({
-      object_permission: { mcp_servers: ["srv-1"], mcp_tool_permissions: { "srv-1": ["read_wiki"] } },
+      key: "tok_123",
     });
     renderView(true);
 
@@ -391,45 +345,6 @@ describe("KeyInfoView handleKeyUpdate cache sync", () => {
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Key updated successfully"));
     expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: ["keys"] });
-  });
-});
-
-describe("KeyInfoView handleKeyUpdate skills", () => {
-  it("should forward the skills the edit form supplies into object_permission and drop the form key", async () => {
-    renderView(true);
-
-    fireEvent.click(screen.getByText("Settings"));
-    fireEvent.click(screen.getByText("Edit Settings"));
-    (globalThis as any).__TEST_FORM_VALUES = {
-      token: "tok_123",
-      skills: ["private-skill"],
-    };
-
-    fireEvent.click(screen.getByText("Mock Submit"));
-
-    await waitFor(() => expect(keyUpdateCallMock).toHaveBeenCalled());
-
-    const [, sentPayload] = keyUpdateCallMock.mock.calls[0];
-    expect(sentPayload.object_permission.skills).toEqual(["private-skill"]);
-    expect(sentPayload).not.toHaveProperty("skills");
-  });
-
-  it("should send an explicit empty skills list when the form clears every skill", async () => {
-    renderView(true);
-
-    fireEvent.click(screen.getByText("Settings"));
-    fireEvent.click(screen.getByText("Edit Settings"));
-    (globalThis as any).__TEST_FORM_VALUES = {
-      token: "tok_123",
-      skills: [],
-    };
-
-    fireEvent.click(screen.getByText("Mock Submit"));
-
-    await waitFor(() => expect(keyUpdateCallMock).toHaveBeenCalled());
-
-    const [, sentPayload] = keyUpdateCallMock.mock.calls[0];
-    expect(sentPayload.object_permission.skills).toEqual([]);
   });
 });
 

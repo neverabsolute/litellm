@@ -5,10 +5,10 @@ import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from functools import cache
 from importlib.resources import files
-from typing import TYPE_CHECKING, Final, Protocol
+from typing import Final
 
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import ConfigDict, TypeAdapter
+from fastapi import APIRouter, HTTPException
+from pydantic import TypeAdapter
 from typing_extensions import ReadOnly, TypedDict
 
 import litellm
@@ -20,31 +20,14 @@ from litellm.litellm_core_utils.get_blog_posts import (
 )
 from litellm.litellm_core_utils.get_model_cost_map import GetModelCostMap
 from litellm.litellm_core_utils.offline_mode import is_offline_mode
-from litellm.proxy._types import (
-    CommonProxyErrors,
-)
-from litellm.proxy.db.health_check_latest import latest_by_model_name
-from litellm.proxy.utils import get_custom_url
-from litellm.repositories.table_repositories import ClaudeCodePluginRepository
 from litellm.router_strategy.complexity_router.fuse_presets import FusePresetCatalog, get_fuse_presets
-from litellm.types.agents import AgentCard
-from litellm.types.mcp import MCPPublicServer
-from litellm.types.proxy.management_endpoints.model_management_endpoints import (
-    ModelGroupInfoProxy,
-)
 from litellm.types.proxy.public_endpoints.public_endpoints import (
-    AgentCreateInfo,
-    AgentCredentialField,
     AutoRouterPresetRecord,
     ComplexityScorerDefaults,
     ProviderCreateInfo,
-    PublicModelHubInfo,
     SupportedEndpointsResponse,
 )
 from litellm.types.utils import LlmProviders
-
-if TYPE_CHECKING:
-    from datetime import datetime
 
 router: Final = APIRouter()
 
@@ -68,34 +51,6 @@ class _EndpointEntry(TypedDict):
     label: ReadOnly[str]
     endpoint: ReadOnly[str]
     providers: ReadOnly[Sequence[_EndpointProviderEntry]]
-
-
-class _PluginRow(Protocol):
-    @property
-    def id(self) -> str: ...
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def enabled(self) -> bool: ...
-
-    @property
-    def created_at(self) -> "datetime | None": ...
-
-    @property
-    def updated_at(self) -> "datetime | None": ...
-
-    @property
-    def manifest_json(self) -> str | None: ...
-
-
-class _PluginTableActions(Protocol):
-    def find_many(self, *, where: Mapping[str, bool]) -> Awaitable[Sequence[_PluginRow]]: ...
-
-
-def _plugin_table(prisma_client: object) -> _PluginTableActions:
-    return ClaudeCodePluginRepository(prisma_client).table
 
 
 # ---------------------------------------------------------------------------
@@ -214,15 +169,6 @@ def _load_endpoints() -> list[_EndpointEntry]:
     return _build_endpoints(raw)
 
 
-class _BundledAgentCreateInfo(AgentCreateInfo):
-    model_config = ConfigDict(frozen=True)
-
-    inherit_credentials_from_provider: str | None = None
-
-
-_BUNDLED_AGENTS_ADAPTER: Final = TypeAdapter(list[_BundledAgentCreateInfo])
-
-
 def _read_bundled_file(filename: str) -> bytes:
     return files("litellm.proxy.public_endpoints").joinpath(filename).read_bytes()
 
@@ -232,210 +178,7 @@ def _provider_create_fields() -> tuple[ProviderCreateInfo, ...]:
     return tuple(_PROVIDER_CREATE_FIELDS_ADAPTER.validate_json(_read_bundled_file("provider_create_fields.json")))
 
 
-def _inherited_credential_fields(provider: ProviderCreateInfo) -> tuple[AgentCredentialField, ...]:
-    return tuple(
-        AgentCredentialField.model_validate({**field.model_dump(), "include_in_litellm_params": True})
-        for field in provider.credential_fields
-    )
-
-
-def _with_inherited_credentials(
-    agent: _BundledAgentCreateInfo, providers: Mapping[str, ProviderCreateInfo]
-) -> AgentCreateInfo:
-    provider_name: Final = agent.inherit_credentials_from_provider
-    provider: Final = providers.get(provider_name) if provider_name else None
-    inherited: Final = _inherited_credential_fields(provider) if provider else ()
-    return AgentCreateInfo.model_validate(
-        {
-            **agent.model_dump(exclude={"inherit_credentials_from_provider"}),
-            "credential_fields": [*agent.credential_fields, *inherited],
-        }
-    )
-
-
-@cache
-def _agent_create_fields() -> tuple[AgentCreateInfo, ...]:
-    providers: Final = {provider.provider: provider for provider in _provider_create_fields()}
-    return tuple(
-        _with_inherited_credentials(agent, providers)
-        for agent in _BUNDLED_AGENTS_ADAPTER.validate_json(_read_bundled_file("agent_create_fields.json"))
-    )
-
-
 # ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/public/model_hub",
-    tags=["public", "model management"],
-    response_model=list[ModelGroupInfoProxy],
-)
-async def public_model_hub():
-    import litellm
-    from litellm.proxy.health_endpoints._health_endpoints import (
-        convert_health_check_to_dict,
-    )
-    from litellm.proxy.proxy_server import (
-        get_model_group_info,
-        llm_router,
-        prisma_client,
-    )
-
-    if llm_router is None:
-        raise HTTPException(status_code=400, detail=CommonProxyErrors.no_llm_router.value)
-
-    model_groups: list[ModelGroupInfoProxy] = []
-    if litellm.public_model_groups is not None:
-        model_groups = get_model_group_info(  # rebind-ok: pre-existing rebinding on a rename-only line
-            llm_router=llm_router,
-            all_models_str=litellm.public_model_groups,
-            model_group=None,
-        )
-
-    # Fetch health check information if available
-    health_checks_map: Final = {}
-    if prisma_client is not None:
-        try:
-            latest_checks: Final = await prisma_client.get_all_latest_health_checks()
-            for model_name, check in latest_by_model_name(latest_checks).items():
-                health_checks_map[model_name] = convert_health_check_to_dict(check)
-        except Exception:
-            pass
-
-    for model_group in model_groups:
-        health_info = health_checks_map.get(model_group.model_group)
-        if health_info:
-            model_group.health_status = health_info.get("status")
-            model_group.health_response_time = health_info.get("response_time_ms")
-            model_group.health_checked_at = health_info.get("checked_at")
-
-    return model_groups
-
-
-@router.get(
-    "/public/agent_hub",
-    tags=["[beta] Agents", "public"],
-    response_model=list[AgentCard],
-)
-async def get_agents(request: Request):
-    import litellm
-    from litellm.proxy.agent_endpoints.agent_registry import global_agent_registry
-
-    agents: Final = global_agent_registry.get_public_agent_list()
-
-    if litellm.public_agent_groups is None:
-        return []
-
-    return [
-        {
-            **(agent.agent_card_params or {}),
-            "url": get_custom_url(str(request.base_url), route=f"a2a/{agent.agent_id}"),
-        }
-        for agent in agents
-        if not global_agent_registry.ids_for_agent(agent.agent_id).isdisjoint(litellm.public_agent_groups)
-    ]
-
-
-@router.get(
-    "/public/mcp_hub",
-    tags=["[beta] MCP", "public"],
-    response_model=list[MCPPublicServer],
-)
-async def get_mcp_servers():
-    from litellm.proxy.mcp_server.mcp_server_manager import (
-        global_mcp_server_manager,
-    )
-
-    public_mcp_servers: Final = global_mcp_server_manager.get_public_mcp_servers()
-    return [
-        MCPPublicServer.model_validate(
-            {
-                **server.model_dump(),
-                "mcp_info": {
-                    **(server.mcp_info or {}),
-                    "is_public": True,
-                    "is_public_explicit": server.server_id in (litellm.public_mcp_servers or ()),
-                },
-            }
-        )
-        for server in public_mcp_servers
-    ]
-
-
-@router.get(
-    "/public/skill_hub",
-    tags=["public", "Claude Code Marketplace"],
-)
-async def public_skill_hub():
-    """Return enabled (public) Claude Code skills, or none when the marketplace requires a key."""
-    from litellm.proxy.anthropic_endpoints.claude_code_endpoints.claude_code_marketplace import (
-        MANIFEST_FIELDS,
-        get_installation_preference,
-    )
-    from litellm.proxy.common_utils.claude_code_marketplace_auth import marketplace_auth_required
-    from litellm.proxy.proxy_server import prisma_client
-    from litellm.types.proxy.claude_code_endpoints import (
-        ListPluginsResponse,
-        PluginListItem,
-    )
-
-    if marketplace_auth_required():
-        return ListPluginsResponse(plugins=[], count=0)
-    if prisma_client is None:
-        raise HTTPException(status_code=500, detail=CommonProxyErrors.db_not_connected_error.value)
-    try:
-        plugins: Final = await _plugin_table(prisma_client).find_many(where={"enabled": True})
-        items: Final = []
-        for plugin in plugins:
-            raw = plugin.manifest_json or {}
-            manifest = json.loads(raw) if isinstance(raw, str) else raw
-            items.append(
-                PluginListItem(
-                    id=plugin.id,
-                    name=plugin.name,
-                    enabled=plugin.enabled,
-                    created_at=str(plugin.created_at) if plugin.created_at else None,
-                    updated_at=str(plugin.updated_at) if plugin.updated_at else None,
-                    source=manifest.get("source", {}),
-                    description=manifest.get("description"),
-                    version=manifest.get("version"),
-                    category=manifest.get("category"),
-                    keywords=manifest.get("keywords"),
-                    author=manifest.get("author"),
-                    homepage=manifest.get("homepage"),
-                    domain=manifest.get("domain"),
-                    namespace=manifest.get("namespace"),
-                    installation_preference=get_installation_preference(MANIFEST_FIELDS.validate_python(manifest)),
-                )
-            )
-        return ListPluginsResponse(plugins=items, count=len(items))
-    except Exception as e:
-        verbose_logger.exception("Error listing public skills: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to list skills")
-
-
-@router.get(
-    "/public/model_hub/info",
-    tags=["public", "model management"],
-    response_model=PublicModelHubInfo,
-)
-async def public_model_hub_info():
-    import litellm
-    from litellm.proxy.proxy_server import title, version
-
-    try:
-        from litellm_enterprise.proxy.proxy_server import EnterpriseProxyConfig
-
-        custom_docs_description = EnterpriseProxyConfig.get_custom_docs_description()
-    except Exception:
-        custom_docs_description = None
-
-    return PublicModelHubInfo(
-        docs_title=title,
-        custom_docs_description=custom_docs_description,
-        litellm_version=version,
-        useful_links=litellm.public_model_groups_links,
-    )
 
 
 @router.get(
@@ -639,21 +382,3 @@ async def get_supported_endpoints() -> SupportedEndpointsResponse:
     if _cached_endpoints is None:
         _cached_endpoints = SupportedEndpointsResponse(endpoints=_load_endpoints())
     return _cached_endpoints
-
-
-@router.get(
-    "/public/agents/fields",
-    tags=["public", "[beta] Agents"],
-    response_model=list[AgentCreateInfo],
-)
-async def get_agent_fields() -> tuple[AgentCreateInfo, ...]:
-    """
-    Return agent type metadata required by the dashboard create-agent flow.
-
-    If an agent has `inherit_credentials_from_provider`, the provider's credential
-    fields are automatically appended to the agent's credential_fields.
-
-    Reads from the bundled local files. Result is cached in-process for the
-    lifetime of the server process.
-    """
-    return _agent_create_fields()

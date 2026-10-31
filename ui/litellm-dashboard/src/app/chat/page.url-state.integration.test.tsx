@@ -20,10 +20,6 @@ vi.mock("@/components/llm_calls/responses_api", () => ({
   makeOpenAIResponsesRequest: mockMakeOpenAIResponsesRequest,
 }));
 
-vi.mock("@/components/chat/MCPConnectPicker", () => ({
-  default: () => <div data-testid="mcp-connect-picker" />,
-}));
-
 vi.mock("react-markdown", () => ({
   default: ({ children }: { children: string }) => <div>{children}</div>,
 }));

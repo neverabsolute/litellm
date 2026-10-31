@@ -28,7 +28,6 @@ vi.mock("@/app/(dashboard)/hooks/users/useUsers", () => ({
 
 vi.mock("./LogDetailContent", () => ({
   LogDetailContent: ({ userEmail }: { userEmail?: string }) => <span>user-email:{userEmail ?? "none"}</span>,
-  GuardrailJumpLink: () => null,
 }));
 
 vi.mock("./DrawerHeader", () => ({

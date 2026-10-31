@@ -1,25 +1,12 @@
 import { z } from "zod";
-import { UseFormReturn, UseFormSetValue } from "react-hook-form";
 
 import { KeyResponse } from "../key_team_helpers/key_list";
-import { ToolPermissionsChangeOrigin } from "../mcp_server_management/MCPToolPermissions";
 import { extractLoggingSettings, formatMetadataForDisplay, stripTagsFromMetadata } from "../key_info_utils";
 import { mapInternalToDisplayNames } from "../callback_info_helpers";
 import { estimateChecks, estimateFields } from "./estimatedOutputTokens";
 import { canonicalBudgetDuration, keyOrganizationId } from "./keyEditFieldNormalizers";
 import { storedAllowedIps, withoutAllowedIps } from "./keyAllowedIps";
 import { ipEntriesError } from "@/utils/ipAddress";
-
-export interface McpServersAndGroups {
-  servers: string[];
-  accessGroups: string[];
-  toolsets: string[];
-}
-
-export interface AgentsAndGroups {
-  agents: string[];
-  accessGroups: string[];
-}
 
 export interface KeyEditFormValues {
   key_alias?: string;
@@ -40,19 +27,10 @@ export interface KeyEditFormValues {
   model_rpm_limit?: string;
   default_estimated_output_tokens?: number | string | null;
   default_estimated_output_tokens_per_model?: string;
-  guardrails?: string[];
-  disable_global_guardrails?: boolean;
-  policies?: string[];
   tags?: string[];
   prompts?: string[];
-  access_group_ids?: string[];
   allowed_passthrough_routes?: string[];
   allowed_ips?: string[];
-  vector_stores?: string[];
-  mcp_servers_and_groups?: McpServersAndGroups;
-  mcp_tool_permissions?: Record<string, string[]>;
-  agents_and_groups?: AgentsAndGroups;
-  skills?: string[];
   organization_id?: string | null;
   team_id?: string | null;
   project_id?: string | null;
@@ -93,26 +71,10 @@ export const toKeyEditFormValues = (keyData: KeyResponse): KeyEditFormValues => 
     default_estimated_output_tokens?: number | string | null;
     default_estimated_output_tokens_per_model?: string;
   }),
-  guardrails: readMetadata(keyData, "guardrails") as string[] | undefined,
-  disable_global_guardrails: Boolean(readMetadata(keyData, "disable_global_guardrails")),
-  policies: (keyData as { policies?: string[] }).policies,
   tags: readMetadata(keyData, "tags") as string[] | undefined,
   prompts: readMetadata(keyData, "prompts") as string[] | undefined,
-  access_group_ids: keyData.access_group_ids || [],
   allowed_passthrough_routes: (keyData as { allowed_passthrough_routes?: string[] }).allowed_passthrough_routes,
   allowed_ips: storedAllowedIps(keyData.metadata),
-  vector_stores: keyData.object_permission?.vector_stores || [],
-  mcp_servers_and_groups: {
-    servers: keyData.object_permission?.mcp_servers || [],
-    accessGroups: keyData.object_permission?.mcp_access_groups || [],
-    toolsets: keyData.object_permission?.mcp_toolsets || [],
-  },
-  mcp_tool_permissions: keyData.object_permission?.mcp_tool_permissions || {},
-  agents_and_groups: {
-    agents: keyData.object_permission?.agents || [],
-    accessGroups: keyData.object_permission?.agent_access_groups || [],
-  },
-  skills: keyData.object_permission?.skills || [],
   organization_id: keyOrganizationId(keyData),
   team_id: keyData.team_id,
   project_id: keyData.project_id,
@@ -152,12 +114,8 @@ export const keyEditFormSchema = z.object({
     .custom<string | undefined>()
     .refine(estimateChecks.perModel.isValid, estimateChecks.perModel.message)
     .optional(),
-  guardrails: z.custom<string[] | undefined>().optional(),
-  disable_global_guardrails: z.custom<boolean | undefined>().optional(),
-  policies: z.custom<string[] | undefined>().optional(),
   tags: z.custom<string[] | undefined>().optional(),
   prompts: z.custom<string[] | undefined>().optional(),
-  access_group_ids: z.custom<string[] | undefined>().optional(),
   allowed_passthrough_routes: z.custom<string[] | undefined>().optional(),
   allowed_ips: z
     .custom<string[] | undefined>()
@@ -166,11 +124,6 @@ export const keyEditFormSchema = z.object({
       if (message !== undefined) ctx.addIssue({ code: "custom", message });
     })
     .optional(),
-  vector_stores: z.custom<string[] | undefined>().optional(),
-  mcp_servers_and_groups: z.custom<McpServersAndGroups | undefined>().optional(),
-  mcp_tool_permissions: z.custom<Record<string, string[]> | undefined>().optional(),
-  agents_and_groups: z.custom<AgentsAndGroups | undefined>().optional(),
-  skills: z.custom<string[] | undefined>().optional(),
   organization_id: z.custom<string | null | undefined>().optional(),
   team_id: z.custom<string | null | undefined>().optional(),
   project_id: z.string().nullable().optional(),
@@ -184,13 +137,12 @@ export const keyEditFormSchema = z.object({
 });
 
 export interface MountedFieldGates {
-  canViewPolicies: boolean;
   canViewPrompts: boolean;
 }
 
 export const toSubmittedValues = (
   values: KeyEditFormValues,
-  { canViewPolicies, canViewPrompts }: MountedFieldGates,
+  { canViewPrompts }: MountedFieldGates,
 ): Record<string, unknown> => ({
   key_alias: values.key_alias,
   models: values.models,
@@ -210,19 +162,10 @@ export const toSubmittedValues = (
   model_rpm_limit: values.model_rpm_limit,
   default_estimated_output_tokens: values.default_estimated_output_tokens,
   default_estimated_output_tokens_per_model: values.default_estimated_output_tokens_per_model,
-  guardrails: values.guardrails,
-  disable_global_guardrails: values.disable_global_guardrails,
-  ...(canViewPolicies ? { policies: values.policies } : {}),
   tags: values.tags,
   ...(canViewPrompts ? { prompts: values.prompts } : {}),
-  access_group_ids: values.access_group_ids,
   allowed_passthrough_routes: values.allowed_passthrough_routes,
   allowed_ips: values.allowed_ips,
-  vector_stores: values.vector_stores,
-  mcp_servers_and_groups: values.mcp_servers_and_groups,
-  mcp_tool_permissions: values.mcp_tool_permissions,
-  agents_and_groups: values.agents_and_groups,
-  skills: values.skills,
   organization_id: values.organization_id,
   team_id: values.team_id,
   logging_settings: values.logging_settings,
@@ -233,15 +176,3 @@ export const toSubmittedValues = (
   auto_rotate: values.auto_rotate,
   rotation_interval: values.rotation_interval,
 });
-
-export const clearMcpGrants = (setValue: UseFormSetValue<KeyEditFormValues>) => {
-  setValue("mcp_servers_and_groups", { servers: [], accessGroups: [], toolsets: [] }, { shouldDirty: true });
-  setValue("mcp_tool_permissions", {}, { shouldDirty: true });
-};
-
-export const writeMcpToolPermissions =
-  (form: Pick<UseFormReturn<KeyEditFormValues>, "getFieldState" | "setValue">) =>
-  (toolPermissions: Record<string, string[]>, origin: ToolPermissionsChangeOrigin) =>
-    form.setValue("mcp_tool_permissions", toolPermissions, {
-      shouldDirty: origin === "edit" || form.getFieldState("mcp_servers_and_groups").isDirty,
-    });

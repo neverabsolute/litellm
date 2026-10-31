@@ -1,6 +1,5 @@
 /**
- * Unified selector component that handles both model and agent selection
- * based on the current endpoint configuration.
+ * Selector component whose copy comes from the current endpoint configuration.
  */
 
 import {

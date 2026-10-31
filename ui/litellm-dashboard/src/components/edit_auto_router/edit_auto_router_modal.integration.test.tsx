@@ -153,14 +153,12 @@ describe("EditAutoRouterModal keyword matching", () => {
         },
         litellm_params: {
           ...MODEL_DATA.litellm_params,
-          auto_router_routing_compression: "admin-compression",
           complexity_router_config: { ...STORED_CONFIG, deployment_affinity: true },
         },
       },
     });
 
     expect(await screen.findByRole("textbox", { name: "Auto Router Name" })).toHaveAttribute("readonly");
-    expect(screen.queryByText("Compression")).not.toBeInTheDocument();
     expect(screen.queryByText("Model Access Groups")).not.toBeInTheDocument();
     openAutoRouterAdvanced("Affinity");
     await user.click(await screen.findByRole("switch", { name: "Pin one model deployment per tier" }));
@@ -1373,148 +1371,6 @@ describe("EditAutoRouterModal with a stored custom tier set", () => {
     expect(savedConfig().tier_model_configs).toEqual(CUSTOM_STORED.tier_model_configs);
   });
 });
-describe("EditAutoRouterModal prompt compression", () => {
-  beforeEach(() => {
-    modelPatchUpdateCall.mockClear();
-  });
-
-  const savedLitellmParams = () => {
-    const [, payload] = modelPatchUpdateCall.mock.calls.at(-1) ?? [];
-    return payload?.litellm_params;
-  };
-
-  const renderWithStoredCompression = (compression?: {
-    auto_router_routing_compression?: string;
-    auto_router_model_compression?: string;
-  }) =>
-    renderWithProviders(
-      <EditAutoRouterModal
-        isVisible
-        onCancel={vi.fn()}
-        onSuccess={vi.fn()}
-        modelData={{
-          ...MODEL_DATA,
-          litellm_params: { ...MODEL_DATA.litellm_params, ...compression },
-        }}
-        accessToken="token"
-        userRole="Admin"
-      />,
-    );
-
-  it("should clear both saved compression overrides when inheritance is selected", async () => {
-    const user = userEvent.setup();
-    renderWithStoredCompression({
-      auto_router_routing_compression: "routing-compressor",
-      auto_router_model_compression: "model-compressor",
-    });
-
-    openAutoRouterAdvanced("Compression");
-    await user.click(screen.getAllByRole("button", { name: "Clear" })[0]);
-    await waitFor(() => expect(screen.getByRole("button", { name: /save changes/i })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() =>
-      expect(modelPatchUpdateCall).toHaveBeenCalledWith(
-        "token",
-        expect.objectContaining({
-          litellm_params: expect.objectContaining({
-            model: "auto_router/complexity_router",
-            auto_router_routing_compression: null,
-            auto_router_model_compression: null,
-          }),
-        }),
-        "auto-1",
-      ),
-    );
-  });
-
-  it("should discard a cancelled clear and preserve compression when the saved choice is restored", async () => {
-    const user = userEvent.setup();
-    const stored = { auto_router_routing_compression: "none", auto_router_model_compression: "model-compressor" };
-    const view = renderWithStoredCompression(stored);
-
-    openAutoRouterAdvanced("Compression");
-    await user.click(screen.getAllByRole("button", { name: "Clear" })[0]);
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(modelPatchUpdateCall).not.toHaveBeenCalled();
-    view.unmount();
-
-    renderWithStoredCompression(stored);
-    openAutoRouterAdvanced("Compression");
-    expect(screen.getByRole("combobox", { name: "Routing decision compression" })).toHaveValue("None (no compression)");
-    await user.click(screen.getAllByRole("button", { name: "Clear" })[0]);
-    await user.click(screen.getByRole("combobox", { name: "Routing decision compression" }));
-    await user.click(screen.getByRole("option", { name: "None (no compression)" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /save changes/i })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(modelPatchUpdateCall).toHaveBeenCalled());
-    expect(savedLitellmParams()).toMatchObject(stored);
-  });
-
-  it("leaves both compression keys out of an untouched save when none were stored", async () => {
-    const user = userEvent.setup();
-    renderWithStoredCompression();
-
-    await waitFor(() => expect(screen.getByRole("button", { name: /save changes/i })).toBeEnabled());
-    await user.click(await screen.findByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(modelPatchUpdateCall).toHaveBeenCalled());
-    expect(savedLitellmParams()).not.toHaveProperty("auto_router_routing_compression");
-    expect(savedLitellmParams()).not.toHaveProperty("auto_router_model_compression");
-  });
-
-  it.each([
-    { auto_router_routing_compression: "headroom-a", auto_router_model_compression: "headroom-a" },
-    { auto_router_routing_compression: "routing-compressor" },
-    { auto_router_model_compression: "model-compressor" },
-  ])("should preserve the exact stored compression fields through an untouched save: %j", async (stored) => {
-    const user = userEvent.setup();
-    await renderWithSettledAvailability(() => renderWithStoredCompression(stored));
-
-    await waitFor(() => expect(screen.getByRole("button", { name: /save changes/i })).toBeEnabled());
-    await user.click(await screen.findByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(modelPatchUpdateCall).toHaveBeenCalled());
-    expect(
-      Object.fromEntries(
-        Object.entries(savedLitellmParams()).filter(
-          ([key]) => key === "auto_router_routing_compression" || key === "auto_router_model_compression",
-        ),
-      ),
-    ).toEqual(stored);
-  });
-
-  it("shows a stored different-compression choice as Use a different compression, not Same", async () => {
-    const user = userEvent.setup();
-    renderWithStoredCompression({
-      auto_router_routing_compression: "headroom-a",
-      auto_router_model_compression: "none",
-    });
-
-    openAutoRouterAdvanced("Compression");
-
-    expect(await screen.findByRole("combobox", { name: "Routing decision compression" })).toHaveValue("headroom-a");
-    expect(screen.getByRole("radio", { name: "Use a different compression" })).toBeChecked();
-    expect(screen.getByRole("combobox", { name: "Model call compression" })).toHaveValue("None (no compression)");
-  });
-
-  it("preserves a stored different-compression choice through an untouched open-and-save", async () => {
-    const user = userEvent.setup();
-    renderWithStoredCompression({
-      auto_router_routing_compression: "headroom-a",
-      auto_router_model_compression: "none",
-    });
-
-    await waitFor(() => expect(screen.getByRole("button", { name: /save changes/i })).toBeEnabled());
-    await user.click(await screen.findByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(modelPatchUpdateCall).toHaveBeenCalled());
-    expect(savedLitellmParams()?.auto_router_routing_compression).toBe("headroom-a");
-    expect(savedLitellmParams()?.auto_router_model_compression).toBe("none");
-  });
-});
-
 describe("EditAutoRouterModal classifier vision", () => {
   beforeEach(() => {
     modelPatchUpdateCall.mockClear();

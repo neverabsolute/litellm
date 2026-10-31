@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import type { MessageType } from "@/components/chat_ui/types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { FieldDescription } from "@/components/ui/field";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
@@ -147,40 +146,6 @@ function Routing({ message }: { message: MessageType }) {
   );
 }
 
-const noneRan = (policies: readonly string[] | undefined): string | null => {
-  if (policies === undefined) return "No guardrails ran on this request";
-  return policies.length === 0 ? "No guardrails or policies ran on this request" : null;
-};
-
-function Guardrails({ message }: { message: MessageType }) {
-  const guardrails = message.trace?.appliedGuardrails;
-  const policies = message.trace?.appliedPolicies;
-  if (guardrails === undefined) {
-    return (
-      <TraceSection value="guardrails" title="Guardrails and policies">
-        <Muted>This endpoint does not report which guardrails or policies ran</Muted>
-      </TraceSection>
-    );
-  }
-  const emptyNote = guardrails.length === 0 ? noneRan(policies) : null;
-  return (
-    <TraceSection value="guardrails" title="Guardrails and policies">
-      {guardrails.map((name) => (
-        <TraceRow key={`g-${name}`} title={name} description="Guardrail">
-          <Badge variant="secondary">Ran</Badge>
-        </TraceRow>
-      ))}
-      {policies?.map((name) => (
-        <TraceRow key={`p-${name}`} title={name} description="Policy">
-          <Badge variant="secondary">Ran</Badge>
-        </TraceRow>
-      ))}
-      {emptyNote && <Muted>{emptyNote}</Muted>}
-      {policies === undefined && <Muted>Policies are only reported when the dashboard is opened from the proxy</Muted>}
-    </TraceSection>
-  );
-}
-
 function SpeedAndCost({ message }: { message: MessageType }) {
   const usage = message.usage;
   const cost = usage?.cost ?? message.trace?.cost;
@@ -216,7 +181,7 @@ function NothingYet() {
       <EmptyHeader>
         <EmptyTitle className="text-sm">Nothing to inspect yet</EmptyTitle>
         <EmptyDescription>
-          Each reply shows here with the deployment that served it, fallbacks, guardrails, timing and cost
+          Each reply shows here with the deployment that served it, fallbacks, timing and cost
         </EmptyDescription>
       </EmptyHeader>
     </Empty>
@@ -226,9 +191,8 @@ function NothingYet() {
 function Trace({ message }: { message: MessageType | null }) {
   if (!message) return <NothingYet />;
   return (
-    <Accordion multiple defaultValue={["routing", "guardrails", "performance"]}>
+    <Accordion multiple defaultValue={["routing", "performance"]}>
       <Routing message={message} />
-      <Guardrails message={message} />
       <SpeedAndCost message={message} />
     </Accordion>
   );

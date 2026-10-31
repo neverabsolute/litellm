@@ -9,8 +9,6 @@ export type GatewayTrace = Readonly<{
   overheadMs?: number;
   responseMs?: number;
   cost?: number;
-  appliedGuardrails: readonly string[];
-  appliedPolicies?: readonly string[];
   cacheHit: boolean;
 }>;
 
@@ -26,12 +24,6 @@ const number = (headers: Headers, name: string): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-const list = (headers: Headers, name: string): readonly string[] =>
-  (text(headers, name) ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item) => item !== "");
-
 export const gatewayTraceFromHeaders = (headers: Headers): GatewayTrace => ({
   callId: text(headers, "x-litellm-call-id"),
   modelGroup: text(headers, "x-litellm-model-group"),
@@ -43,7 +35,5 @@ export const gatewayTraceFromHeaders = (headers: Headers): GatewayTrace => ({
   overheadMs: number(headers, "x-litellm-overhead-duration-ms"),
   responseMs: number(headers, "x-litellm-response-duration-ms"),
   cost: number(headers, "x-litellm-response-cost"),
-  appliedGuardrails: list(headers, "x-litellm-applied-guardrails"),
-  appliedPolicies: headers.has("x-litellm-call-id") ? list(headers, "x-litellm-applied-policies") : undefined,
   cacheHit: text(headers, "x-litellm-cache-key") !== undefined,
 });

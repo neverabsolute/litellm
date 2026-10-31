@@ -16,7 +16,6 @@ import { coy } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 import { useSyntaxTheme } from "@/hooks/useSyntaxTheme";
 import ReasoningContent from "@/components/chat_ui/ReasoningContent";
-import MCPEventsDisplay from "@/components/chat_ui/MCPEventsDisplay";
 import ResponseMetrics from "@/components/chat_ui/ResponseMetrics";
 import { ChatAttachment, ChatImageAttachment, ChatMessage } from "./types";
 import ChatFileChip from "./ChatFileChip";
@@ -273,7 +272,6 @@ interface AssistantBubbleProps {
   isLastMessage: boolean;
   isStreaming: boolean;
   isTypingIndicator: boolean;
-  mcpEvents?: ChatMessage["mcpEvents"];
   actions?: React.ReactNode;
 }
 
@@ -283,7 +281,6 @@ function AssistantBubble({
   isLastMessage,
   isStreaming,
   isTypingIndicator,
-  mcpEvents,
   actions,
 }: AssistantBubbleProps) {
   const [reasoningKey, setReasoningKey] = useState(0);
@@ -346,11 +343,6 @@ function AssistantBubble({
       </BubbleContent>
 
       {actions ?? (mainContent.trim() && <CopyButton text={mainContent} />)}
-      {mcpEvents && mcpEvents.length > 0 && (
-        <div className="mt-2 max-w-full">
-          <MCPEventsDisplay events={mcpEvents} />
-        </div>
-      )}
 
       <ResponseMetrics
         timeToFirstToken={message.timeToFirstToken}
@@ -526,7 +518,6 @@ export function ChatMessageContent({
       isLastMessage={isLastMessage}
       isStreaming={isStreaming}
       isTypingIndicator={isLastMessage && isStreaming && isEmptyResponse}
-      mcpEvents={message.mcpEvents}
       actions={actions}
     />
   );

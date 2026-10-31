@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useDebouncer } from "@tanstack/react-pacer/debouncer";
-import { MessageType, A2ATaskMetadata } from "@/components/chat_ui/types";
+import { MessageType } from "@/components/chat_ui/types";
 import { TokenUsage } from "@/components/chat_ui/ResponseMetrics";
-import { MCPEvent } from "@/components/mcp_tools/types";
 import { truncateString } from "@/utils/textUtils";
 
 const CHAT_HISTORY_PERSIST_WAIT_MS = 500;
@@ -11,8 +10,6 @@ export interface UseChatHistoryReturn {
   // State
   chatHistory: MessageType[];
   setChatHistory: React.Dispatch<React.SetStateAction<MessageType[]>>;
-  mcpEvents: MCPEvent[];
-  setMCPEvents: React.Dispatch<React.SetStateAction<MCPEvent[]>>;
   messageTraceId: string | null;
   setMessageTraceId: React.Dispatch<React.SetStateAction<string | null>>;
   responsesSessionId: string | null;
@@ -24,19 +21,15 @@ export interface UseChatHistoryReturn {
   updateTextUI: (role: string, chunk: string, model?: string) => void;
   updateReasoningContent: (chunk: string) => void;
   updateTimingData: (timeToFirstToken: number) => void;
-  updateUsageData: (usage: TokenUsage, toolName?: string) => void;
-  updateA2AMetadata: (a2aMetadata: A2ATaskMetadata) => void;
+  updateUsageData: (usage: TokenUsage) => void;
   updateTotalLatency: (totalLatency: number) => void;
-  updateSearchResults: (searchResults: any[]) => void;
   handleResponseId: (responseId: string) => void;
   handleToggleSessionManagement: (useApi: boolean) => void;
-  handleMCPEvent: (event: MCPEvent) => void;
   updateImageUI: (imageUrl: string, model: string) => void;
   updateEmbeddingsUI: (embeddings: string, model?: string) => void;
   updateAudioUI: (audioUrl: string, model: string) => void;
   updateChatImageUI: (imageUrl: string, model?: string) => void;
   clearChatHistory: () => void;
-  clearMCPEvents: () => void;
 }
 
 export function useChatHistory({ simplified }: { simplified: boolean }): UseChatHistoryReturn {
@@ -50,8 +43,6 @@ export function useChatHistory({ simplified }: { simplified: boolean }): UseChat
       return [];
     }
   });
-
-  const [mcpEvents, setMCPEvents] = useState<MCPEvent[]>([]);
 
   const [messageTraceId, setMessageTraceId] = useState<string | null>(() =>
     simplified ? null : sessionStorage.getItem("messageTraceId") || null,
@@ -185,7 +176,7 @@ export function useChatHistory({ simplified }: { simplified: boolean }): UseChat
     });
   };
 
-  const updateUsageData = (usage: TokenUsage, toolName?: string) => {
+  const updateUsageData = (usage: TokenUsage) => {
     setChatHistory((prevHistory) => {
       const lastMessage = prevHistory[prevHistory.length - 1];
 
@@ -193,25 +184,8 @@ export function useChatHistory({ simplified }: { simplified: boolean }): UseChat
         const updatedMessage = {
           ...lastMessage,
           usage,
-          toolName,
         };
 
-        return [...prevHistory.slice(0, prevHistory.length - 1), updatedMessage];
-      }
-
-      return prevHistory;
-    });
-  };
-
-  const updateA2AMetadata = (a2aMetadata: A2ATaskMetadata) => {
-    setChatHistory((prevHistory) => {
-      const lastMessage = prevHistory[prevHistory.length - 1];
-
-      if (lastMessage && lastMessage.role === "assistant") {
-        const updatedMessage = {
-          ...lastMessage,
-          a2aMetadata,
-        };
         return [...prevHistory.slice(0, prevHistory.length - 1), updatedMessage];
       }
 
@@ -237,23 +211,6 @@ export function useChatHistory({ simplified }: { simplified: boolean }): UseChat
     });
   };
 
-  const updateSearchResults = (searchResults: any[]) => {
-    setChatHistory((prevHistory) => {
-      const lastMessage = prevHistory[prevHistory.length - 1];
-
-      if (lastMessage && lastMessage.role === "assistant") {
-        const updatedMessage = {
-          ...lastMessage,
-          searchResults,
-        };
-
-        return [...prevHistory.slice(0, prevHistory.length - 1), updatedMessage];
-      }
-
-      return prevHistory;
-    });
-  };
-
   const handleResponseId = (responseId: string) => {
     if (useApiSessionManagement) {
       setResponsesSessionId(responseId);
@@ -266,28 +223,6 @@ export function useChatHistory({ simplified }: { simplified: boolean }): UseChat
       // Clear API session when switching to UI mode
       setResponsesSessionId(null);
     }
-  };
-
-  const handleMCPEvent = (event: MCPEvent) => {
-    setMCPEvents((prev) => {
-      // Check if this is a duplicate event (same item_id and type)
-      // Only check for duplicates if item_id is defined (for mcp_list_tools, item_id is "mcp_list_tools")
-      const isDuplicate = event.item_id
-        ? prev.some(
-            (existingEvent) =>
-              existingEvent.item_id === event.item_id &&
-              existingEvent.type === event.type &&
-              (existingEvent.sequence_number === event.sequence_number ||
-                (existingEvent.sequence_number === undefined && event.sequence_number === undefined)),
-          )
-        : false;
-
-      if (isDuplicate) {
-        return prev;
-      }
-
-      return [...prev, event];
-    });
   };
 
   const updateImageUI = (imageUrl: string, model: string) => {
@@ -352,7 +287,6 @@ export function useChatHistory({ simplified }: { simplified: boolean }): UseChat
 
     setMessageTraceId(null);
     setResponsesSessionId(null); // Clear responses session ID
-    setMCPEvents([]); // Clear MCP events
     if (!simplified) {
       sessionStorage.removeItem("chatHistory");
       sessionStorage.removeItem("messageTraceId");
@@ -360,15 +294,9 @@ export function useChatHistory({ simplified }: { simplified: boolean }): UseChat
     }
   };
 
-  const clearMCPEvents = () => {
-    setMCPEvents([]);
-  };
-
   return {
     chatHistory,
     setChatHistory,
-    mcpEvents,
-    setMCPEvents,
     messageTraceId,
     setMessageTraceId,
     responsesSessionId,
@@ -379,17 +307,13 @@ export function useChatHistory({ simplified }: { simplified: boolean }): UseChat
     updateReasoningContent,
     updateTimingData,
     updateUsageData,
-    updateA2AMetadata,
     updateTotalLatency,
-    updateSearchResults,
     handleResponseId,
     handleToggleSessionManagement,
-    handleMCPEvent,
     updateImageUI,
     updateEmbeddingsUI,
     updateAudioUI,
     updateChatImageUI,
     clearChatHistory,
-    clearMCPEvents,
   };
 }

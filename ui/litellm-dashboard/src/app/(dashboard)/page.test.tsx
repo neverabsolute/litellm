@@ -117,10 +117,10 @@ describe("dashboard landing", () => {
     expect(screen.queryByTestId("home-page")).not.toBeInTheDocument();
   });
 
-  it("carries the MCP env-var deep link's other params through the legacy redirect", () => {
-    state.search = "page=mcp-servers&fill_env_vars=srv-1";
+  it("carries a legacy deep link's other params through the redirect", () => {
+    state.search = "page=logs&request_id=req-1";
     render(<CreateKeyPage />);
-    expect(mockReplace).toHaveBeenCalledWith("/mocked-ui/mcp-servers?fill_env_vars=srv-1");
+    expect(mockReplace).toHaveBeenCalledWith("/mocked-ui/logs?request_id=req-1");
   });
 
   it("still sends the user to an explicit stored return URL", () => {

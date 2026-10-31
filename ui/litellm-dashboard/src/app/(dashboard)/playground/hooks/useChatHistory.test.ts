@@ -189,21 +189,6 @@ describe("useChatHistory", () => {
 
       expect(result.current.chatHistory[0].usage).toEqual(usage);
     });
-
-    it("should add toolName when provided", () => {
-      const { result } = renderHook(() => useChatHistory({ simplified: false }));
-
-      act(() => {
-        result.current.updateTextUI("assistant", "Hello", "gpt-4");
-      });
-
-      const usage = { completionTokens: 10, promptTokens: 5, totalTokens: 15 };
-      act(() => {
-        result.current.updateUsageData(usage, "search_tool");
-      });
-
-      expect(result.current.chatHistory[0].toolName).toBe("search_tool");
-    });
   });
 
   describe("updateTotalLatency", () => {
@@ -218,40 +203,6 @@ describe("useChatHistory", () => {
       });
 
       expect(result.current.chatHistory[0].totalLatency).toBe(500);
-    });
-  });
-
-  describe("updateA2AMetadata", () => {
-    it("should add A2A metadata to assistant message", () => {
-      const { result } = renderHook(() => useChatHistory({ simplified: false }));
-
-      act(() => {
-        result.current.updateTextUI("assistant", "Hello", "gpt-4");
-      });
-
-      const metadata = { taskId: "task-1", contextId: "ctx-1" };
-      act(() => {
-        result.current.updateA2AMetadata(metadata);
-      });
-
-      expect(result.current.chatHistory[0].a2aMetadata).toEqual(metadata);
-    });
-  });
-
-  describe("updateSearchResults", () => {
-    it("should add search results to assistant message", () => {
-      const { result } = renderHook(() => useChatHistory({ simplified: false }));
-
-      act(() => {
-        result.current.updateTextUI("assistant", "Hello", "gpt-4");
-      });
-
-      const searchResults = [{ object: "search", search_query: "test", data: [] }];
-      act(() => {
-        result.current.updateSearchResults(searchResults);
-      });
-
-      expect(result.current.chatHistory[0].searchResults).toEqual(searchResults);
     });
   });
 
@@ -329,89 +280,18 @@ describe("useChatHistory", () => {
     });
   });
 
-  describe("handleMCPEvent", () => {
-    it("should add MCP event", () => {
-      const { result } = renderHook(() => useChatHistory({ simplified: false }));
-
-      act(() => {
-        result.current.handleMCPEvent({ type: "tool_call", item_id: "1" });
-      });
-
-      expect(result.current.mcpEvents).toHaveLength(1);
-    });
-
-    it("should deduplicate events by item_id and type", () => {
-      const { result } = renderHook(() => useChatHistory({ simplified: false }));
-
-      const event = { type: "tool_call", item_id: "1" };
-      act(() => {
-        result.current.handleMCPEvent(event);
-      });
-      act(() => {
-        result.current.handleMCPEvent(event);
-      });
-
-      expect(result.current.mcpEvents).toHaveLength(1);
-    });
-
-    it("should allow events without item_id (no dedup)", () => {
-      const { result } = renderHook(() => useChatHistory({ simplified: false }));
-
-      act(() => {
-        result.current.handleMCPEvent({ type: "tool_call" });
-      });
-      act(() => {
-        result.current.handleMCPEvent({ type: "tool_call" });
-      });
-
-      expect(result.current.mcpEvents).toHaveLength(2);
-    });
-
-    it("should allow events with same item_id/type but different sequence_number", () => {
-      const { result } = renderHook(() => useChatHistory({ simplified: false }));
-
-      act(() => {
-        result.current.handleMCPEvent({ type: "tool_call", item_id: "1", sequence_number: 1 });
-      });
-      act(() => {
-        result.current.handleMCPEvent({ type: "tool_call", item_id: "1", sequence_number: 2 });
-      });
-
-      expect(result.current.mcpEvents).toHaveLength(2);
-    });
-  });
-
-  describe("clearMCPEvents", () => {
-    it("should clear MCP events without affecting chat history", () => {
-      const { result } = renderHook(() => useChatHistory({ simplified: false }));
-
-      act(() => {
-        result.current.updateTextUI("assistant", "Hello", "gpt-4");
-        result.current.handleMCPEvent({ type: "tool_call", item_id: "1" });
-      });
-      act(() => {
-        result.current.clearMCPEvents();
-      });
-
-      expect(result.current.mcpEvents).toEqual([]);
-      expect(result.current.chatHistory).toHaveLength(1);
-    });
-  });
-
   describe("clearChatHistory", () => {
     it("should clear all state", () => {
       const { result } = renderHook(() => useChatHistory({ simplified: false }));
 
       act(() => {
         result.current.updateTextUI("assistant", "Hello", "gpt-4");
-        result.current.handleMCPEvent({ type: "tool_call", item_id: "1" });
       });
       act(() => {
         result.current.clearChatHistory();
       });
 
       expect(result.current.chatHistory).toEqual([]);
-      expect(result.current.mcpEvents).toEqual([]);
       expect(result.current.messageTraceId).toBeNull();
       expect(result.current.responsesSessionId).toBeNull();
     });

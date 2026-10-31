@@ -27,11 +27,6 @@ vi.mock("@/components/organisms/create_key_button", () => ({
   fetchTeamModels: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock("@/components/networking", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/components/networking")>()),
-  getGuardrailsList: vi.fn().mockResolvedValue({ guardrails: [{ guardrail_name: "pii-guard" }] }),
-}));
-
 vi.mock("@/components/key_team_helpers/fetch_available_models_team_key", () => ({
   getModelDisplayName: (model: string) => model,
 }));
@@ -165,7 +160,7 @@ describe("CreateProjectModal submit payload", () => {
     expect(params().blocked).toBe(true);
   });
 
-  it("omits guardrails, limits and metadata when the advanced section is untouched", async () => {
+  it("omits limits and metadata when the advanced section is untouched", async () => {
     const user = setup();
     renderModal();
 
@@ -175,7 +170,6 @@ describe("CreateProjectModal submit payload", () => {
     await submit(user);
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
-    expect(params()).not.toHaveProperty("guardrails");
     expect(params()).not.toHaveProperty("model_rpm_limit");
     expect(params()).not.toHaveProperty("model_tpm_limit");
     expect(params()).not.toHaveProperty("metadata");
@@ -219,23 +213,6 @@ describe("CreateProjectModal submit payload", () => {
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(params().metadata).toStrictEqual({ owner: "platform" });
-  });
-
-  it("sends guardrails when chosen in the advanced section", async () => {
-    const user = setup();
-    renderModal();
-
-    fireEvent.change(screen.getByLabelText("Project Name"), { target: { value: "My Project" } });
-    await pickTeam(user);
-    await expandAdvanced(user);
-
-    await user.click(screen.getByLabelText("Guardrails"));
-    await user.click(await screen.findByTitle("pii-guard"));
-    await user.keyboard("{Escape}");
-    await submit(user);
-
-    await waitFor(() => expect(mutate).toHaveBeenCalled());
-    expect(params().guardrails).toStrictEqual(["pii-guard"]);
   });
 
   it("blocks submit when two model limits name the same model", async () => {

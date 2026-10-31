@@ -13,10 +13,6 @@ vi.mock("@/components/chat_ui/ResponseMetrics", () => ({
   default: () => <div data-testid="response-metrics">ResponseMetrics</div>,
 }));
 
-vi.mock("../../chat_ui/SearchResultsDisplay", () => ({
-  SearchResultsDisplay: () => <div data-testid="search-results">SearchResultsDisplay</div>,
-}));
-
 vi.mock("../../chat_ui/ChatImageRenderer", () => ({
   default: ({ message }: { message: any }) =>
     message.imagePreviewUrl ? (
@@ -54,7 +50,6 @@ describe("MessageDisplay", () => {
         role: "assistant",
         content: "2+2 equals 4",
         model: "gpt-4",
-        toolName: "calculator",
         timeToFirstToken: 100,
         totalLatency: 500,
         usage: {
@@ -68,7 +63,6 @@ describe("MessageDisplay", () => {
     expect(screen.getByText("You")).toBeInTheDocument();
     expect(screen.getByText("What is 2+2?")).toBeInTheDocument();
     expect(screen.getByText("gpt-4")).toBeInTheDocument();
-    expect(screen.getByText("calculator")).toBeInTheDocument();
     expect(screen.getByText("2+2 equals 4")).toBeInTheDocument();
     expect(screen.getByTestId("response-metrics")).toBeInTheDocument();
   });

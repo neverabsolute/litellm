@@ -54,7 +54,6 @@ import TierModelEffortRows from "./TierModelEffortRows";
 import { KeywordTierRule } from "./KeywordTierRules";
 import { type DimensionWeights, type TierBoundaries, type TokenThresholds } from "./heuristic_scoring_knobs";
 import { type CustomDimensionRow } from "./custom_dimensions";
-import { type AutoRouterCompressionState, DEFAULT_AUTO_ROUTER_COMPRESSION } from "./buildAutoRouterCompression";
 import { type ReminderMarkerPair } from "./build_complexity_router_config";
 
 export type { DimensionWeights, TierBoundaries, TokenThresholds };
@@ -499,8 +498,6 @@ interface ComplexityRouterConfigProps {
   onEscalationKeywordsChange?: (keywords: string[]) => void;
   // Optional: not part of complexity_router_config, since it applies to every
   // pre-routing strategy, not just the complexity router.
-  autoRouterCompression?: AutoRouterCompressionState;
-  onAutoRouterCompressionChange?: (state: AutoRouterCompressionState) => void;
   showValidationErrors?: boolean;
 }
 
@@ -623,8 +620,6 @@ const ComplexityRouterConfig: React.FC<ComplexityRouterConfigProps> = ({
   onMatchThresholdChange = () => {},
   escalationKeywords = [],
   onEscalationKeywordsChange,
-  autoRouterCompression = DEFAULT_AUTO_ROUTER_COMPRESSION,
-  onAutoRouterCompressionChange,
   showValidationErrors = false,
 }) => {
   const forecast = isForecastClassifier(value.classifier_type);
@@ -884,8 +879,6 @@ const ComplexityRouterConfig: React.FC<ComplexityRouterConfigProps> = ({
             onMatchThresholdChange={onMatchThresholdChange}
             escalationKeywords={escalationKeywords}
             onEscalationKeywordsChange={onEscalationKeywordsChange}
-            autoRouterCompression={autoRouterCompression}
-            onAutoRouterCompressionChange={onAutoRouterCompressionChange}
             modelInfo={modelInfo}
             tierRows={tierRows}
             customTierSet={customTierSet}

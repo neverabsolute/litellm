@@ -20,10 +20,6 @@ const sessionCookie = () => {
 const responseFor = (url: string): object | object[] => {
   if (url.includes("/v2/team/list")) return { teams: [], total: 0, page: 1, page_size: 50, total_pages: 1 };
   if (url.includes("/models")) return { data: [{ id: "gpt-4" }] };
-  if (url.includes("/v1/access_group")) return [];
-  if (url.includes("/v1/mcp/access_groups")) return { access_groups: [] };
-  if (url.includes("/guardrails/list")) return { guardrails: [] };
-  if (url.includes("/policies/list")) return { policies: [] };
   if (url.includes("/organization/list")) return { organizations: [] };
   if (url.includes("/team/new")) return { team_id: "new-team-1" };
   if (url.includes("/default")) return { values: {} };

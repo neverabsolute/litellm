@@ -1,15 +1,12 @@
 import { observeResponseHeaders, type ResponseHeadersListener } from "@/lib/http/observeResponseHeaders";
 import openai from "openai";
-import type { ResponseFunctionToolCall, ResponseInputItem } from "openai/resources/responses/responses";
 import { MessageType } from "../chat_ui/types";
 import { TokenUsage } from "../chat_ui/ResponseMetrics";
-import { getGatewayBaseUrl, getProxyBaseUrl } from "@/components/networking";
+import { getGatewayBaseUrl } from "@/components/networking";
 import { toast } from "@/lib/toast";
 import { extractPromptCacheTokens } from "@/utils/promptCacheUsage";
 import { parseUsageCost } from "./usage_cost";
 import { buildPlaygroundHeaders, type CustomHeaders } from "./request_headers";
-import type { MCPEvent } from "@/components/mcp_tools/types";
-import { MCPServer, MCPToolset } from "@/components/mcp_tools/types";
 import {
   CodeInterpreterResult,
   CodeInterpreterState,
@@ -19,9 +16,7 @@ import {
 
 export type { CodeInterpreterResult } from "./code_interpreter_handler";
 
-export interface ResponsesMessage extends MessageType {
-  mcpEvents?: MCPEvent[];
-}
+export type ResponsesMessage = MessageType;
 
 interface ResponseOutputPart {
   type?: string;
@@ -91,21 +86,13 @@ export async function makeOpenAIResponsesRequest(
   signal?: AbortSignal,
   onReasoningContent?: (content: string) => void,
   onTimingData?: (timeToFirstToken: number) => void,
-  onUsageData?: (usage: TokenUsage, toolName?: string) => void,
+  onUsageData?: (usage: TokenUsage) => void,
   traceId?: string,
-  vector_store_ids?: string[],
-  guardrails?: string[],
-  policies?: string[],
-  selectedMCPServers?: string[],
   previousResponseId?: string | null,
   onResponseId?: (responseId: string) => void,
-  onMCPEvent?: (event: MCPEvent) => void,
   codeInterpreterEnabled?: boolean,
   onCodeInterpreterResult?: (result: CodeInterpreterResult) => void,
   customBaseUrl?: string,
-  mcpServers?: MCPServer[],
-  mcpServerToolRestrictions?: Record<string, string[]>,
-  mcpToolsets?: MCPToolset[],
   streamingEnabled: boolean = true,
   onTotalLatency?: (latency: number) => void,
   customHeaders?: CustomHeaders,
@@ -126,7 +113,6 @@ export async function makeOpenAIResponsesRequest(
   }
 
   const proxyBaseUrl = customBaseUrl || getGatewayBaseUrl();
-  const mcpBaseUrl = customBaseUrl || getProxyBaseUrl();
   const headers = buildPlaygroundHeaders(tags, customHeaders);
 
   const client = new openai.OpenAI({
@@ -143,99 +129,21 @@ export async function makeOpenAIResponsesRequest(
     let reasoningPartKey: string | null = null;
     let servedFromResponseCache = false;
 
-    const formattedInput = messages.flatMap((message) => {
-      const mcpInput =
-        message.role === "assistant"
-          ? (message.mcpEvents ?? []).flatMap<ResponseFunctionToolCall | ResponseInputItem.FunctionCallOutput>(
-              (event) => {
-                const item = event.item;
-                const callId = item?.id || event.item_id;
-                if (event.type !== "response.output_item.done" || item?.type !== "mcp_call" || !callId) {
-                  return [];
-                }
-                if (!item.name || typeof item.arguments !== "string" || typeof item.output !== "string") {
-                  return [];
-                }
-                return [
-                  { type: "function_call", call_id: callId, name: item.name, arguments: item.arguments },
-                  { type: "function_call_output", call_id: callId, output: item.output },
-                ];
-              },
-            )
-          : [];
-      return [
-        ...mcpInput,
-        ...(mcpInput.length > 0 && message.content === ""
-          ? []
-          : [{ role: message.role, content: message.content, type: "message" }]),
-      ];
-    });
+    const formattedInput = messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+      type: "message",
+    }));
 
-    // Build tools array
-    const tools: any[] = [];
-
-    // Add MCP servers if selected
-    if (selectedMCPServers && selectedMCPServers.length > 0) {
-      if (selectedMCPServers.includes("__all__")) {
-        // All MCP Servers selected
-        const allServersTool = {
-          type: "mcp",
-          server_label: "litellm",
-          server_url: `${mcpBaseUrl}/mcp`,
-          require_approval: "never",
-        };
-        tools.push(allServersTool);
-      } else {
-        // Individual servers/toolsets selected - create one entry per item
-        selectedMCPServers.forEach((serverId) => {
-          if (serverId.startsWith("toolset:")) {
-            // Toolset: same /{name}/mcp pattern as individual servers
-            const toolsetId = serverId.slice("toolset:".length);
-            const toolset = mcpToolsets?.find((t) => t.toolset_id === toolsetId);
-            const toolsetName = toolset?.toolset_name || toolsetId;
-            const toolsetTool = {
-              type: "mcp",
-              server_label: toolsetName,
-              server_url: `${mcpBaseUrl}/mcp/${encodeURIComponent(toolsetName)}`,
-              require_approval: "never",
-            };
-            tools.push(toolsetTool);
-          } else {
-            const server = mcpServers?.find((s) => s.server_id === serverId);
-            // Use server_name for both routing and labelling. server_name is the
-            // unique registered identifier; aliases can collide across servers.
-            const routeName = server?.server_name || serverId;
-            const allowedTools = mcpServerToolRestrictions?.[serverId] || [];
-
-            const serverTool = {
-              type: "mcp",
-              server_label: routeName, // unique per request — collisions cause silent tool-routing failures
-              server_url: `${mcpBaseUrl}/mcp/${encodeURIComponent(routeName)}`,
-              require_approval: "never",
-              ...(allowedTools.length > 0 ? { allowed_tools: allowedTools } : {}),
-            };
-            tools.push(serverTool);
-          }
-        });
-      }
-    }
-
-    // Add code_interpreter tool if enabled (OpenAI auto-creates container)
-    if (codeInterpreterEnabled) {
-      tools.push({
-        type: "code_interpreter",
-        container: { type: "auto" },
-      });
-    }
+    const tools: { type: string; container: { type: string } }[] = codeInterpreterEnabled
+      ? [{ type: "code_interpreter", container: { type: "auto" } }]
+      : [];
 
     const requestBody = {
       model: selectedModel,
       input: formattedInput,
       litellm_trace_id: traceId,
       ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
-      ...(vector_store_ids ? { vector_store_ids } : {}),
-      ...(guardrails ? { guardrails } : {}),
-      ...(policies ? { policies } : {}),
       ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
     };
 
@@ -252,40 +160,11 @@ export async function makeOpenAIResponsesRequest(
         })();
     const events = streamingEnabled ? response : responseAsEvents(response);
 
-    let mcpToolUsed = "";
     let codeInterpreterState: CodeInterpreterState = { code: "", containerId: "" };
 
     for await (const event of events) {
       // Use a type-safe approach to handle events
       if (typeof event === "object" && event !== null) {
-        // Handle MCP events first
-        if (
-          event.type?.startsWith("response.mcp_") ||
-          (event.type === "response.output_item.done" &&
-            (event.item?.type === "mcp_list_tools" || event.item?.type === "mcp_call"))
-        ) {
-          if (onMCPEvent) {
-            const mcpEvent: MCPEvent = {
-              type: event.type,
-              sequence_number: event.sequence_number,
-              output_index: event.output_index,
-              item_id: event.item_id || event.item?.id, // Handle both structures
-              item: event.item,
-              delta: event.delta,
-              arguments: event.arguments,
-              timestamp: Date.now(),
-            };
-            onMCPEvent(mcpEvent);
-          }
-
-          // Continue processing other aspects of the event
-        }
-
-        // Check for MCP tool usage
-        if (event.type === "response.output_item.done" && event.item?.type === "mcp_call" && event.item?.name) {
-          mcpToolUsed = event.item.name;
-        }
-
         // Handle code interpreter events
         codeInterpreterState = handleCodeInterpreterCall(event, codeInterpreterState);
         handleCodeInterpreterOutput(event, codeInterpreterState, onCodeInterpreterResult);
@@ -360,7 +239,7 @@ export async function makeOpenAIResponsesRequest(
               usageData.cost = parsedCost;
             }
 
-            onUsageData(usageData, mcpToolUsed);
+            onUsageData(usageData);
           }
         }
       }

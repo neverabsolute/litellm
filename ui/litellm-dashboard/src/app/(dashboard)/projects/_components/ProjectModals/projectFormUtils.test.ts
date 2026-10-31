@@ -134,22 +134,6 @@ describe("buildProjectCreateParams", () => {
     });
     expect(result).not.toHaveProperty("metadata");
   });
-
-  it("should include guardrails as a top-level field when provided", () => {
-    const result = buildProjectCreateParams({
-      ...baseValues,
-      guardrails: ["pii-check", "content-filter"],
-    });
-    expect(result.guardrails).toEqual(["pii-check", "content-filter"]);
-  });
-
-  it("should omit guardrails when the array is empty", () => {
-    const result = buildProjectCreateParams({
-      ...baseValues,
-      guardrails: [],
-    });
-    expect(result).not.toHaveProperty("guardrails");
-  });
 });
 
 describe("buildProjectUpdateParams clearing", () => {
@@ -189,19 +173,17 @@ describe("buildProjectUpdateParams clearing", () => {
     expect(result).not.toHaveProperty("model_itpm_limit");
     expect(result).not.toHaveProperty("model_otpm_limit");
     expect(result).not.toHaveProperty("metadata");
-    expect(result).not.toHaveProperty("guardrails");
   });
 });
 
 describe("buildProjectCreateParams vs buildProjectUpdateParams", () => {
-  const cleared: ProjectFormValues = { ...baseValues, modelLimits: [], metadata: [], guardrails: [] };
+  const cleared: ProjectFormValues = { ...baseValues, modelLimits: [], metadata: [] };
 
   it("should leave a brand new project free of the empty maps that only exist to clear stored values", () => {
     const result = buildProjectCreateParams(cleared);
     expect(result).not.toHaveProperty("model_itpm_limit");
     expect(result).not.toHaveProperty("model_otpm_limit");
     expect(result).not.toHaveProperty("metadata");
-    expect(result).not.toHaveProperty("guardrails");
   });
 
   it("should send those same empty values on an update so the stored ones are cleared", () => {
@@ -209,6 +191,5 @@ describe("buildProjectCreateParams vs buildProjectUpdateParams", () => {
     expect(result.model_itpm_limit).toEqual({});
     expect(result.model_otpm_limit).toEqual({});
     expect(result.metadata).toEqual({});
-    expect(result.guardrails).toEqual([]);
   });
 });

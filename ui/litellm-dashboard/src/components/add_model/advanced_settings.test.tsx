@@ -25,13 +25,7 @@ const KubernetesPodDiscoveryValue = () => {
 const renderAdvancedSettings = (includeDiscoveryValue = false) =>
   render(
     <MountedFormHost>
-      <AdvancedSettings
-        showAdvancedSettings={true}
-        setShowAdvancedSettings={() => {}}
-        guardrailsList={[]}
-        tagsList={{}}
-        accessToken="test-token"
-      />
+      <AdvancedSettings showAdvancedSettings={true} setShowAdvancedSettings={() => {}} tagsList={{}} />
       {includeDiscoveryValue && <KubernetesPodDiscoveryValue />}
     </MountedFormHost>,
   );

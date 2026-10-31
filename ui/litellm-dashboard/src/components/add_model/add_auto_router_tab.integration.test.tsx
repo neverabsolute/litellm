@@ -1010,7 +1010,6 @@ describe("AddAutoRouterTab", () => {
     expect(screen.getByPlaceholderText(/smart_router/i)).toHaveValue("my-router");
     await user.selectOptions(screen.getByTestId("team-dropdown"), "team-1");
     expandDetailedConfiguration();
-    expect(screen.queryByText("Compression")).not.toBeInTheDocument();
     expect(screen.queryByText("Model Access Groups")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: /add auto router/i })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: /add auto router/i }));
@@ -1444,78 +1443,6 @@ describe("AddAutoRouterTab", () => {
     expect(vi.mocked(handleAddAutoRouterSubmit).mock.calls.at(-1)?.[0].complexity_router_config).not.toHaveProperty(
       "context_window_escalation_buffer",
     );
-  });
-
-  describe("prompt compression", () => {
-    it("leaves both compression keys out of the create payload when the section is untouched", async () => {
-      const user = userEvent.setup();
-      vi.mocked(getMissingTiersError).mockReturnValue(null);
-
-      renderAdvanced(<Harness />);
-
-      fireEvent.change(screen.getByLabelText("Auto Router Name"), { target: { value: "no-compression-router" } });
-      await waitFor(() => expect(screen.getByRole("button", { name: /add auto router/i })).toBeEnabled());
-      await user.click(screen.getByRole("button", { name: /add auto router/i }));
-
-      await waitFor(() => expect(handleAddAutoRouterSubmit).toHaveBeenCalled());
-      const submitted = vi.mocked(handleAddAutoRouterSubmit).mock.calls.at(-1)?.[0];
-      expect(submitted).not.toHaveProperty("auto_router_routing_compression");
-      expect(submitted).not.toHaveProperty("auto_router_model_compression");
-    });
-
-    it("mirrors an explicit no-compression routing choice onto the model call by default", async () => {
-      const user = userEvent.setup();
-      vi.mocked(getMissingTiersError).mockReturnValue(null);
-
-      renderAdvanced(<Harness />);
-
-      fireEvent.change(screen.getByLabelText("Auto Router Name"), {
-        target: { value: "no-compression-explicit-router" },
-      });
-      expandDetailedConfiguration();
-      openAutoRouterAdvanced("Compression");
-      await chooseSelectOption(
-        user,
-        screen.getByRole("combobox", { name: "Routing decision compression" }),
-        "None (no compression)",
-      );
-
-      await waitFor(() => expect(screen.getByRole("button", { name: /add auto router/i })).toBeEnabled());
-      await user.click(screen.getByRole("button", { name: /add auto router/i }));
-
-      await waitFor(() => expect(handleAddAutoRouterSubmit).toHaveBeenCalled());
-      const submitted = vi.mocked(handleAddAutoRouterSubmit).mock.calls.at(-1)?.[0];
-      expect(submitted?.auto_router_routing_compression).toBe("none");
-      expect(submitted?.auto_router_model_compression).toBe("none");
-    });
-
-    it("defaults the model call to none when different is chosen but nothing is picked there", async () => {
-      const user = userEvent.setup();
-      vi.mocked(getMissingTiersError).mockReturnValue(null);
-
-      renderAdvanced(<Harness />);
-
-      fireEvent.change(screen.getByLabelText("Auto Router Name"), {
-        target: { value: "different-compression-router" },
-      });
-      expandDetailedConfiguration();
-      openAutoRouterAdvanced("Compression");
-      await chooseSelectOption(
-        user,
-        screen.getByRole("combobox", { name: "Routing decision compression" }),
-        "None (no compression)",
-      );
-      await user.click(screen.getByText("Use a different compression"));
-      expect(screen.getByRole("combobox", { name: "Model call compression" })).toBeInTheDocument();
-
-      await waitFor(() => expect(screen.getByRole("button", { name: /add auto router/i })).toBeEnabled());
-      await user.click(screen.getByRole("button", { name: /add auto router/i }));
-
-      await waitFor(() => expect(handleAddAutoRouterSubmit).toHaveBeenCalled());
-      const submitted = vi.mocked(handleAddAutoRouterSubmit).mock.calls.at(-1)?.[0];
-      expect(submitted?.auto_router_routing_compression).toBe("none");
-      expect(submitted?.auto_router_model_compression).toBe("none");
-    });
   });
 
   // The scalar floor is the one scorer knob with no group dict behind it, so its wiring into the create

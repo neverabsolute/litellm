@@ -3,7 +3,6 @@ import openai from "openai";
 import { makeOpenAIResponsesRequest } from "./responses_api";
 import { MessageType } from "../chat_ui/types";
 import type { TokenUsage } from "../chat_ui/ResponseMetrics";
-import type { MCPEvent } from "../mcp_tools/types";
 
 vi.mock("@/components/networking", () => ({
   getProxyBaseUrl: vi.fn(() => "https://backend.example.com"),
@@ -80,74 +79,6 @@ describe("responses_api", () => {
     expect(mockUpdateTextUI).toHaveBeenCalledWith("assistant", "Hi", "gpt-4");
   });
 
-  it("replays completed MCP calls and results in conversation order without partial or discovery events", async () => {
-    const item = {
-      type: "mcp_call",
-      id: "mcp-inventory",
-      name: "lookup_inventory",
-      arguments: '{"location":"warehouse"}',
-      output: '{"quantity":17}',
-    };
-    const events: MCPEvent[] = [
-      { type: "response.output_item.done", item: { type: "mcp_list_tools", tools: [] } },
-      { type: "response.output_item.added", item },
-      { type: "response.mcp_call.in_progress", item_id: item.id },
-      { type: "response.output_item.done", item },
-      {
-        type: "response.output_item.done",
-        item_id: "mcp-empty",
-        item: { ...item, id: undefined, output: "" },
-      },
-      { type: "response.output_item.done", item: { ...item, id: undefined } },
-      { type: "response.output_item.done", item: { ...item, name: undefined } },
-      { type: "response.output_item.done", item: { ...item, arguments: undefined } },
-      { type: "response.output_item.done", item: { ...item, output: undefined } },
-    ];
-    const originalEvents = structuredClone(events);
-    const history = [
-      { role: "user", content: "Check inventory", mcpEvents: events },
-      { role: "assistant", content: "Lookup completed", mcpEvents: events },
-      { role: "user", content: "What was the quantity?" },
-    ];
-
-    await makeOpenAIResponsesRequest(history, mockUpdateTextUI, "model", "test-token");
-
-    expect(mockResponsesCreate.mock.calls[0][0].input).toEqual([
-      { role: "user", content: "Check inventory", type: "message" },
-      { type: "function_call", call_id: item.id, name: item.name, arguments: item.arguments },
-      { type: "function_call_output", call_id: item.id, output: item.output },
-      { type: "function_call", call_id: "mcp-empty", name: item.name, arguments: item.arguments },
-      { type: "function_call_output", call_id: "mcp-empty", output: "" },
-      { role: "assistant", content: "Lookup completed", type: "message" },
-      { role: "user", content: "What was the quantity?", type: "message" },
-    ]);
-    expect(events).toEqual(originalEvents);
-  });
-
-  it("replays an MCP-only assistant turn without an empty message", async () => {
-    const history = [
-      {
-        role: "assistant",
-        content: "",
-        mcpEvents: [
-          {
-            type: "response.output_item.done",
-            item: { type: "mcp_call", id: "mcp-only", name: "lookup", arguments: "{}", output: "17" },
-          },
-        ],
-      },
-      { role: "user", content: "What was the quantity?" },
-    ];
-
-    await makeOpenAIResponsesRequest(history, mockUpdateTextUI, "model", "test-token");
-
-    expect(mockResponsesCreate.mock.calls[0][0].input).toEqual([
-      { type: "function_call", call_id: "mcp-only", name: "lookup", arguments: "{}" },
-      { type: "function_call_output", call_id: "mcp-only", output: "17" },
-      { role: "user", content: "What was the quantity?", type: "message" },
-    ]);
-  });
-
   it("should send a non-streaming request and render the whole output at once when streaming is disabled", async () => {
     mockResponsesCreate.mockReturnValueOnce(
       nonStreamingResponse({
@@ -180,19 +111,11 @@ describe("responses_api", () => {
       onTimingData,
       onUsageData,
       undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      undefined, // selectedMCPServers
       undefined, // previousResponseId
       onResponseId,
-      undefined, // onMCPEvent
       undefined, // codeInterpreterEnabled
       undefined, // onCodeInterpreterResult
       undefined, // customBaseUrl
-      undefined, // mcpServers
-      undefined, // mcpServerToolRestrictions
-      undefined, // mcpToolsets
       false, // streamingEnabled
     );
 
@@ -202,7 +125,7 @@ describe("responses_api", () => {
     expect(mockUpdateTextUI).toHaveBeenCalledTimes(1);
     expect(mockUpdateTextUI).toHaveBeenCalledWith("assistant", "Full answer", "gpt-4");
 
-    expect(onUsageData).toHaveBeenCalledWith({ completionTokens: 3, promptTokens: 4, totalTokens: 7 }, "");
+    expect(onUsageData).toHaveBeenCalledWith({ completionTokens: 3, promptTokens: 4, totalTokens: 7 });
     expect(onResponseId).toHaveBeenCalledWith("resp_456");
     expect(onTimingData).not.toHaveBeenCalled();
   });
@@ -221,19 +144,11 @@ describe("responses_api", () => {
         undefined, // onTimingData
         undefined, // onUsageData
         undefined, // traceId
-        undefined, // vector_store_ids
-        undefined, // guardrails
-        undefined, // policies
-        undefined, // selectedMCPServers
         undefined, // previousResponseId
         undefined, // onResponseId
-        undefined, // onMCPEvent
         undefined, // codeInterpreterEnabled
         undefined, // onCodeInterpreterResult
         undefined, // customBaseUrl
-        undefined, // mcpServers
-        undefined, // mcpServerToolRestrictions
-        undefined, // mcpToolsets
         streamingEnabled,
         onTotalLatency,
       );
@@ -281,10 +196,12 @@ describe("responses_api", () => {
       onUsageData,
     );
 
-    expect(onUsageData).toHaveBeenCalledWith(
-      { completionTokens: 12, promptTokens: 12, totalTokens: 24, cost: 0.000063 },
-      "",
-    );
+    expect(onUsageData).toHaveBeenCalledWith({
+      completionTokens: 12,
+      promptTokens: 12,
+      totalTokens: 24,
+      cost: 0.000063,
+    });
   });
 
   it("should omit cost when the proxy reports none", async () => {
@@ -302,7 +219,7 @@ describe("responses_api", () => {
       onUsageData,
     );
 
-    expect(onUsageData).toHaveBeenCalledWith(expect.not.objectContaining({ cost: expect.anything() }), "");
+    expect(onUsageData).toHaveBeenCalledWith(expect.not.objectContaining({ cost: expect.anything() }));
   });
 
   it("should omit cost when the proxy reports a non-numeric cost", async () => {
@@ -331,7 +248,7 @@ describe("responses_api", () => {
       onUsageData,
     );
 
-    expect(onUsageData).toHaveBeenCalledWith(expect.not.objectContaining({ cost: expect.anything() }), "");
+    expect(onUsageData).toHaveBeenCalledWith(expect.not.objectContaining({ cost: expect.anything() }));
   });
 
   it("should omit cost when the proxy reports a blank cost", async () => {
@@ -360,133 +277,7 @@ describe("responses_api", () => {
       onUsageData,
     );
 
-    expect(onUsageData).toHaveBeenCalledWith(expect.not.objectContaining({ cost: expect.anything() }), "");
-  });
-
-  it("should replay MCP output items as events for a non-streaming response", async () => {
-    mockResponsesCreate.mockReturnValueOnce(
-      nonStreamingResponse({
-        id: "resp_789",
-        output: [
-          { type: "mcp_call", id: "mcp_1", name: "search_docs", arguments: "{}", output: "found it" },
-          { type: "message", content: [{ type: "output_text", text: "Answer" }] },
-        ],
-        usage: { output_tokens: 1, input_tokens: 1, total_tokens: 2 },
-      }),
-    );
-
-    const onMCPEvent = vi.fn();
-    const onUsageData = vi.fn();
-
-    await makeOpenAIResponsesRequest(
-      messages,
-      mockUpdateTextUI,
-      "gpt-4",
-      "test-token",
-      undefined, // tags
-      undefined, // signal
-      undefined, // onReasoningContent
-      undefined, // onTimingData
-      onUsageData,
-      undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      undefined, // selectedMCPServers
-      undefined, // previousResponseId
-      undefined, // onResponseId
-      onMCPEvent,
-      undefined, // codeInterpreterEnabled
-      undefined, // onCodeInterpreterResult
-      undefined, // customBaseUrl
-      undefined, // mcpServers
-      undefined, // mcpServerToolRestrictions
-      undefined, // mcpToolsets
-      false, // streamingEnabled
-    );
-
-    expect(onMCPEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "response.output_item.done",
-        item_id: "mcp_1",
-        item: expect.objectContaining({ type: "mcp_call", name: "search_docs", output: "found it" }),
-      }),
-    );
-    expect(onUsageData).toHaveBeenCalledWith(expect.anything(), "search_docs");
-  });
-
-  it("should configure MCP tools per server with restrictions", async () => {
-    const selectedMCPServers = ["server-1", "server-2"];
-    const mcpServers = [
-      {
-        server_id: "server-1",
-        alias: "alpha",
-        server_name: "Alpha",
-        url: "http://example.com",
-        created_at: "2024-01-01",
-        created_by: "test",
-        updated_at: "2024-01-01",
-        updated_by: "test",
-      },
-      {
-        server_id: "server-2",
-        server_name: "Beta",
-        url: "http://example.com",
-        created_at: "2024-01-01",
-        created_by: "test",
-        updated_at: "2024-01-01",
-        updated_by: "test",
-      },
-    ];
-    const mcpServerToolRestrictions: Record<string, string[]> = {
-      "server-1": ["toolA"],
-      "server-2": ["toolB", "toolC"],
-    };
-
-    await makeOpenAIResponsesRequest(
-      messages,
-      mockUpdateTextUI,
-      "gpt-4",
-      "test-token",
-      undefined, // tags
-      undefined, // signal
-      undefined, // onReasoningContent
-      undefined, // onTimingData
-      undefined, // onUsageData
-      undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      selectedMCPServers,
-      undefined, // previousResponseId
-      undefined, // onResponseId
-      undefined, // onMCPEvent
-      undefined, // codeInterpreterEnabled
-      undefined, // onCodeInterpreterResult
-      undefined, // customBaseUrl
-      mcpServers,
-      mcpServerToolRestrictions,
-    );
-
-    const callArgs = mockResponsesCreate.mock.calls[0][0];
-    expect(callArgs.tool_choice).toBe("auto");
-    expect(openai.OpenAI).toHaveBeenCalledWith(expect.objectContaining({ baseURL: "https://gateway.example.com" }));
-    expect(callArgs.tools).toEqual([
-      {
-        type: "mcp",
-        server_label: "Alpha",
-        server_url: "https://backend.example.com/mcp/Alpha",
-        require_approval: "never",
-        allowed_tools: ["toolA"],
-      },
-      {
-        type: "mcp",
-        server_label: "Beta",
-        server_url: "https://backend.example.com/mcp/Beta",
-        require_approval: "never",
-        allowed_tools: ["toolB", "toolC"],
-      },
-    ]);
+    expect(onUsageData).toHaveBeenCalledWith(expect.not.objectContaining({ cost: expect.anything() }));
   });
 });
 
@@ -510,14 +301,6 @@ describe("responses_api reasoning", () => {
         timeToFirstToken.push(ttft);
         reasoningAtFirstToken.push(reasoningChunks.join("") + "|" + answerChunks.join(""));
       },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -726,25 +509,16 @@ describe("responses_api response cache", () => {
       undefined, // onTimingData
       onUsageData,
       undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      undefined, // selectedMCPServers
       undefined, // previousResponseId
       undefined, // onResponseId
-      undefined, // onMCPEvent
       undefined, // codeInterpreterEnabled
       undefined, // onCodeInterpreterResult
       undefined, // customBaseUrl
-      undefined, // mcpServers
-      undefined, // mcpServerToolRestrictions
-      undefined, // mcpToolsets
       false, // streamingEnabled
     );
 
     expect(onUsageData).toHaveBeenCalledWith(
       expect.objectContaining({ cacheReadTokens: 4695, servedFromResponseCache: true }),
-      "",
     );
   });
 
@@ -770,23 +544,15 @@ describe("responses_api response cache", () => {
       undefined, // onTimingData
       onUsageData,
       undefined, // traceId
-      undefined, // vector_store_ids
-      undefined, // guardrails
-      undefined, // policies
-      undefined, // selectedMCPServers
       undefined, // previousResponseId
       undefined, // onResponseId
-      undefined, // onMCPEvent
       undefined, // codeInterpreterEnabled
       undefined, // onCodeInterpreterResult
       undefined, // customBaseUrl
-      undefined, // mcpServers
-      undefined, // mcpServerToolRestrictions
-      undefined, // mcpToolsets
       false, // streamingEnabled
     );
 
-    expect(onUsageData).toHaveBeenCalledWith(expect.not.objectContaining({ servedFromResponseCache: true }), "");
+    expect(onUsageData).toHaveBeenCalledWith(expect.not.objectContaining({ servedFromResponseCache: true }));
   });
 
   it("never flags a streaming response, even when the proxy reports a cache key", async () => {
@@ -812,7 +578,7 @@ describe("responses_api response cache", () => {
       onUsageData,
     );
 
-    expect(onUsageData).toHaveBeenCalledWith(expect.not.objectContaining({ servedFromResponseCache: true }), "");
+    expect(onUsageData).toHaveBeenCalledWith(expect.not.objectContaining({ servedFromResponseCache: true }));
   });
 });
 
@@ -830,14 +596,6 @@ describe("responses_api custom headers", () => {
       "gpt-4",
       "test-token",
       ["team-a"],
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
       undefined,
       undefined,
       undefined,

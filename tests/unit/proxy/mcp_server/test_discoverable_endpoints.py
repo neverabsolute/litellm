@@ -12545,37 +12545,6 @@ def test_native_client_authorize_without_the_proxy_resource_keeps_the_mcp_flow(m
     assert minted == []
 
 
-def test_introspect_route_requires_virtual_key_auth_and_is_advertised():
-    """RFC 7662 section 2.1: introspection must not be anonymous. Pins the route-level
-    user_api_key_auth dependency (structure, so removing it fails here without a proxy),
-    and that the aggregate AS metadata advertises the endpoint for discovery."""
-    from fastapi import FastAPI
-    from fastapi.routing import APIRoute
-    from fastapi.testclient import TestClient
-
-    from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
-    from litellm.proxy.mcp_server.discoverable_endpoints import router
-
-    route = next(r for r in router.routes if isinstance(r, APIRoute) and r.path == "/introspect")
-    assert route.methods == {"POST"}
-    assert any(dependency.call is user_api_key_auth for dependency in route.dependant.dependencies)
-
-    from litellm.proxy._types import LiteLLMRoutes
-
-    assert "/introspect" in LiteLLMRoutes.mcp_routes.value
-
-    from litellm.proxy._lazy_features import LAZY_FEATURES
-
-    discoverable = next(feature for feature in LAZY_FEATURES if feature.name == "mcp_discoverable")
-    assert "/introspect" in discoverable.path_prefixes
-
-    app = FastAPI()
-    app.include_router(router)
-    client = TestClient(app)
-    asm = client.get("/.well-known/oauth-authorization-server/mcp")
-    assert asm.json()["introspection_endpoint"] == "http://testserver/introspect"
-
-
 def test_introspect_route_answers_for_authenticated_caller(monkeypatch):
     """End-to-end over the real route with the auth dependency satisfied: a garbage token
     is active false, a freshly minted session access token is active true with its claims."""

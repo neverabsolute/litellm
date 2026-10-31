@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders, testQueryClient } from "../../../../../tests/test-utils";
 import { UserEditView } from "./user_edit_view";
-import * as networking from "@/components/networking";
 
 vi.mock("@/components/networking");
 
@@ -63,9 +62,6 @@ describe("UserEditView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     testQueryClient.clear();
-    vi.mocked(networking.fetchMCPServers).mockResolvedValue([]);
-    vi.mocked(networking.fetchMCPAccessGroups).mockResolvedValue([]);
-    vi.mocked(networking.fetchMCPToolsets).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -642,14 +638,12 @@ describe("UserEditView", () => {
       return onSubmit.mock.calls[0][0];
     };
 
-    it("should send exactly the ten keys an admin edit produces, with seeded types preserved", async () => {
+    it("should send exactly the eight keys an admin edit produces, with seeded types preserved", async () => {
       const payload = await submittedPayload();
 
       expect(Object.keys(payload).sort()).toEqual([
         "budget_duration",
         "max_budget",
-        "mcp_servers_and_groups",
-        "mcp_tool_permissions",
         "metadata",
         "models",
         "user_alias",
@@ -666,14 +660,12 @@ describe("UserEditView", () => {
         max_budget: 100.5,
         budget_duration: "30d",
         metadata: { key1: "value1", key2: "value2" },
-        mcp_servers_and_groups: { servers: [], accessGroups: [], toolsets: [] },
-        mcp_tool_permissions: {},
       };
       expect(payload).toStrictEqual(expectedPayload);
       expect(typeof payload.max_budget).toBe("number");
     });
 
-    it("should drop user_id, user_email and both mcp keys in bulk edit mode", async () => {
+    it("should drop user_id and user_email in bulk edit mode", async () => {
       const payload = await submittedPayload({ isBulkEdit: true });
 
       expect(Object.keys(payload).sort()).toEqual([
@@ -682,21 +674,6 @@ describe("UserEditView", () => {
         "metadata",
         "models",
         "user_alias",
-        "user_role",
-      ]);
-    });
-
-    it("should drop both mcp keys for a non-admin editor while keeping identity keys", async () => {
-      const payload = await submittedPayload({ userRole: "user" });
-
-      expect(Object.keys(payload).sort()).toEqual([
-        "budget_duration",
-        "max_budget",
-        "metadata",
-        "models",
-        "user_alias",
-        "user_email",
-        "user_id",
         "user_role",
       ]);
     });
@@ -765,69 +742,6 @@ describe("UserEditView", () => {
       expect(budgetInput).toHaveAttribute("step", "0.01");
       expect(budgetInput).not.toHaveAttribute("min");
       expect(form).not.toHaveAttribute("novalidate");
-    });
-
-    it("asks for the MCP servers scoped to the edited user", async () => {
-      renderWithProviders(<UserEditView {...defaultProps} />);
-      await waitFor(() => {
-        expect(networking.fetchMCPServers).toHaveBeenCalledWith(expect.anything(), undefined, undefined, "user-123");
-      });
-    });
-
-    it("shows the tool matrix for servers the user reaches only through an access group or toolset", async () => {
-      vi.mocked(networking.fetchMCPServers).mockResolvedValue([
-        { server_id: "srv-group", server_name: "Group Server", alias: "Group Server", mcp_access_groups: ["group-a"] },
-        { server_id: "srv-toolset", server_name: "Toolset Server", alias: "Toolset Server" },
-      ]);
-      vi.mocked(networking.fetchMCPAccessGroups).mockResolvedValue(["group-a"]);
-      vi.mocked(networking.fetchMCPToolsets).mockResolvedValue([
-        {
-          toolset_id: "toolset-a",
-          toolset_name: "Toolset A",
-          tools: [{ server_id: "srv-toolset", tool_name: "list_issues" }],
-        } as never,
-      ]);
-      vi.mocked(networking.listMCPTools).mockResolvedValue({
-        tools: [{ name: "list_issues", description: "List issues" }],
-        error: false,
-      });
-
-      renderWithProviders(
-        <UserEditView
-          {...defaultProps}
-          objectPermission={
-            {
-              mcp_servers: [],
-              mcp_access_groups: ["group-a"],
-              mcp_toolsets: ["toolset-a"],
-              mcp_tool_permissions: {},
-            } as never
-          }
-        />,
-      );
-
-      expect(await screen.findByText("Via access group: group-a")).toBeInTheDocument();
-      expect(await screen.findByText("Via toolset: Toolset A")).toBeInTheDocument();
-      expect(networking.listMCPTools).toHaveBeenCalledWith("test-token", "srv-group");
-      expect(networking.listMCPTools).toHaveBeenCalledWith("test-token", "srv-toolset");
-    });
-
-    it("should send objects for the mcp keys seeded from objectPermission", async () => {
-      const payload = await submittedPayload({
-        objectPermission: {
-          mcp_servers: ["server-a"],
-          mcp_access_groups: ["group-a"],
-          mcp_toolsets: ["toolset-a"],
-          mcp_tool_permissions: { "server-a": ["tool-a"] },
-        } as never,
-      });
-
-      expect(payload.mcp_servers_and_groups).toStrictEqual({
-        servers: ["server-a"],
-        accessGroups: ["group-a"],
-        toolsets: ["toolset-a"],
-      });
-      expect(payload.mcp_tool_permissions).toStrictEqual({ "server-a": ["tool-a"] });
     });
 
     it("should not submit at all when metadata is not valid JSON", async () => {
