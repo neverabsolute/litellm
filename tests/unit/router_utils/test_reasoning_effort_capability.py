@@ -583,6 +583,56 @@ class TestResolveDeploymentReasoningEffort:
             "Ignoring reasoning_effort_rounding=donwforged, expected 'up' or 'down'"
         ]
 
+    @pytest.mark.parametrize("level", ["minimal", "low"])
+    def test_a_level_the_model_map_refuses_moves_to_one_the_gpt_gate_accepts(
+        self, local_model_cost_map: None, level: str
+    ) -> None:
+        from litellm.llms.openai.chat.gpt_reasoning_transformation import OpenAIGPT5Config
+
+        refused: Final = [
+            key
+            for key, entry in litellm.model_cost.items()
+            if entry.get("litellm_provider") == "openai" and entry.get(f"supports_{level}_reasoning_effort") is False
+        ]
+        assert refused
+        for model in refused:
+            sent = _sent(level, None, model=model, provider="openai")
+            assert isinstance(sent, str) and not OpenAIGPT5Config().refuses_reasoning_effort_level(model, sent), model
+            turns_reasoning_off = not OpenAIGPT5Config().refuses_reasoning_effort_level(model, "none")
+            assert (sent == "none") is (level == "minimal" and turns_reasoning_off), model
+            assert sent == "none" or (
+                REASONING_EFFORT_STRENGTH_ORDER.index(sent) > REASONING_EFFORT_STRENGTH_ORDER.index(level)
+            ), model
+
+    def test_a_refused_level_keeps_the_rest_of_a_reasoning_object(self, local_model_cost_map: None) -> None:
+        assert _sent({"effort": "minimal", "summary": "auto"}, None, model="gpt-5.6-luna", provider="openai") == {
+            "effort": "none",
+            "summary": "auto",
+        }
+
+    def test_a_level_the_model_map_accepts_is_sent_as_requested(self, local_model_cost_map: None) -> None:
+        assert _sent("low", None, model="gpt-5.6-luna", provider="openai") == "low"
+        assert _sent("minimal", None, model="gemini-3-flash-preview", provider="gemini") == "minimal"
+        assert _sent("minimal", None, model="no-such-model", provider="openai") == "minimal"
+
+    @pytest.mark.parametrize(
+        "provider, model",
+        [
+            ("anthropic", "claude-haiku-5-5"),
+            ("bedrock", "us.anthropic.claude-haiku-5-5"),
+            ("vertex_ai", "claude-haiku-5-5"),
+        ],
+    )
+    def test_minimal_turns_claude_thinking_off(self, local_model_cost_map: None, provider: str, model: str) -> None:
+        assert _sent("minimal", None, model=model, provider=provider) == "none"
+        assert _sent("low", None, model=model, provider=provider) == "low"
+
+    def test_minimal_is_kept_on_a_claude_model_that_always_thinks(self, local_model_cost_map: None) -> None:
+        from litellm.llms.anthropic.common_utils import AnthropicModelInfo
+
+        assert not AnthropicModelInfo.can_turn_thinking_off("claude-fable-5", "anthropic")
+        assert _sent("minimal", None, model="claude-fable-5", provider="anthropic") == "minimal"
+
     def test_only_the_deployment_declaration_rounds_never_the_model_map(self, local_model_cost_map: None) -> None:
         assert _sent("xhigh", None, model="kimi-k3", provider="fireworks_ai") == "xhigh"
         assert _sent("xhigh", {"id": "kimi-1"}, model="kimi-k3", provider="fireworks_ai") == "xhigh"

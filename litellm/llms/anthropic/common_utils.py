@@ -857,15 +857,17 @@ class AnthropicModelInfo(BaseLLMModelInfo):
     ) -> None:
         """Forward ``temperature``/``top_p``/``top_k`` to
         ``optional_params[output_key]`` unless the model removed sampling
-        params, in which case drop the param (with drop_params) or raise a
-        clean client-side 400."""
+        params. Such a model's temperature is omitted, so a request a fallback
+        chain also sends to models that take it still succeeds, while top_p and
+        top_k are dropped (with drop_params) or raise a clean client-side 400."""
         if AnthropicModelInfo._supports_sampling_params(model) or (param == "temperature" and value == 1):
             optional_params[output_key] = value
+        elif param == "temperature":
+            litellm.verbose_logger.info("Omitting temperature=%s for %s, which only accepts the default", value, model)
         elif not (litellm.drop_params or drop_params):
-            supported_hint: Final = "Only temperature=1 is supported. " if param == "temperature" else ""
             raise litellm.utils.UnsupportedParamsError(
                 message=(
-                    f"{model} does not support {param}={value}. {supported_hint}"
+                    f"{model} does not support {param}={value}. "
                     "To drop unsupported params, set `litellm.drop_params = True`."
                 ),
                 status_code=400,
@@ -1076,6 +1078,10 @@ class AnthropicModelInfo(BaseLLMModelInfo):
         custom_llm_provider: str,
     ) -> bool:
         return cls._is_adaptive_thinking_model(model, custom_llm_provider)
+
+    @staticmethod
+    def can_turn_thinking_off(model: str, custom_llm_provider: str) -> bool:
+        return not AnthropicModelInfo._is_always_on_thinking_model(model, custom_llm_provider)
 
     @staticmethod
     def _is_always_on_thinking_model(model: str, custom_llm_provider: str) -> bool:

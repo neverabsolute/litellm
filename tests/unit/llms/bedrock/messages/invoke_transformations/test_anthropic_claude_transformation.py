@@ -3800,9 +3800,13 @@ async def test_reasoning_effort_grid_wire_shapes(
         if route_name == "bedrock_converse"
         else request_body
     )
+    assert "reasoning_effort" not in reasoning_fields
+    if effort == "minimal" and route_name == "bedrock_invoke_chat":
+        # opus 4.6 can turn thinking off, unlike the always-thinking fable rows, so minimal sends none
+        assert "thinking" not in reasoning_fields and "output_config" not in reasoning_fields
+        return
     assert reasoning_fields["thinking"] == {"type": "adaptive", "display": "summarized"}
     assert reasoning_fields["output_config"] == {"effort": expected_effort}
-    assert "reasoning_effort" not in reasoning_fields
 
 
 @pytest.mark.usefixtures("local_model_cost_map", "local_beta_headers_config")

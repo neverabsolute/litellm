@@ -7119,17 +7119,17 @@ class TestFinalOptionalParamsLineRedaction:
 
 class TestDropParamsStringCoercion:
     @pytest.mark.parametrize("drop_params", ["true", "True", True])
-    def test_truthy_drop_params_drops_unsupported_temperature(self, drop_params, monkeypatch):
+    def test_truthy_drop_params_drops_unsupported_top_p(self, drop_params, monkeypatch):
         from litellm.utils import get_optional_params
 
         monkeypatch.setattr(litellm, "drop_params", False)
         result = get_optional_params(
             model="gpt-5-nano",
             custom_llm_provider="openai",
-            temperature=0.1,
+            top_p=0.1,
             drop_params=drop_params,
         )
-        assert "temperature" not in result
+        assert "top_p" not in result
 
     @pytest.mark.parametrize("drop_params", ["false", False, None])
     def test_falsy_drop_params_still_raises(self, drop_params, monkeypatch):
@@ -7140,7 +7140,7 @@ class TestDropParamsStringCoercion:
             get_optional_params(
                 model="gpt-5-nano",
                 custom_llm_provider="openai",
-                temperature=0.1,
+                top_p=0.1,
                 drop_params=drop_params,
             )
 

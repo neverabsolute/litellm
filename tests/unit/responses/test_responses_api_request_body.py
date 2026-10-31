@@ -455,8 +455,6 @@ async def test_aresponses_sends_a_declared_level_the_model_map_disables(
         "reasoning": {"effort": level},
     }
 
-    with pytest.raises(litellm.UnsupportedParamsError):
-        await litellm.aresponses(**request, model_info={"id": "undeclared"})
     await litellm.aresponses(**request, model_info={"id": "declared", "reasoning_effort_levels": [level, "high"]})
 
     assert upstream.call_count == 1

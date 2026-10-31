@@ -6370,7 +6370,21 @@ def test_sampling_params_dropped_for_models_that_removed_them(model):
     assert "top_p" not in result
 
 
-@pytest.mark.parametrize("params", [{"temperature": 0.5}, {"top_p": 0.9}, {"top_p": 1}])
+def test_temperature_is_omitted_without_drop_params_on_models_that_removed_sampling_params(monkeypatch):
+    monkeypatch.setattr(litellm, "drop_params", False)
+
+    result = AnthropicConfig().map_openai_params(
+        non_default_params={"temperature": 0, "max_tokens": 10},
+        optional_params={},
+        model="claude-fable-5",
+        drop_params=False,
+    )
+
+    assert "temperature" not in result
+    assert result["max_tokens"] == 10
+
+
+@pytest.mark.parametrize("params", [{"top_p": 0.9}, {"top_p": 1}])
 def test_sampling_params_raise_clean_error_without_drop_params(params, monkeypatch):
     monkeypatch.setattr(litellm, "drop_params", False)
     config = AnthropicConfig()

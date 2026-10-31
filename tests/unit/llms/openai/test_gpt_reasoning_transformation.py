@@ -74,14 +74,14 @@ def test_gpt5_temperature_drop(config: OpenAIConfig):
     assert "temperature" not in params
 
 
-def test_gpt5_temperature_error(config: OpenAIConfig):
-    with pytest.raises(litellm.utils.UnsupportedParamsError):
-        config.map_openai_params(
-            non_default_params={"temperature": 0.2},
-            optional_params={},
-            model="gpt-5",
-            drop_params=False,
-        )
+def test_gpt5_omits_a_temperature_it_cannot_take_without_drop_params(config: OpenAIConfig):
+    params = config.map_openai_params(
+        non_default_params={"temperature": 0.2},
+        optional_params={},
+        model="gpt-5",
+        drop_params=False,
+    )
+    assert "temperature" not in params
 
 
 def test_gpt5_unsupported_params_drop(config: OpenAIConfig):
@@ -134,18 +134,14 @@ def test_gpt5_codex_temperature_drop(config: OpenAIConfig):
     assert "temperature" not in params
 
 
-def test_gpt5_codex_temperature_error(config: OpenAIConfig):
-    """Test that GPT-5-Codex raises error for unsupported temperature when drop_params=False."""
-    with pytest.raises(
-        litellm.utils.UnsupportedParamsError,
-        match=re.escape("gpt-5-codex doesn't support temperature=0.7 while reasoning is active"),
-    ):
-        config.map_openai_params(
-            non_default_params={"temperature": 0.7},
-            optional_params={},
-            model="gpt-5-codex",
-            drop_params=False,
-        )
+def test_gpt5_codex_omits_unsupported_temperature(config: OpenAIConfig):
+    """GPT-5-Codex omits an unsupported temperature even when drop_params=False."""
+    assert "temperature" not in config.map_openai_params(
+        non_default_params={"temperature": 0.7},
+        optional_params={},
+        model="gpt-5-codex",
+        drop_params=False,
+    )
 
 
 def test_gpt5_codex_temperature_one_allowed(config: OpenAIConfig):
@@ -842,14 +838,13 @@ def test_gpt5_2_keeps_reasoning_effort_with_tools(config: OpenAIConfig):
     assert params["tools"] == tools
 
 
-def test_gpt5_4_pro_rejects_non_default_temperature(config: OpenAIConfig):
-    with pytest.raises(litellm.utils.UnsupportedParamsError):
-        config.map_openai_params(
-            non_default_params={"temperature": 0.5},
-            optional_params={},
-            model="gpt-5.4-pro",
-            drop_params=False,
-        )
+def test_gpt5_4_pro_omits_non_default_temperature(config: OpenAIConfig):
+    assert "temperature" not in config.map_openai_params(
+        non_default_params={"temperature": 0.5},
+        optional_params={},
+        model="gpt-5.4-pro",
+        drop_params=False,
+    )
 
 
 def test_gpt5_1_temperature_without_reasoning_effort(config: OpenAIConfig):
@@ -871,15 +866,14 @@ def test_gpt5_1_temperature_without_reasoning_effort(config: OpenAIConfig):
 
 def test_gpt5_1_temperature_with_reasoning_effort_other_values(config: OpenAIConfig):
     """Test that GPT-5.1 only allows temperature=1 when reasoning_effort is not 'none'."""
-    # Test that temperature != 1 raises error when reasoning_effort is set to other values
+    # temperature != 1 is omitted when reasoning_effort is set to other values
     for effort in ["low", "medium", "high"]:
-        with pytest.raises(litellm.utils.UnsupportedParamsError):
-            config.map_openai_params(
-                non_default_params={"temperature": 0.7, "reasoning_effort": effort},
-                optional_params={},
-                model="gpt-5.1",
-                drop_params=False,
-            )
+        assert "temperature" not in config.map_openai_params(
+            non_default_params={"temperature": 0.7, "reasoning_effort": effort},
+            optional_params={},
+            model="gpt-5.1",
+            drop_params=False,
+        )
 
     # Test that temperature=1 is allowed with other reasoning_effort values
     for effort in ["low", "medium", "high"]:
@@ -906,14 +900,13 @@ def test_gpt5_1_temperature_with_reasoning_effort_in_optional_params(
     )
     assert params["temperature"] == 0.5
 
-    # Test with reasoning_effort="low" in optional_params (should only allow temp=1)
-    with pytest.raises(litellm.utils.UnsupportedParamsError):
-        config.map_openai_params(
-            non_default_params={"temperature": 0.5},
-            optional_params={"reasoning_effort": "low"},
-            model="gpt-5.1",
-            drop_params=False,
-        )
+    # Test with reasoning_effort="low" in optional_params (temperature is omitted)
+    assert "temperature" not in config.map_openai_params(
+        non_default_params={"temperature": 0.5},
+        optional_params={"reasoning_effort": "low"},
+        model="gpt-5.1",
+        drop_params=False,
+    )
 
 
 def test_gpt5_1_temperature_drop_when_not_none(config: OpenAIConfig):
@@ -931,13 +924,12 @@ def test_gpt5_1_temperature_drop_when_not_none(config: OpenAIConfig):
 def test_gpt5_temperature_still_restricted(config: OpenAIConfig):
     """Test that regular gpt-5 (not 5.1) still only allows temperature=1."""
     # Regular gpt-5 should still only allow temperature=1
-    with pytest.raises(litellm.utils.UnsupportedParamsError):
-        config.map_openai_params(
-            non_default_params={"temperature": 0.7},
-            optional_params={},
-            model="gpt-5",
-            drop_params=False,
-        )
+    assert "temperature" not in config.map_openai_params(
+        non_default_params={"temperature": 0.7},
+        optional_params={},
+        model="gpt-5",
+        drop_params=False,
+    )
 
     # temperature=1 should still work for gpt-5
     params = config.map_openai_params(
@@ -954,15 +946,14 @@ def test_gpt5_2_chat_temperature_restricted(config: OpenAIConfig):
 
     Regression test for https://github.com/BerriAI/litellm/issues/21911
     """
-    # gpt-5.2-chat should reject non-1 temperature when drop_params=False
+    # gpt-5.2-chat omits a non-1 temperature even when drop_params=False
     for model in ["gpt-5.2-chat", "gpt-5.2-chat-latest"]:
-        with pytest.raises(litellm.utils.UnsupportedParamsError):
-            config.map_openai_params(
-                non_default_params={"temperature": 0.7},
-                optional_params={},
-                model=model,
-                drop_params=False,
-            )
+        assert "temperature" not in config.map_openai_params(
+            non_default_params={"temperature": 0.7},
+            optional_params={},
+            model=model,
+            drop_params=False,
+        )
 
         # temperature=1 should still work
         params = config.map_openai_params(
@@ -1509,16 +1500,16 @@ class TestDefaultReasoningEffortGatesSamplingParams:
         )
         assert ("top_p" in mapped) is top_p_survives
 
-    def test_an_undeclared_model_is_refused_rather_than_forwarded(self):
-        """Without drop_params the caller gets an actionable 400 naming the remedy, instead of
-        the provider's own rejection arriving from an upstream it did not address."""
-        with pytest.raises(litellm.utils.UnsupportedParamsError, match="default_reasoning_effort"):
-            OpenAIGPT5Config().map_openai_params(
-                non_default_params={"temperature": 0},
-                optional_params={},
-                model="gpt-5.6-terra",
-                drop_params=False,
-            )
+    def test_an_undeclared_model_has_temperature_omitted_rather_than_forwarded(self):
+        """Without drop_params the provider's own rejection must still not be provoked, and a
+        fallback chain sending temperature=0 to models that take it must not fail on this one."""
+        mapped = OpenAIGPT5Config().map_openai_params(
+            non_default_params={"temperature": 0},
+            optional_params={},
+            model="gpt-5.6-terra",
+            drop_params=False,
+        )
+        assert "temperature" not in mapped
 
 
 class TestACatalogueOlderThanTheCodeDoesNotStripTemperature:

@@ -7549,13 +7549,27 @@ def test_converse_drops_sampling_params_for_models_that_removed_them():
     assert "topP" not in result
 
 
+def test_converse_omits_temperature_without_drop_params_on_models_that_removed_sampling_params(monkeypatch):
+    monkeypatch.setattr(litellm, "drop_params", False)
+
+    result = AmazonConverseConfig().map_openai_params(
+        non_default_params={"temperature": 0.5, "max_tokens": 10},
+        optional_params={},
+        model="global.anthropic.claude-opus-4-8-v1:0",
+        drop_params=False,
+    )
+
+    assert "temperature" not in result
+    assert result["maxTokens"] == 10
+
+
 def test_converse_sampling_params_raise_without_drop_params(monkeypatch):
     monkeypatch.setattr(litellm, "drop_params", False)
     config = AmazonConverseConfig()
 
     with pytest.raises(litellm.utils.UnsupportedParamsError, match="drop_params"):
         config.map_openai_params(
-            non_default_params={"temperature": 0.5},
+            non_default_params={"top_p": 0.5},
             optional_params={},
             model="global.anthropic.claude-opus-4-8-v1:0",
             drop_params=False,

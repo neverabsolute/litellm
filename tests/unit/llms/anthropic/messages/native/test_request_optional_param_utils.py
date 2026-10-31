@@ -125,11 +125,21 @@ def test_temperature_1_kept_for_unsupported_model(monkeypatch):
     assert result == {"temperature": 1}
 
 
+def test_temperature_is_omitted_without_drop_params(monkeypatch):
+    monkeypatch.setattr(litellm, "drop_params", False)
+    result = AnthropicMessagesRequestUtils.get_requested_anthropic_messages_optional_param(
+        params={"temperature": 0.3, "max_tokens": 10},
+        model="claude-opus-4-7",
+        drop_params=False,
+    )
+    assert result == {"max_tokens": 10}
+
+
 def test_sampling_param_raises_clean_400_without_drop_params(monkeypatch):
     monkeypatch.setattr(litellm, "drop_params", False)
-    with pytest.raises(litellm.utils.UnsupportedParamsError, match="does not support temperature"):
+    with pytest.raises(litellm.utils.UnsupportedParamsError, match="does not support top_p"):
         AnthropicMessagesRequestUtils.get_requested_anthropic_messages_optional_param(
-            params={"temperature": 0.3},
+            params={"top_p": 0.3},
             model="claude-opus-4-7",
             drop_params=False,
         )
