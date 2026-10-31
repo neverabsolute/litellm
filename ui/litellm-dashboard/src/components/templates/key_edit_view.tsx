@@ -32,9 +32,11 @@ import {
 } from "./keyEditFieldNormalizers";
 import {
   KeyAgentAndSkillFields,
+  KeyAllowedIpsField,
   KeyBudgetNumberField,
   KeyMetadataField,
   KeyRateLimitFields,
+  KeyTagListField,
   KeyTypeSelect,
   labelWithHint,
   moveMetadataTagsToTagsField,
@@ -107,8 +109,8 @@ function KeyEditSession({
   const canEditGuardrails = premiumUser || (userRole != null && rolesWithWriteAccess.includes(userRole));
   const canViewPolicies = hasCapability(userRole, "viewPolicies");
   const canViewPrompts = hasCapability(userRole, "viewPrompts");
-  const canEditEstimates = userRole != null && isProxyAdminRole(userRole);
-  const estimateTooltip = estimateTooltips(canEditEstimates);
+  const isProxyAdmin = userRole != null && isProxyAdminRole(userRole);
+  const estimateTooltip = estimateTooltips(isProxyAdmin);
   const form = useZodForm<KeyEditFormValues, KeyEditFormValues>(keyEditFormSchema, {
     // Refresh untouched fields without erasing the user's in-progress edits.
     values: toKeyEditFormValues(keyData),
@@ -518,7 +520,7 @@ function KeyEditSession({
                 accessToken={accessToken}
                 value={endUserBudgetId}
                 onChange={setEndUserBudgetId}
-                canEdit={userRole != null && isProxyAdminRole(userRole)}
+                canEdit={isProxyAdmin}
               />
             </Field>
           )}
@@ -583,7 +585,7 @@ function KeyEditSession({
             label={labelWithHint("Estimated Output Tokens", estimateTooltip.estimate)}
           >
             {({ ref: _ref, ...field }) => (
-              <NumericalInput {...field} value={field.value ?? ""} min={1} step={1} disabled={!canEditEstimates} />
+              <NumericalInput {...field} value={field.value ?? ""} min={1} step={1} disabled={!isProxyAdmin} />
             )}
           </FormField>
 
@@ -598,7 +600,7 @@ function KeyEditSession({
                 value={(field.value as string | undefined) ?? ""}
                 rows={4}
                 placeholder='{"gpt-4": 4096}'
-                disabled={!canEditEstimates}
+                disabled={!isProxyAdmin}
               />
             )}
           </FormField>
@@ -628,7 +630,7 @@ function KeyEditSession({
             }
           </FormField>
 
-          {userRole != null && isProxyAdminRole(userRole) && (
+          {isProxyAdmin && (
             <FormField
               control={form.control}
               name="disable_global_guardrails"
@@ -664,17 +666,13 @@ function KeyEditSession({
             </FormField>
           )}
 
-          <FormField control={form.control} name="tags" label="Tags">
-            {({ value, onChange, id }) => (
-              <TagsInput
-                id={id}
-                value={(value as string[] | undefined) ?? []}
-                onValueChange={onChange}
-                options={Object.values(tagsList).map((tag) => ({ value: tag.name, label: tag.name }))}
-                placeholder="Select or enter tags"
-              />
-            )}
-          </FormField>
+          <KeyTagListField
+            control={form.control}
+            name="tags"
+            label="Tags"
+            options={Object.values(tagsList).map((tag) => tag.name)}
+            placeholder="Select or enter tags"
+          />
 
           {canViewPrompts && (
             <FormField
@@ -744,6 +742,8 @@ function KeyEditSession({
               />
             )}
           </FormField>
+
+          {isProxyAdmin && <KeyAllowedIpsField control={form.control} />}
 
           <FormField control={form.control} name="vector_stores" label="Vector Stores">
             {({ value, onChange }) => (

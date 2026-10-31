@@ -7,6 +7,7 @@ from typing import Any, Final, Literal  # noqa: TID251  # allowed_routes and met
 from pydantic import Field, PositiveInt, field_validator, model_validator
 from typing_extensions import TypeIs  # noqa: TID251  # narrows the raw payload a before-validator receives
 
+from litellm.litellm_core_utils.ip_ranges import normalize_ip_entries
 from litellm.types.proxy.management_endpoints.request_base import GenerateRequestBase
 from litellm.types.router import ContentPolicyFallbackRules, UpdateRouterConfig
 from litellm.types.utils import LiteLLMPydanticObjectBase
@@ -47,6 +48,15 @@ class KeyRequestBase(GenerateRequestBase):
     )
     router_settings: UpdateRouterConfig | None = None
     access_group_ids: list[str] | None = None
+    allowed_ips: tuple[str, ...] | None = Field(
+        default=None,
+        description="IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.",
+    )
+
+    @field_validator("allowed_ips")
+    @classmethod
+    def allowed_ips_are_addresses_or_ranges(cls, allowed_ips: tuple[str, ...] | None) -> tuple[str, ...] | None:
+        return None if allowed_ips is None else normalize_ip_entries(allowed_ips)
 
     @field_validator("router_settings")
     @classmethod
@@ -118,7 +128,7 @@ class UpdateKeyRequest(KeyRequestBase):
 
     project_id: str | None = Field(
         default=None,
-        description="Omit to retain the project, or send null to detach. Assigning a different project is not supported.",
+        description="Omit to retain the project, send null to detach, or send a project id to assign an unassigned key to a project on the key's team. Moving a key between projects is not supported.",
     )
 
     @model_validator(mode="before")

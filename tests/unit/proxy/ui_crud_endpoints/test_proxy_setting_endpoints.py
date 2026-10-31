@@ -2803,7 +2803,7 @@ def test_add_allowed_ip_writes_audit_log(mock_proxy_config, monkeypatch):
 
     app.dependency_overrides[user_api_key_auth] = _admin_auth
     try:
-        resp = client.post("/add/allowed_ip", json={"ip": "203.0.113.77"})
+        resp = TestClient(app, client=("203.0.113.77", 50000)).post("/add/allowed_ip", json={"ip": "203.0.113.77"})
         assert resp.status_code == 200, resp.text
 
         audit_create.assert_awaited_once()
@@ -2828,7 +2828,7 @@ def test_add_allowed_ip_hands_save_config_only_the_changed_general_setting(monke
     covered by test_ProxyConfig_save_config_merges_changed_keys_without_copying_file_settings.
 
     This lives here rather than in the e2e suite because /add/allowed_ip mutates the
-    live general_settings["allowed_ips"] that auth_utils._check_valid_ip reads, so on a
+    live general_settings["allowed_ips"] that ip_access.enforce_allowed_ips reads, so on a
     shared proxy the first call locks every later request out, cleanup included.
     """
     from types import MappingProxyType
@@ -2868,7 +2868,9 @@ def test_add_allowed_ip_hands_save_config_only_the_changed_general_setting(monke
 
     app.dependency_overrides[user_api_key_auth] = _admin_auth
     try:
-        resp: Final = client.post("/add/allowed_ip", json={"ip": "203.0.113.77"})
+        resp: Final = TestClient(app, client=("203.0.113.77", 50000)).post(
+            "/add/allowed_ip", json={"ip": "203.0.113.77"}
+        )
         assert resp.status_code == 200, resp.text
 
         save_config.assert_awaited_once()
@@ -2978,7 +2980,7 @@ def test_allowed_ip_routes_refuse_a_config_owned_list_with_a_clear_400(route, mo
     app.dependency_overrides[user_api_key_auth] = _admin_auth
     try:
         ip = "198.51.100.9" if route == "/add/allowed_ip" else "203.0.113.77"
-        resp = client.post(route, json={"ip": ip})
+        resp = TestClient(app, client=("198.51.100.9", 50000)).post(route, json={"ip": ip})
 
         assert resp.status_code == 400, resp.text
         assert "allowed_ips" in resp.text
@@ -4488,3 +4490,114 @@ def test_usage_default_range_reports_config_precedence(mock_auth, monkeypatch: p
     assert response.status_code == 200, response.text
     assert response.json()["values"]["usage_default_time_range"] == "month_to_date"
     assert response.json()["source"]["usage_default_time_range"] == "config"
+
+
+@pytest.mark.parametrize(
+    ("route", "stored", "ip", "status"),
+    [
+        ("/add/allowed_ip", [], "198.51.100.0/24", 400),
+        ("/add/allowed_ip", [], "203.0.113.0/24", 200),
+        ("/add/allowed_ip", ["192.0.2.0/24"], "203.0.113.77", 200),
+        ("/delete/allowed_ip", ["203.0.113.0/24", "192.0.2.0/24"], "203.0.113.0/24", 400),
+        ("/delete/allowed_ip", ["203.0.113.0/24"], "203.0.113.0/24", 200),
+    ],
+)
+def test_allowed_ip_changes_that_would_lock_out_the_caller_are_refused(route, stored, ip, status, monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+
+    import litellm.proxy.proxy_server as proxy_server_module
+    from litellm.proxy._types import UserAPIKeyAuth
+    from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
+
+    general_settings = {"allowed_ips": list(stored)}
+    fake_prisma = MagicMock()
+    fake_prisma.db.litellm_auditlog.create = AsyncMock()
+
+    async def _get_config():
+        return {"general_settings": {"allowed_ips": list(stored)}}
+
+    async def _save_config(new_config=None):
+        return new_config
+
+    monkeypatch.setattr(proxy_server_module, "prisma_client", fake_prisma)
+    monkeypatch.setattr(proxy_server_module, "store_model_in_db", True)
+    monkeypatch.setattr(proxy_server_module, "general_settings", general_settings)
+    monkeypatch.setattr(proxy_server_module.proxy_config, "get_config", _get_config)
+    monkeypatch.setattr(proxy_server_module.proxy_config, "save_config", _save_config)
+
+    async def _admin_auth():
+        return UserAPIKeyAuth(user_id="ip-admin", api_key="hashed-admin-key", user_role=LitellmUserRoles.PROXY_ADMIN)
+
+    app.dependency_overrides[user_api_key_auth] = _admin_auth
+    try:
+        resp = TestClient(app, client=("203.0.113.77", 50000)).post(route, json={"ip": ip})
+
+        assert resp.status_code == status, resp.text
+        if status == 400:
+            assert "203.0.113.77" in resp.json()["detail"]["error"]
+            assert general_settings["allowed_ips"] == stored
+    finally:
+        app.dependency_overrides.pop(user_api_key_auth, None)
+
+
+@pytest.mark.parametrize(("ip", "status"), [("10.1.2.3/8", 200), ("office-vpn", 422)])
+def test_add_allowed_ip_accepts_cidr_ranges_and_rejects_non_addresses(ip, status, monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+
+    import litellm.proxy.proxy_server as proxy_server_module
+    from litellm.proxy._types import UserAPIKeyAuth
+    from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
+
+    general_settings = {}
+    fake_prisma = MagicMock()
+    fake_prisma.db.litellm_auditlog.create = AsyncMock()
+
+    async def _get_config():
+        return {"general_settings": {}}
+
+    async def _save_config(new_config=None):
+        return new_config
+
+    monkeypatch.setattr(proxy_server_module, "prisma_client", fake_prisma)
+    monkeypatch.setattr(proxy_server_module, "store_model_in_db", True)
+    monkeypatch.setattr(proxy_server_module, "general_settings", general_settings)
+    monkeypatch.setattr(proxy_server_module.proxy_config, "get_config", _get_config)
+    monkeypatch.setattr(proxy_server_module.proxy_config, "save_config", _save_config)
+
+    async def _admin_auth():
+        return UserAPIKeyAuth(user_id="ip-admin", api_key="hashed-admin-key", user_role=LitellmUserRoles.PROXY_ADMIN)
+
+    app.dependency_overrides[user_api_key_auth] = _admin_auth
+    try:
+        resp = TestClient(app, client=("10.9.9.9", 50000)).post("/add/allowed_ip", json={"ip": ip})
+
+        assert resp.status_code == status, resp.text
+        if status == 200:
+            assert general_settings["allowed_ips"] == ["10.0.0.0/8"]
+    finally:
+        app.dependency_overrides.pop(user_api_key_auth, None)
+
+
+def test_add_allowed_ip_without_db_storage_leaves_the_live_list_untouched(monkeypatch):
+    from unittest.mock import MagicMock
+
+    import litellm.proxy.proxy_server as proxy_server_module
+    from litellm.proxy._types import UserAPIKeyAuth
+    from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
+
+    general_settings = {"allowed_ips": ["203.0.113.0/24"]}
+    monkeypatch.setattr(proxy_server_module, "prisma_client", MagicMock())
+    monkeypatch.setattr(proxy_server_module, "store_model_in_db", False)
+    monkeypatch.setattr(proxy_server_module, "general_settings", general_settings)
+
+    async def _admin_auth():
+        return UserAPIKeyAuth(user_id="ip-admin", api_key="hashed-admin-key", user_role=LitellmUserRoles.PROXY_ADMIN)
+
+    app.dependency_overrides[user_api_key_auth] = _admin_auth
+    try:
+        resp = TestClient(app, client=("203.0.113.77", 50000)).post("/add/allowed_ip", json={"ip": "192.0.2.0/24"})
+
+        assert resp.status_code == 500, resp.text
+        assert general_settings["allowed_ips"] == ["203.0.113.0/24"]
+    finally:
+        app.dependency_overrides.pop(user_api_key_auth, None)

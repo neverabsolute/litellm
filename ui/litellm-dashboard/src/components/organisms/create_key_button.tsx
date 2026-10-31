@@ -28,6 +28,7 @@ import { ChevronDown, Info } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { type Control, useForm, useWatch, type UseFormSetValue } from "react-hook-form";
 import { isProxyAdminRole, rolesWithWriteAccess } from "../../utils/roles";
+import { ipEntriesError } from "@/utils/ipAddress";
 import AgentSelector from "../agent_management/AgentSelector";
 import SkillSelector from "../skills/SkillSelector";
 import AccessGroupSelector from "../common_components/AccessGroupSelector";
@@ -1537,6 +1538,33 @@ const CreateKey: React.FC<CreateKeyProps> = ({ team, teams, data, addKey, autoOp
                           />
                         )}
                       </MountedFormField>
+                      {userRole != null && isProxyAdminRole(userRole) && (
+                        <MountedFormField
+                          label={
+                            <span>
+                              Allowed IPs{" "}
+                              <SimpleTooltip content="IP addresses or CIDR ranges this key can be used from. Leave empty to allow any address the proxy accepts">
+                                <Info className="ml-1 inline size-3.5 align-text-bottom" />
+                              </SimpleTooltip>
+                            </span>
+                          }
+                          name="allowed_ips"
+                          className="mt-4"
+                          rules={{
+                            validate: (value: unknown) => ipEntriesError(value as string[] | undefined) ?? true,
+                          }}
+                        >
+                          {(control) => (
+                            <TagsInput
+                              id={control.id}
+                              value={(control.value as string[] | undefined) ?? []}
+                              onValueChange={control.onChange}
+                              placeholder="e.g. 203.0.113.7 or 10.0.0.0/8"
+                              tokenSeparators={[",", " "]}
+                            />
+                          )}
+                        </MountedFormField>
+                      )}
                       <MountedFormField
                         label={
                           <span>

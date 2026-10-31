@@ -2147,3 +2147,35 @@ model LiteLLM_SubscriptionAccountTable {
 
   @@unique([custom_llm_provider, account_id], map: "LiteLLM_SubscriptionAccountTable_provider_account_key")
 }
+
+model LiteLLM_DailyIPActivity {
+  date                String
+  ip_address          String
+  api_key             String   @default("")
+  successful_requests BigInt   @default(0)
+  failed_requests     BigInt   @default(0)
+  spend               Float    @default(0.0)
+  total_tokens        BigInt   @default(0)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  @@id([date, ip_address, api_key])
+  @@index([date])
+  @@index([ip_address, date])
+}
+
+model LiteLLM_DailyDeniedRequests {
+  date            String
+  ip_address      String
+  route           String
+  status_code     Int
+  reason          String
+  api_key         String   @default("")
+  denied_requests BigInt   @default(0)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@id([date, ip_address, route, status_code, reason, api_key])
+  @@index([date])
+  @@index([ip_address, date])
+}

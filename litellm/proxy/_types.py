@@ -124,6 +124,7 @@ from .types_utils.utils import get_instance_fn, validate_custom_validate_return_
 if TYPE_CHECKING:
     from opentelemetry.trace import Span as _Span
 
+    from litellm.repositories.database import Database
     from litellm.tracing import TraceReceiver
 
     Span = _Span | Any
@@ -133,6 +134,7 @@ else:
 
 class ProxyLifespanState(TypedDict):
     tracing_receiver: ReadOnly["TraceReceiver | None"]
+    database: ReadOnly["Database | None"]
 
 
 class ReconcileOutcome(NamedTuple):
@@ -2992,7 +2994,15 @@ class ConfigGeneralSettings(LiteLLMPydanticObjectBase):
     )
     trusted_proxy_ranges: list[str] | None = Field(
         None,
-        description="CIDR ranges of trusted reverse proxies allowed to provide identity headers for header-based auth paths such as enable_oauth2_proxy_auth and custom_ui_sso_sign_in_handler, and whose X-Forwarded-For is used to attribute Admin UI sign-in attempts to a source address. Set it to an empty list when clients connect directly, so the peer address is the source. Left unset, or containing an entry that is not an address or CIDR range, the per-source sign-in limit is off.",
+        description="CIDR ranges of trusted reverse proxies allowed to provide identity headers for header-based auth paths such as enable_oauth2_proxy_auth and custom_ui_sso_sign_in_handler, and whose X-Forwarded-For is used to attribute Admin UI sign-in attempts, the logged requester_ip_address, and allowed_ips checks to a source address. The client is the right-most X-Forwarded-For hop outside these ranges. Behind a CDN, list the CDN's published edge ranges here too. Set it to an empty list when clients connect directly, so the peer address is the source. Left unset, or containing an entry that is not an address or CIDR range, the per-source sign-in limit is off and the client IP falls back to use_x_forwarded_for.",
+    )
+    trusted_client_ip_header: str | None = Field(
+        None,
+        description="Header a trusted edge proxy sets to the original client IP, e.g. 'cf-connecting-ip' behind Cloudflare. Read only when the direct peer and every X-Forwarded-For hop are in trusted_proxy_ranges, so a caller that bypasses the edge cannot forge it.",
+    )
+    allowed_ips: tuple[str, ...] | None = Field(
+        None,
+        description="IP addresses and CIDR ranges allowed to call the proxy. Unset or empty admits every address. Per-key allowed_ips narrow this further. The client IP is resolved through trusted_proxy_ranges.",
     )
     store_model_in_db: bool | None = Field(
         None,
@@ -3758,6 +3768,7 @@ class SpendLogsMetadata(TypedDict):
     kubernetes_pod_routing: ReadOnly[StandardLoggingKubernetesPodRouting | None]
     internal_call_origin: InternalCallOrigin | None
     billed_retry_attempt: ReadOnly[NotRequired[bool | None]]
+    upstream_provider: ReadOnly[NotRequired[str | None]]
     litellm_roi_estimator: ReadOnly[NotRequired[bool | None]]
     is_silent_experiment: ReadOnly[NotRequired[bool | None]]
     guardrail_information: list[StandardLoggingGuardrailInformation] | None
@@ -4610,6 +4621,7 @@ LiteLLM_ManagementEndpoint_MetadataFields: Final = [
     "enable_prompt_caching",
     "end_user_budget_id",
     "require_trace_id",
+    "allowed_ips",
 ]
 
 LiteLLM_ManagementEndpoint_MetadataFields_Premium: Final = [

@@ -186,7 +186,7 @@ describe("AdminPanel", () => {
     beforeEach(async () => {
       const user = userEvent.setup();
       mockUseAuthorized.mockReturnValue({
-        premiumUser: true,
+        premiumUser: false,
         accessToken: "test-token",
         userId: "user-1",
       });
@@ -195,7 +195,7 @@ describe("AdminPanel", () => {
       await user.click(securityTab);
     });
 
-    it("should open allowed IPs modal when premium user clicks Allowed IPs button", async () => {
+    it("should open allowed IPs modal when Allowed IPs button is clicked", async () => {
       const user = userEvent.setup();
       mockGetAllowedIPs.mockResolvedValue(["192.168.1.1", "10.0.0.1"]);
       const allowedIPsButton = screen.getByRole("button", { name: /allowed ips/i });
@@ -247,6 +247,21 @@ describe("AdminPanel", () => {
       });
       const deleteButtons = screen.queryAllByRole("button", { name: /delete/i });
       expect(deleteButtons.length).toBe(0);
+    });
+
+    it("shows the server's lockout message when deleting the entry that covers the caller", async () => {
+      const user = userEvent.setup();
+      const lockout = "This change would block your own IP address 10.0.0.1. Add an entry that covers it first.";
+      mockGetAllowedIPs.mockResolvedValue(["10.0.0.0/8"]);
+      mockDeleteAllowedIP.mockRejectedValue({ detail: { error: lockout } });
+      await user.click(screen.getByRole("button", { name: /allowed ips/i }));
+      const manageDialog = await screen.findByRole("dialog", { name: /manage allowed ip addresses/i });
+
+      await user.click(within(manageDialog).getByRole("button", { name: "Delete" }));
+      await user.click(await screen.findByRole("button", { name: "Yes" }));
+
+      expect(await screen.findByText(lockout)).toBeInTheDocument();
+      expect(mockDeleteAllowedIP).toHaveBeenCalledWith("test-token", "10.0.0.0/8");
     });
 
     it("should handle error when fetching allowed IPs fails", async () => {
@@ -330,7 +345,7 @@ describe("AdminPanel add allowed IP form", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockUseAuthorized.mockReturnValue({
-      premiumUser: true,
+      premiumUser: false,
       accessToken: "test-token",
       userId: "user-1",
     });
@@ -343,15 +358,14 @@ describe("AdminPanel add allowed IP form", () => {
     await user.click(screen.getByRole("tab", { name: /security settings/i }));
     await user.click(screen.getByRole("button", { name: /allowed ips/i }));
     const manageDialog = await screen.findByRole("dialog", { name: /manage allowed ip addresses/i });
-    await user.click(within(manageDialog).getByRole("button", { name: /add ip address/i }));
-    await screen.findByPlaceholderText("Enter IP address");
+    await user.click(within(manageDialog).getByRole("button", { name: /add ip address or range/i }));
+    await screen.findByLabelText("IP address or CIDR range");
   });
 
-  const ipField = () => screen.getByPlaceholderText("Enter IP address") as HTMLInputElement;
+  const ipField = () => screen.getByLabelText("IP address or CIDR range") as HTMLInputElement;
 
   const submitAddIP = async (user: ReturnType<typeof userEvent.setup>) => {
-    const addIpForm = ipField().form as HTMLFormElement;
-    await user.click(within(addIpForm).getByText("Add IP Address"));
+    await user.click(screen.getByRole("button", { name: "Add Entry" }));
   };
 
   it("sends the access token and the typed IP address", async () => {
@@ -371,7 +385,7 @@ describe("AdminPanel add allowed IP form", () => {
 
     await submitAddIP(user);
 
-    expect(await screen.findByText("Please enter an IP address")).toBeInTheDocument();
+    expect(await screen.findByText("Please enter an IP address or CIDR range")).toBeInTheDocument();
     expect(mockAddAllowedIP).not.toHaveBeenCalled();
   });
 
@@ -383,6 +397,39 @@ describe("AdminPanel add allowed IP form", () => {
     await waitFor(() => {
       expect(mockAddAllowedIP).toHaveBeenCalledWith("test-token", "172.16.0.9");
     });
+  });
+
+  it.each(["10.0.0.0/8", "2001:db8::/32"])("sends the CIDR range %s", async (range) => {
+    const user = userEvent.setup();
+
+    fireEvent.change(ipField(), { target: { value: range } });
+    await submitAddIP(user);
+
+    await waitFor(() => {
+      expect(mockAddAllowedIP).toHaveBeenCalledWith("test-token", range);
+    });
+  });
+
+  it.each(["10.0.0.0/33", "not-an-ip", "300.1.1.1"])("blocks the submit of the invalid entry %s", async (entry) => {
+    const user = userEvent.setup();
+
+    fireEvent.change(ipField(), { target: { value: entry } });
+    await submitAddIP(user);
+
+    expect(await screen.findByText(/Enter an IPv4 or IPv6 address, or a CIDR range/)).toBeInTheDocument();
+    expect(mockAddAllowedIP).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's lockout message and keeps the dialog open", async () => {
+    const user = userEvent.setup();
+    const lockout = "This change would block your own IP address 203.0.113.7. Add an entry that covers it first.";
+    mockAddAllowedIP.mockRejectedValue({ detail: { error: lockout } });
+
+    fireEvent.change(ipField(), { target: { value: "10.0.0.0/8" } });
+    await submitAddIP(user);
+
+    expect(await screen.findByText(lockout)).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /add allowed ip address or range/i })).toBeInTheDocument();
   });
 
   it("refreshes the allowed IP list after a successful add", async () => {

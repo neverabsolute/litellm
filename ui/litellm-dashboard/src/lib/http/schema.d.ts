@@ -8221,6 +8221,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ip_analytics/denied": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Denied Requests
+         * @description The most denied (day, address, route, status, reason, key) buckets across every route.
+         */
+        get: operations["get_denied_requests_ip_analytics_denied_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ip_analytics/ip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ip Detail
+         * @description One caller address broken down by the keys it used, and every denial it received.
+         */
+        get: operations["get_ip_detail_ip_analytics_ip_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ip_analytics/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ip Summary
+         * @description Caller addresses ranked by traffic, with their failures, auth denials, spend and keys.
+         */
+        get: operations["get_ip_summary_ip_analytics_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jwt/key/mapping/delete": {
         parameters: {
             query?: never;
@@ -8953,7 +9013,7 @@ export interface paths {
          *     - user_id: Optional[str] - User ID associated with key
          *     - team_id: Optional[str] - Team ID associated with key
          *     - agent_id: Optional[str] - The agent id associated with the key.
-         *     - project_id: Optional[str] - Omit to retain the project, or send null to detach. A different project ID is rejected.
+         *     - project_id: Optional[str] - Omit to retain the project, send null to detach, or send a project id to assign an unassigned key to a project on the key's team. Moving a key between projects is rejected.
          *     - organization_id: Optional[str] - The organization id of the key.
          *     - budget_id: Optional[str] - The budget id associated with the key. Created by calling `/budget/new`.
          *     - end_user_budget_id: Optional[str] - Proxy admin only. Budget id applied to end users first seen through this key that carry no budget of their own. Omit to keep the current value, pass an empty string to clear it.
@@ -18082,9 +18142,9 @@ export interface paths {
          * @description Namespace a toolset as its own MCP endpoint.
          *
          *     Connecting to /toolset/<name>/mcp exposes exactly the tools defined in
-         *     the toolset. Access is enforced: non-admin API keys must have the toolset
-         *     listed in their object_permission.mcp_toolsets grant list, or the request
-         *     will be rejected with a 403.
+         *     the toolset. Access is enforced: API keys other than an admin's key with no
+         *     team must hold the toolset through one of their grant sources, or the
+         *     request will be rejected with a 403.
          */
         get: operations["toolset_mcp_route_toolset__toolset_name__mcp_get"];
         /**
@@ -18092,9 +18152,9 @@ export interface paths {
          * @description Namespace a toolset as its own MCP endpoint.
          *
          *     Connecting to /toolset/<name>/mcp exposes exactly the tools defined in
-         *     the toolset. Access is enforced: non-admin API keys must have the toolset
-         *     listed in their object_permission.mcp_toolsets grant list, or the request
-         *     will be rejected with a 403.
+         *     the toolset. Access is enforced: API keys other than an admin's key with no
+         *     team must hold the toolset through one of their grant sources, or the
+         *     request will be rejected with a 403.
          */
         put: operations["toolset_mcp_route_toolset__toolset_name__mcp_put"];
         /**
@@ -18102,9 +18162,9 @@ export interface paths {
          * @description Namespace a toolset as its own MCP endpoint.
          *
          *     Connecting to /toolset/<name>/mcp exposes exactly the tools defined in
-         *     the toolset. Access is enforced: non-admin API keys must have the toolset
-         *     listed in their object_permission.mcp_toolsets grant list, or the request
-         *     will be rejected with a 403.
+         *     the toolset. Access is enforced: API keys other than an admin's key with no
+         *     team must hold the toolset through one of their grant sources, or the
+         *     request will be rejected with a 403.
          */
         post: operations["toolset_mcp_route_toolset__toolset_name__mcp_post"];
         /**
@@ -18112,9 +18172,9 @@ export interface paths {
          * @description Namespace a toolset as its own MCP endpoint.
          *
          *     Connecting to /toolset/<name>/mcp exposes exactly the tools defined in
-         *     the toolset. Access is enforced: non-admin API keys must have the toolset
-         *     listed in their object_permission.mcp_toolsets grant list, or the request
-         *     will be rejected with a 403.
+         *     the toolset. Access is enforced: API keys other than an admin's key with no
+         *     team must hold the toolset through one of their grant sources, or the
+         *     request will be rejected with a 403.
          */
         delete: operations["toolset_mcp_route_toolset__toolset_name__mcp_delete"];
         /**
@@ -18122,9 +18182,9 @@ export interface paths {
          * @description Namespace a toolset as its own MCP endpoint.
          *
          *     Connecting to /toolset/<name>/mcp exposes exactly the tools defined in
-         *     the toolset. Access is enforced: non-admin API keys must have the toolset
-         *     listed in their object_permission.mcp_toolsets grant list, or the request
-         *     will be rejected with a 403.
+         *     the toolset. Access is enforced: API keys other than an admin's key with no
+         *     team must hold the toolset through one of their grant sources, or the
+         *     request will be rejected with a 403.
          */
         options: operations["toolset_mcp_route_toolset__toolset_name__mcp_options"];
         /**
@@ -18132,9 +18192,9 @@ export interface paths {
          * @description Namespace a toolset as its own MCP endpoint.
          *
          *     Connecting to /toolset/<name>/mcp exposes exactly the tools defined in
-         *     the toolset. Access is enforced: non-admin API keys must have the toolset
-         *     listed in their object_permission.mcp_toolsets grant list, or the request
-         *     will be rejected with a 403.
+         *     the toolset. Access is enforced: API keys other than an admin's key with no
+         *     team must hold the toolset through one of their grant sources, or the
+         *     request will be rejected with a 403.
          */
         head: operations["toolset_mcp_route_toolset__toolset_name__mcp_head"];
         /**
@@ -18142,9 +18202,9 @@ export interface paths {
          * @description Namespace a toolset as its own MCP endpoint.
          *
          *     Connecting to /toolset/<name>/mcp exposes exactly the tools defined in
-         *     the toolset. Access is enforced: non-admin API keys must have the toolset
-         *     listed in their object_permission.mcp_toolsets grant list, or the request
-         *     will be rejected with a 403.
+         *     the toolset. Access is enforced: API keys other than an admin's key with no
+         *     team must hold the toolset through one of their grant sources, or the
+         *     request will be rejected with a 403.
          */
         patch: operations["toolset_mcp_route_toolset__toolset_name__mcp_patch"];
         trace?: never;
@@ -26304,6 +26364,11 @@ export interface components {
          * @enum {string}
          */
         AlertType: "llm_exceptions" | "llm_too_slow" | "llm_requests_hanging" | "budget_alerts" | "spend_reports" | "failed_tracking_spend" | "user_spend_thresholds" | "user_spend_anomalies" | "db_exceptions" | "daily_reports" | "cooldown_deployment" | "new_model_added" | "model_deprecation_warnings" | "outage_alerts" | "region_outage_alerts" | "fallback_reports" | "new_virtual_key_created" | "virtual_key_updated" | "virtual_key_deleted" | "new_team_created" | "team_updated" | "team_deleted" | "new_internal_user_created" | "internal_user_updated" | "internal_user_deleted" | "mcp_tool_description_blocked" | "mcp_pinned_tools_changed";
+        /** AllowedIPEntry */
+        AllowedIPEntry: {
+            /** Ip */
+            ip: string;
+        };
         /** AllowedVectorStoreIndexItem */
         AllowedVectorStoreIndexItem: {
             /** Index Name */
@@ -27870,7 +27935,10 @@ export interface components {
             entities?: {
                 [key: string]: components["schemas"]["MetricWithMetadata"];
             };
-            /** Guardrails */
+            /**
+             * Guardrails
+             * @description Spend by guardrail ID, already included in key and model spend. Populated on user, team and organization aggregated activity only, without a model filter
+             */
             guardrails?: {
                 [key: string]: components["schemas"]["GuardrailMetric"];
             };
@@ -29996,6 +30064,11 @@ export interface components {
              */
             allowed_file_extensions?: string[] | null;
             /**
+             * Allowed Ips
+             * @description IP addresses and CIDR ranges allowed to call the proxy. Unset or empty admits every address. Per-key allowed_ips narrow this further. The client IP is resolved through trusted_proxy_ranges.
+             */
+            allowed_ips?: string[] | null;
+            /**
              * Allowed Routes
              * @description Proxy API Endpoints you want users to be able to access
              */
@@ -30520,8 +30593,13 @@ export interface components {
              */
             transcribe_media_buckets?: string[] | null;
             /**
+             * Trusted Client Ip Header
+             * @description Header a trusted edge proxy sets to the original client IP, e.g. 'cf-connecting-ip' behind Cloudflare. Read only when the direct peer and every X-Forwarded-For hop are in trusted_proxy_ranges, so a caller that bypasses the edge cannot forge it.
+             */
+            trusted_client_ip_header?: string | null;
+            /**
              * Trusted Proxy Ranges
-             * @description CIDR ranges of trusted reverse proxies allowed to provide identity headers for header-based auth paths such as enable_oauth2_proxy_auth and custom_ui_sso_sign_in_handler, and whose X-Forwarded-For is used to attribute Admin UI sign-in attempts to a source address. Set it to an empty list when clients connect directly, so the peer address is the source. Left unset, or containing an entry that is not an address or CIDR range, the per-source sign-in limit is off.
+             * @description CIDR ranges of trusted reverse proxies allowed to provide identity headers for header-based auth paths such as enable_oauth2_proxy_auth and custom_ui_sso_sign_in_handler, and whose X-Forwarded-For is used to attribute Admin UI sign-in attempts, the logged requester_ip_address, and allowed_ips checks to a source address. The client is the right-most X-Forwarded-For hop outside these ranges. Behind a CDN, list the CDN's published edge ranges here too. Set it to an empty list when clients connect directly, so the peer address is the source. Left unset, or containing an entry that is not an address or CIDR range, the per-source sign-in limit is off and the client IP falls back to use_x_forwarded_for.
              */
             trusted_proxy_ranges?: string[] | null;
             /**
@@ -31996,6 +32074,46 @@ export interface components {
             /** User Ids */
             user_ids: string[];
         };
+        /** DeniedRequestEntry */
+        DeniedRequestEntry: {
+            /** Api Key */
+            api_key: string;
+            /** Date */
+            date: string;
+            /** Denied Requests */
+            denied_requests: number;
+            /** Ip Address */
+            ip_address: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "ip_not_allowed_global" | "ip_not_allowed_key" | "auth_error";
+            /** Route */
+            route: string;
+            /** Status Code */
+            status_code: number;
+        };
+        /**
+         * DeniedRequestsResponse
+         * @description Response for GET /ip_analytics/denied.
+         */
+        DeniedRequestsResponse: {
+            /**
+             * Denied
+             * @default []
+             */
+            denied: components["schemas"]["DeniedRequestEntry"][];
+            /** End Date */
+            end_date: string;
+            /** Start Date */
+            start_date: string;
+        };
         /** Deployment */
         Deployment: {
             /** Blocked */
@@ -32989,6 +33107,11 @@ export interface components {
              * @default []
              */
             allowed_cache_controls: unknown[] | null;
+            /**
+             * Allowed Ips
+             * @description IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.
+             */
+            allowed_ips?: string[] | null;
             /** Allowed Passthrough Routes */
             allowed_passthrough_routes?: unknown[] | null;
             /**
@@ -33159,6 +33282,11 @@ export interface components {
              * @default []
              */
             allowed_cache_controls: unknown[] | null;
+            /**
+             * Allowed Ips
+             * @description IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.
+             */
+            allowed_ips?: string[] | null;
             /** Allowed Passthrough Routes */
             allowed_passthrough_routes?: unknown[] | null;
             /**
@@ -33448,32 +33576,44 @@ export interface components {
         };
         /** GuardrailKeyMetric */
         GuardrailKeyMetric: {
+            /** @description API key alias and existence information */
             metadata: components["schemas"]["KeyMetadata"];
+            /** @description Guardrail spend and unpriced units for this API key */
             metrics: components["schemas"]["GuardrailSpendMetrics"];
         };
         /** GuardrailMetadata */
         GuardrailMetadata: {
-            /** Guardrail Name */
+            /**
+             * Guardrail Name
+             * @description Guardrail display name, falling back to the guardrail ID
+             */
             guardrail_name: string;
         };
         /** GuardrailMetric */
         GuardrailMetric: {
-            /** Api Key Breakdown */
+            /**
+             * Api Key Breakdown
+             * @description Per-key guardrail spend and unpriced units, limited to keys in the day's API key breakdown
+             */
             api_key_breakdown?: {
                 [key: string]: components["schemas"]["GuardrailKeyMetric"];
             };
+            /** @description Guardrail name information */
             metadata: components["schemas"]["GuardrailMetadata"];
+            /** @description Guardrail spend and unpriced units across all matching API keys */
             metrics: components["schemas"]["GuardrailSpendMetrics"];
         };
         /** GuardrailSpendMetrics */
         GuardrailSpendMetrics: {
             /**
              * Spend
+             * @description Guardrail spend in USD, already included in key and model spend
              * @default 0
              */
             spend: number;
             /**
              * Untracked Units
+             * @description Guardrail units with no known price, excluded from spend
              * @default 0
              */
             untracked_units: number;
@@ -33667,6 +33807,103 @@ export interface components {
         IPAddress: {
             /** Ip */
             ip: string;
+        };
+        /**
+         * IPDetailResponse
+         * @description Response for GET /ip_analytics/ip.
+         */
+        IPDetailResponse: {
+            /**
+             * By Key
+             * @default []
+             */
+            by_key: components["schemas"]["IPKeyActivityEntry"][];
+            /**
+             * Denied
+             * @default []
+             */
+            denied: components["schemas"]["DeniedRequestEntry"][];
+            /** Ip Address */
+            ip_address: string;
+        };
+        /** IPKeyActivityEntry */
+        IPKeyActivityEntry: {
+            /** Api Key */
+            api_key: string;
+            /**
+             * Failed Requests
+             * @default 0
+             */
+            failed_requests: number;
+            /** Key Alias */
+            key_alias?: string | null;
+            /**
+             * Spend
+             * @default 0
+             */
+            spend: number;
+            /**
+             * Successful Requests
+             * @default 0
+             */
+            successful_requests: number;
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
+        };
+        /** IPSummaryEntry */
+        IPSummaryEntry: {
+            /**
+             * Denied Requests
+             * @default 0
+             */
+            denied_requests: number;
+            /**
+             * Distinct Keys
+             * @default 0
+             */
+            distinct_keys: number;
+            /**
+             * Failed Requests
+             * @default 0
+             */
+            failed_requests: number;
+            /** Ip Address */
+            ip_address: string;
+            /** Last Seen At */
+            last_seen_at?: string | null;
+            /**
+             * Spend
+             * @default 0
+             */
+            spend: number;
+            /**
+             * Successful Requests
+             * @default 0
+             */
+            successful_requests: number;
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
+        };
+        /**
+         * IPSummaryResponse
+         * @description Response for GET /ip_analytics/summary.
+         */
+        IPSummaryResponse: {
+            /** End Date */
+            end_date: string;
+            /**
+             * Ips
+             * @default []
+             */
+            ips: components["schemas"]["IPSummaryEntry"][];
+            /** Start Date */
+            start_date: string;
         };
         /**
          * ImageGeneration
@@ -35879,6 +36116,8 @@ export interface components {
             search_context_cost_per_query?: {
                 [key: string]: unknown;
             } | null;
+            /** Search Queries Cost Per Query */
+            search_queries_cost_per_query?: number | components["schemas"]["SearchContextCostPerQuery"] | null;
             /** Stream Timeout */
             stream_timeout?: number | string | null;
             /** Stream Timeout By Service Tier */
@@ -39812,6 +40051,11 @@ export interface components {
              * @default []
              */
             allowed_cache_controls: unknown[] | null;
+            /**
+             * Allowed Ips
+             * @description IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.
+             */
+            allowed_ips?: string[] | null;
             /** Allowed Passthrough Routes */
             allowed_passthrough_routes?: unknown[] | null;
             /**
@@ -42383,6 +42627,11 @@ export interface components {
              * @default []
              */
             allowed_cache_controls: unknown[] | null;
+            /**
+             * Allowed Ips
+             * @description IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.
+             */
+            allowed_ips?: string[] | null;
             /** Allowed Passthrough Routes */
             allowed_passthrough_routes?: unknown[] | null;
             /**
@@ -45430,6 +45679,17 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** SearchContextCostPerQuery */
+        SearchContextCostPerQuery: {
+            /** Search Context Size High */
+            search_context_size_high?: number;
+            /** Search Context Size Low */
+            search_context_size_low?: number;
+            /** Search Context Size Medium */
+            search_context_size_medium?: number;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * SearchTool
          * @description Search tool configuration.
@@ -46190,6 +46450,16 @@ export interface components {
              * @enum {string}
              */
             classifier_failure_reason?: "timeout" | "circuit_open" | "not_configured" | "unsupported_input" | "invalid_response" | "declined" | "classifier_error";
+            /** Classifier Input Budget Status */
+            classifier_input_budget_status?: string;
+            /** Classifier Input Budget Tokens */
+            classifier_input_budget_tokens?: number;
+            /** Classifier Input Count Method */
+            classifier_input_count_method?: string;
+            /** Classifier Input Tokens */
+            classifier_input_tokens?: number;
+            /** Classifier Input Truncated */
+            classifier_input_truncated?: boolean;
             /** Classifier Max Quality Gap */
             classifier_max_quality_gap?: number;
             /** Classifier Model */
@@ -48589,6 +48859,11 @@ export interface components {
              * @default []
              */
             allowed_cache_controls: unknown[] | null;
+            /**
+             * Allowed Ips
+             * @description IP addresses or CIDR ranges this key may be used from. Empty or unset admits any address.
+             */
+            allowed_ips?: string[] | null;
             /** Allowed Passthrough Routes */
             allowed_passthrough_routes?: unknown[] | null;
             /**
@@ -48689,7 +48964,7 @@ export interface components {
             policies?: string[] | null;
             /**
              * Project Id
-             * @description Omit to retain the project, or send null to detach. Assigning a different project is not supported.
+             * @description Omit to retain the project, send null to detach, or send a project id to assign an unassigned key to a project on the key's team. Moving a key between projects is not supported.
              */
             project_id?: string | null;
             /** Prompts */
@@ -51384,6 +51659,8 @@ export interface components {
             search_context_cost_per_query?: {
                 [key: string]: unknown;
             } | null;
+            /** Search Queries Cost Per Query */
+            search_queries_cost_per_query?: number | components["schemas"]["SearchContextCostPerQuery"] | null;
             /** Stream Timeout */
             stream_timeout?: number | string | null;
             /** Stream Timeout By Service Tier */
@@ -52280,7 +52557,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IPAddress"];
+                "application/json": components["schemas"]["AllowedIPEntry"];
             };
         };
         responses: {
@@ -63315,6 +63592,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvitationModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_denied_requests_ip_analytics_denied_get: {
+        parameters: {
+            query?: {
+                /** @description Start date (YYYY-MM-DD), defaults to 7 days ago */
+                start_date?: string | null;
+                /** @description End date (YYYY-MM-DD), defaults to today */
+                end_date?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeniedRequestsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_detail_ip_analytics_ip_get: {
+        parameters: {
+            query: {
+                ip_address: string;
+                /** @description Start date (YYYY-MM-DD), defaults to 7 days ago */
+                start_date?: string | null;
+                /** @description End date (YYYY-MM-DD), defaults to today */
+                end_date?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_summary_ip_analytics_summary_get: {
+        parameters: {
+            query?: {
+                /** @description Start date (YYYY-MM-DD), defaults to 7 days ago */
+                start_date?: string | null;
+                /** @description End date (YYYY-MM-DD), defaults to today */
+                end_date?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPSummaryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -76633,7 +77015,7 @@ export interface operations {
                 end_date?: string | null;
                 /** @description Filter by specific model */
                 model?: string | null;
-                /** @description Filter by specific API key */
+                /** @description Filter by reporting API key ID. Missing keys are reported as unattributed. For a literal key unattributed or a key starting with raw:, add an extra raw: prefix */
                 api_key?: string | null;
                 /** @description Filter by specific user ID. Admins can filter by any user or omit for global view. Non-admins must provide their own user_id. */
                 user_id?: string | null;
@@ -76682,7 +77064,7 @@ export interface operations {
                 end_date?: string | null;
                 /** @description Filter by specific model */
                 model?: string | null;
-                /** @description Filter by specific API key */
+                /** @description Filter by reporting API key ID. Missing keys are reported as unattributed. For a literal key unattributed or a key starting with raw:, add an extra raw: prefix */
                 api_key?: string | null;
                 /** @description Filter by specific user ID. Admins can filter by any user or omit for global view. Non-admins must provide their own user_id. */
                 user_id?: string | null;
@@ -76727,7 +77109,7 @@ export interface operations {
                 end_date?: string | null;
                 /** @description Filter by specific model */
                 model?: string | null;
-                /** @description Filter by specific API key */
+                /** @description Filter by reporting API key ID. Missing keys are reported as unattributed. For a literal key unattributed or a key starting with raw:, add an extra raw: prefix */
                 api_key?: string | null;
                 /** @description Filter by specific user ID. Admins can filter by any user or omit for global view. Non-admins must provide their own user_id. */
                 user_id?: string | null;
@@ -76773,7 +77155,7 @@ export interface operations {
                 end_date?: string | null;
                 /** @description Filter by specific model */
                 model?: string | null;
-                /** @description Filter by specific API key */
+                /** @description Filter by reporting API key ID. Missing keys are reported as unattributed. For a literal key unattributed or a key starting with raw:, add an extra raw: prefix */
                 api_key?: string | null;
                 /** @description Filter by specific user ID. Admins can filter by any user or omit for global view. Non-admins must provide their own user_id. */
                 user_id?: string | null;
@@ -76820,7 +77202,7 @@ export interface operations {
                 end_date?: string | null;
                 /** @description Filter by specific model */
                 model?: string | null;
-                /** @description Filter by specific API key */
+                /** @description Filter by reporting API key ID. Missing keys are reported as unattributed. For a literal key unattributed or a key starting with raw:, add an extra raw: prefix */
                 api_key?: string | null;
                 /** @description Filter by specific user ID. Admins can filter by any user or omit for global view. Non-admins must provide their own user_id. */
                 user_id?: string | null;
@@ -76866,7 +77248,7 @@ export interface operations {
                 end_date?: string | null;
                 /** @description Filter by specific model */
                 model?: string | null;
-                /** @description Filter by specific API key */
+                /** @description Filter by reporting API key ID. Missing keys are reported as unattributed. For a literal key unattributed or a key starting with raw:, add an extra raw: prefix */
                 api_key?: string | null;
                 /** @description Filter by specific user ID. Admins can filter by any user or omit for global view. Non-admins must provide their own user_id. */
                 user_id?: string | null;
@@ -76912,7 +77294,7 @@ export interface operations {
                 end_date?: string | null;
                 /** @description Filter by specific model */
                 model?: string | null;
-                /** @description Filter by specific API key */
+                /** @description Filter by reporting API key ID. Missing keys are reported as unattributed. For a literal key unattributed or a key starting with raw:, add an extra raw: prefix */
                 api_key?: string | null;
                 /** @description Filter by specific user ID. Admins can filter by any user or omit for global view. Non-admins must provide their own user_id. */
                 user_id?: string | null;
@@ -76958,7 +77340,7 @@ export interface operations {
                 end_date?: string | null;
                 /** @description Filter by specific model */
                 model?: string | null;
-                /** @description Filter by specific API key */
+                /** @description Filter by reporting API key ID. Missing keys are reported as unattributed. For a literal key unattributed or a key starting with raw:, add an extra raw: prefix */
                 api_key?: string | null;
                 /** @description Filter by specific user ID. Admins can filter by any user or omit for global view. Non-admins must provide their own user_id. */
                 user_id?: string | null;
