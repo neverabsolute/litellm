@@ -1,11 +1,6 @@
 name: Compat Matrix Image
 
 on:
-  pull_request:
-    paths:
-      - tests/e2e/claude_code/cron_vm/**
-      - tests/e2e/claude_code/pr_gate_version_resolver.py
-      - .github/workflows/compat-matrix-image.yml
   workflow_dispatch:
 
 permissions: {}

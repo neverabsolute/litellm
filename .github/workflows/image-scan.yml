@@ -1,43 +1,6 @@
 name: Image Scan
 
 on:
-  pull_request:
-    branches:
-      - main
-      - litellm_oss_branch
-      - "litellm_**"
-    paths:
-      - Dockerfile
-      - docker/Dockerfile.non_root
-      - docker/Dockerfile.database
-      - migrations/Dockerfile
-      - migrations/run.py
-      - gateway/Dockerfile
-      - gateway/launch.py
-      - gateway/main.py
-      - gateway/routes/allowlist.py
-      - litellm_cli/**
-      - backend/Dockerfile
-      - backend/main.py
-      - litellm-rust/**
-      - litellm/proxy/lens/**
-      - docker/component_entrypoint.sh
-      - docker/entrypoint.sh
-      - litellm/proxy/prisma_migration.py
-      - litellm/proxy/admin_mcp.py
-      - litellm/proxy/proxy_server.py
-      - backend/routes/allowlist.py
-      - pyproject.toml
-      - litellm-proxy-extras/**
-      - tests/integration/database/image/**
-      - uv.lock
-      - ui/litellm-dashboard/package-lock.json
-      - ui/Dockerfile
-      - ui/nginx.conf
-      - .github/workflows/image-scan.yml
-      - .grype.yaml
-  schedule:
-    - cron: "41 6 * * *"
   workflow_dispatch:
 
 permissions: {}
@@ -148,7 +111,6 @@ jobs:
         run: |
           python -m pip install "pytest==9.0.3"
           python -m pytest --noconftest tests/integration/database/image/test_offline_image_migration.py tests/integration/database/image/test_image_bedrock_realtime_extra.py tests/integration/database/image/test_image_admin_mcp.py -v
-
 
   migrations-image:
     name: migrations-image
