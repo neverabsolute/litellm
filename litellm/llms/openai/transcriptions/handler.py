@@ -2,12 +2,13 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Final, Optional, cast
 
 import httpx
-from openai import AsyncOpenAI, OpenAI
-from pydantic import BaseModel
+from openai import AsyncOpenAI, AsyncStream, OpenAI
+from openai.types.audio import TranscriptionStreamEvent
+from pydantic import BaseModel, TypeAdapter
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
-from litellm.litellm_core_utils.audio_utils.utils import get_audio_file_name
+from litellm.litellm_core_utils.audio_utils.utils import calculate_request_duration, get_audio_file_name
 from litellm.litellm_core_utils.core_helpers import set_provider_response_headers_in_hidden_params
 from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLoggingObj
 from litellm.llms.base_llm.audio_transcription.transformation import (
@@ -21,6 +22,9 @@ from litellm.utils import (
 )
 
 from ..openai import OpenAIChatCompletion
+from .streaming import openai_transcription_stream
+
+_PROVIDER_HEADERS: Final = TypeAdapter(Mapping[str, str])
 
 
 class OpenAIAudioTranscription(OpenAIChatCompletion):
@@ -192,6 +196,22 @@ class OpenAIAudioTranscription(OpenAIChatCompletion):
                 timeout=timeout,
             )
             logging_obj.model_call_details["response_headers"] = headers
+            if isinstance(response, AsyncStream):
+                return openai_transcription_stream(
+                    upstream=cast(  # cast-ok: the SDK parses a stream=True transcription into this event union
+                        AsyncStream[TranscriptionStreamEvent], response
+                    ),
+                    logging_obj=logging_obj,
+                    hidden_params={
+                        "model": logging_obj.model,
+                        "custom_llm_provider": "openai",
+                        "model_id": logging_obj.get_router_model_id(),
+                        "api_base": str(openai_aclient.base_url),
+                        "litellm_call_id": logging_obj.litellm_call_id,
+                    },
+                    response_headers=_PROVIDER_HEADERS.validate_python(headers),
+                    audio_duration_seconds=calculate_request_duration(audio_file),
+                )
             if isinstance(response, BaseModel):
                 stringified_response = response.model_dump()
             else:

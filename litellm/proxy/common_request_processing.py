@@ -91,6 +91,7 @@ from litellm.litellm_core_utils.served_output_texts import (
 from litellm.litellm_core_utils.streaming_handler import (
     backfill_missing_cache_usage_fields,
 )
+from litellm.litellm_core_utils.success_dispatch import as_success_dispatcher
 from litellm.litellm_core_utils.tool_fields import DropPolicy, MalformedField, drop_policy, resolve_tool_fields
 from litellm.proxy._types import LiteLLMRoutes, ProxyErrorTypes, ProxyException, UserAPIKeyAuth
 from litellm.proxy.auth.auth_checks import (
@@ -667,21 +668,6 @@ class _ReadsHeaderValues(Protocol):
 
 def _as_header_reader(headers: _ReadsHeaderValues) -> _ReadsHeaderValues:
     return headers
-
-
-class _DispatchesSuccessHandlers(Protocol):
-    async def dispatch_success_handlers(
-        self,
-        result: object = None,
-        start_time: object = None,
-        end_time: object = None,
-        cache_hit: object = None,
-        prefer_async_handlers: bool = False,
-    ) -> None: ...
-
-
-def _as_success_dispatcher(logging_obj: _DispatchesSuccessHandlers) -> _DispatchesSuccessHandlers:
-    return logging_obj
 
 
 def serialize_http_exception_detail(
@@ -1487,7 +1473,7 @@ async def _relay_late_response(produced: Response) -> AsyncGenerator[bytes, None
             await _aclose_late_response(produced)
 
 
-async def _sanitized_late_failure(
+async def sanitized_late_failure(
     exc: Exception,
     on_late_failure: "Callable[[Exception], Awaitable[HTTPException | None]] | None",
 ) -> Exception:
@@ -1561,7 +1547,7 @@ async def open_sse_before_first_byte(
                 # would never fire and the failure would go unaudited. The hook
                 # also gets to sanitize what reaches the client, by returning or
                 # raising a replacement, so its answer decides the frame.
-                _, error_obj = sse_error_payload(await _sanitized_late_failure(exc, on_late_failure))
+                _, error_obj = sse_error_payload(await sanitized_late_failure(exc, on_late_failure))
                 for frame in _sse_error_frames(error_obj):
                     yield frame.encode()
                 return
@@ -4342,7 +4328,7 @@ class ProxyBaseLLMRequestProcessing:
                 # _is_sync_litellm_request (which only recognizes a subset of
                 # async markers stored in litellm_params).
                 asyncio.create_task(
-                    _as_success_dispatcher(captured_logging_obj).dispatch_success_handlers(
+                    as_success_dispatcher(captured_logging_obj).dispatch_success_handlers(
                         _response,
                         cache_hit=cache_hit,
                         start_time=None,

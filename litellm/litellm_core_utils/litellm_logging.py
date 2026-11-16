@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime as dt_object
 from functools import lru_cache
 from types import MappingProxyType, TracebackType
-from typing import TYPE_CHECKING, Any, Final, Literal, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, NamedTuple, TypeAlias, cast
 
 from httpx import Response, Timeout
 from pydantic import BaseModel, JsonValue, TypeAdapter
@@ -317,6 +317,9 @@ if TYPE_CHECKING:
     _GENERIC_API_LOGGER_CLS: Final = _GenericAPILoggerCls
 else:
     _GENERIC_API_LOGGER_CLS: Final = GenericAPILogger
+_AssembledStreamResponse: TypeAlias = (
+    ModelResponse | TextCompletionResponse | ResponsesAPIResponse | InteractionsAPIResponse | TranscriptionResponse
+)
 _in_memory_loggers: Final[list[CustomLogger]] = []
 
 _STANDARD_LOGGING_METADATA_RESOLVED_KEYS: Final[frozenset[str]] = frozenset(
@@ -3015,6 +3018,14 @@ class Logging(LiteLLMLoggingBaseClass):
             setattr(result, "usage", transformed_usage)
         return result
 
+    def _restamped_stream_response(
+        self,
+        response: _AssembledStreamResponse,
+    ) -> _AssembledStreamResponse:
+        if isinstance(response, TranscriptionResponse):
+            return response
+        return self._with_continued_response_id(self._with_client_facing_stream_model(response))
+
     def _with_client_facing_stream_model(
         self,
         response: ModelResponse | TextCompletionResponse | ResponsesAPIResponse | InteractionsAPIResponse,
@@ -3416,9 +3427,7 @@ class Logging(LiteLLMLoggingBaseClass):
         is_sync_request: Final = self.is_sync_litellm_request(litellm_params)
         try:
             ## BUILD COMPLETE STREAMED RESPONSE
-            complete_streaming_response: (
-                ModelResponse | TextCompletionResponse | ResponsesAPIResponse | InteractionsAPIResponse | None
-            ) = None
+            complete_streaming_response: _AssembledStreamResponse | None = None
             if "complete_streaming_response" in self.model_call_details and not for_async_request:
                 return  # break out of this.
             complete_streaming_response = self._get_assembled_streaming_response(
@@ -3437,9 +3446,7 @@ class Logging(LiteLLMLoggingBaseClass):
                 )
                 self._add_continued_partial_spend(complete_streaming_response)
                 self._merge_hidden_params_from_response_into_metadata(complete_streaming_response)
-                logged_streaming_response: Final = self._with_continued_response_id(
-                    self._with_client_facing_stream_model(complete_streaming_response)
-                )
+                logged_streaming_response: Final = self._restamped_stream_response(complete_streaming_response)
                 self.model_call_details["complete_streaming_response"] = logged_streaming_response
                 ## STANDARDIZED LOGGING PAYLOAD
                 if not for_async_request:
@@ -3988,9 +3995,7 @@ class Logging(LiteLLMLoggingBaseClass):
         ## BUILD COMPLETE STREAMED RESPONSE
         if "async_complete_streaming_response" in self.model_call_details:
             return  # break out of this.
-        complete_streaming_response: Final[
-            ModelResponse | TextCompletionResponse | ResponsesAPIResponse | InteractionsAPIResponse | None
-        ] = self._get_assembled_streaming_response(
+        complete_streaming_response: Final[_AssembledStreamResponse | None] = self._get_assembled_streaming_response(
             result=result,
             start_time=start_time,
             end_time=end_time,
@@ -4033,9 +4038,7 @@ class Logging(LiteLLMLoggingBaseClass):
 
             await self._prepare_baseline_cache_estimate(complete_streaming_response)
 
-            logged_streaming_response: Final = self._with_continued_response_id(
-                self._with_client_facing_stream_model(complete_streaming_response)
-            )
+            logged_streaming_response: Final = self._restamped_stream_response(complete_streaming_response)
             self.model_call_details["async_complete_streaming_response"] = logged_streaming_response
 
             ## STANDARDIZED LOGGING PAYLOAD
@@ -4911,10 +4914,10 @@ class Logging(LiteLLMLoggingBaseClass):
         end_time: datetime.datetime,
         is_async: bool,
         streaming_chunks: list[object],
-    ) -> ModelResponse | TextCompletionResponse | ResponsesAPIResponse | InteractionsAPIResponse | None:
+    ) -> _AssembledStreamResponse | None:
         if self.stream is not True:
             return None
-        if isinstance(result, ModelResponse) or isinstance(result, TextCompletionResponse):
+        if isinstance(result, (ModelResponse, TextCompletionResponse, TranscriptionResponse)):
             return result
         elif isinstance(
             result,

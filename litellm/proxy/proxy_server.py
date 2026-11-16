@@ -392,6 +392,7 @@ from litellm.llms.anthropic.messages.convertible_blocks import (
 )
 from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
 from litellm.llms.openai.live import parse_live_session_start
+from litellm.llms.openai.transcriptions.streaming import TranscriptionStream
 from litellm.llms.openai_like.model_info import MODEL_INFO_REFRESH_SECONDS
 from litellm.llms.vertex_ai.vertex_llm_base import VertexBase
 from litellm.proxy._lazy_features import attach_lazy_features, reserve_lazy_slot
@@ -561,6 +562,7 @@ from litellm.proxy.common_utils.scheduled_job_stagger import (
     stagger_trigger,
 )
 from litellm.proxy.common_utils.slow_gc_logger import log_slow_gc_passes
+from litellm.proxy.common_utils.sse_keepalive import SSE_COMMENT_PING, wrap_sse_stream_with_keepalive_pings
 from litellm.proxy.common_utils.swagger_utils import ERROR_RESPONSES
 from litellm.proxy.common_utils.timezone_utils import (
     get_budget_reset_settings,
@@ -571,6 +573,7 @@ from litellm.proxy.common_utils.token_count_log import (
     logged_token_count,
     rejected_token_count,
 )
+from litellm.proxy.common_utils.transcription_sse import transcription_sse_frames
 from litellm.proxy.common_utils.user_api_key_cache import (
     UserApiKeyCache,
     end_user_cache_key,
@@ -13163,8 +13166,23 @@ async def audio_speech(
         )
 
 
+_FORM_BOOL: Final = TypeAdapter(bool)
+_REQUEST_FIELDS: Final = TypeAdapter(Mapping[str, object])
+
+
 def _form_fields_without_file(form_data: Mapping[str, object]) -> Mapping[str, object]:
-    return {key: value for key, value in form_data.items() if key != "file"}
+    fields: Final = {key: value for key, value in form_data.items() if key != "file"}
+    if "stream" not in fields:
+        return fields
+    try:
+        return {**fields, "stream": _FORM_BOOL.validate_python(fields["stream"])}
+    except ValidationError as e:
+        raise ProxyException(
+            message=f"Invalid stream value: {fields['stream']!r}. Expected true or false",
+            code=status.HTTP_400_BAD_REQUEST,
+            type="bad_request",
+            param="stream",
+        ) from e
 
 
 @router.post(
@@ -13191,6 +13209,12 @@ async def audio_transcriptions(
     global proxy_logging_obj
     litellm_call_id: Final = resolve_litellm_call_id(request.headers.get("x-litellm-call-id"))
     data: dict = {"litellm_call_id": litellm_call_id}
+
+    async def audit_failure(exc: Exception) -> HTTPException | None:
+        return await proxy_logging_obj.post_call_failure_hook(
+            user_api_key_dict=user_api_key_dict, original_exception=exc, request_data=data
+        )
+
     try:
         # Use orjson to parse JSON data, orjson speeds up requests significantly
         form_data: Final = await get_form_data(request)
@@ -13240,63 +13264,93 @@ async def audio_transcriptions(
                 data=data,
                 call_type="transcription",
             )
+        except Exception:
+            file_object.close()
+            raise
 
-            ## ROUTE TO CORRECT ENDPOINT ##
-            llm_call: Final = await route_request(
+        async def run_transcription() -> object:
+            try:
+                ## ROUTE TO CORRECT ENDPOINT ##
+                llm_call: Final = await route_request(
+                    data=data,
+                    route_type="atranscription",
+                    llm_router=llm_router,
+                    user_model=user_model,
+                )
+                response: Final = await llm_call
+            finally:
+                file_object.close()  # close the file read in by io library
+
+            ### ALERTING ###
+            asyncio.create_task(
+                proxy_logging_obj.update_request_status(litellm_call_id=litellm_call_id, status="success")
+            )
+
+            ### RESPONSE HEADERS ###
+            hidden_params: Final = getattr(response, "hidden_params", {}) or {}
+            model_id: Final = hidden_params.get("model_id", None) or ""
+            cache_key: Final = hidden_params.get("cache_key", None) or ""
+            api_base: Final = hidden_params.get("api_base", None) or ""
+            response_cost: Final = hidden_params.get("response_cost", None) or ""
+            response_call_id: Final = hidden_params.get("litellm_call_id", None) or ""
+            additional_headers: Final[dict] = hidden_params.get("additional_headers", {}) or {}
+
+            fastapi_response.headers.update(
+                ProxyBaseLLMRequestProcessing.get_custom_headers(
+                    user_api_key_dict=user_api_key_dict,
+                    model_id=model_id,
+                    cache_key=cache_key,
+                    api_base=api_base,
+                    version=version,
+                    response_cost=response_cost,
+                    model_region=getattr(user_api_key_dict, "allowed_model_region", ""),
+                    call_id=response_call_id,
+                    request_data=data,
+                    hidden_params=hidden_params,
+                    **additional_headers,
+                )
+            )
+
+            # Call response headers hook (matches base_process_llm_request behavior)
+            callback_headers: Final = await proxy_logging_obj.post_call_response_headers_hook(
                 data=data,
-                route_type="atranscription",
-                llm_router=llm_router,
-                user_model=user_model,
-            )
-            response: Final = await llm_call
-        except Exception as e:
-            raise e
-        finally:
-            file_object.close()  # close the file read in by io library
-
-        ### ALERTING ###
-        asyncio.create_task(proxy_logging_obj.update_request_status(litellm_call_id=litellm_call_id, status="success"))
-
-        ### RESPONSE HEADERS ###
-        hidden_params: Final = getattr(response, "_hidden_params", {}) or {}
-        model_id: Final = hidden_params.get("model_id", None) or ""
-        cache_key: Final = hidden_params.get("cache_key", None) or ""
-        api_base: Final = hidden_params.get("api_base", None) or ""
-        response_cost: Final = hidden_params.get("response_cost", None) or ""
-        response_call_id: Final = hidden_params.get("litellm_call_id", None) or ""
-        additional_headers: Final[dict] = hidden_params.get("additional_headers", {}) or {}
-
-        fastapi_response.headers.update(
-            ProxyBaseLLMRequestProcessing.get_custom_headers(
                 user_api_key_dict=user_api_key_dict,
-                model_id=model_id,
-                cache_key=cache_key,
-                api_base=api_base,
-                version=version,
-                response_cost=response_cost,
-                model_region=getattr(user_api_key_dict, "allowed_model_region", ""),
-                call_id=response_call_id,
-                request_data=data,
-                hidden_params=hidden_params,
-                **additional_headers,
+                response=response,
+                request_headers=dict(request.headers),
             )
-        )
+            if callback_headers:
+                fastapi_response.headers.update(callback_headers)
 
-        # Call response headers hook (matches base_process_llm_request behavior)
-        callback_headers: Final = await proxy_logging_obj.post_call_response_headers_hook(
-            data=data,
-            user_api_key_dict=user_api_key_dict,
-            response=response,
-            request_headers=dict(request.headers),
-        )
-        if callback_headers:
-            fastapi_response.headers.update(callback_headers)
+            return response
 
-        return response
+        request_fields: Final = _REQUEST_FIELDS.validate_python(data)
+        if request_fields.get("stream") is not True:
+            return await run_transcription()
+
+        keepalive_interval: Final = ttft_keepalive_interval(request_fields, llm_router)
+
+        async def produce_transcription_stream() -> StreamingResponse | JSONResponse:
+            response: Final = await run_transcription()
+            if not isinstance(response, TranscriptionStream):
+                return JSONResponse(content=jsonable_encoder(response), headers=dict(fastapi_response.headers))
+            return await create_response(
+                generator=wrap_sse_stream_with_keepalive_pings(
+                    transcription_sse_frames(response, on_failure=audit_failure),
+                    ping_interval_seconds=keepalive_interval,
+                    ping_chunk=SSE_COMMENT_PING,
+                ),
+                media_type="text/event-stream",
+                headers=dict(fastapi_response.headers),
+                request=request,
+            )
+
+        return await open_sse_before_first_byte(
+            produce_transcription_stream(),
+            ping_interval_seconds=keepalive_interval,
+            on_late_failure=audit_failure,
+        )
     except Exception as e:
-        await proxy_logging_obj.post_call_failure_hook(
-            user_api_key_dict=user_api_key_dict, original_exception=e, request_data=data
-        )
+        await audit_failure(e)
         log_llm_api_exception(e, litellm_call_id)
         if isinstance(e, HTTPException):
             raise route_failure_proxy_exception(

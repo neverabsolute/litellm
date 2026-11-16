@@ -1235,6 +1235,7 @@ OpenAIAudioTranscriptionOptionalParams = Literal[
     "response_format",
     "timestamp_granularities",
     "include",
+    "stream",
 ]
 
 

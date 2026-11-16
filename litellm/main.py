@@ -286,6 +286,7 @@ from .llms.openai.completion.handler import OpenAITextCompletion
 from .llms.openai.image_variations.handler import OpenAIImageVariationsHandler
 from .llms.openai.openai import OpenAIChatCompletion
 from .llms.openai.transcriptions.handler import OpenAIAudioTranscription
+from .llms.openai.transcriptions.streaming import TranscriptionStream
 from .llms.openai.workload_identity import build_openai_client
 from .llms.openai_like.chat.handler import OpenAILikeChatHandler
 from .llms.openai_like.embedding.handler import OpenAILikeEmbeddingHandler
@@ -8443,7 +8444,7 @@ async def amoderation(
 
 
 @client
-async def atranscription(*args, **kwargs) -> TranscriptionResponse:
+async def atranscription(*args, **kwargs) -> TranscriptionResponse | TranscriptionStream:
     """
     Calls openai + azure whisper endpoints.
 
@@ -8487,6 +8488,8 @@ async def atranscription(*args, **kwargs) -> TranscriptionResponse:
         else:
             # Call the synchronous function using run_in_executor
             response = await loop.run_in_executor(None, func_with_context)
+        if isinstance(response, TranscriptionStream):
+            return response
         if not isinstance(response, TranscriptionResponse):
             raise ValueError(
                 f"Invalid response from transcription provider, expected TranscriptionResponse, but got {type(response)}"
@@ -8535,7 +8538,7 @@ def transcription(
     custom_llm_provider=None,
     base_url: str | None = None,
     **kwargs,
-) -> TranscriptionResponse | Coroutine[object, object, TranscriptionResponse]:
+) -> TranscriptionResponse | Coroutine[object, object, TranscriptionResponse | TranscriptionStream]:
     """
     Calls openai + azure whisper endpoints.
 
@@ -8550,7 +8553,11 @@ def transcription(
     extra_headers: Final = kwargs.get("extra_headers", None)
     shared_session: Final = kwargs.get("shared_session", None)
     kwargs.pop("tags", [])
-    non_default_params: Final = get_non_default_transcription_params(kwargs)
+    non_default_params: Final = {
+        key: value
+        for key, value in get_non_default_transcription_params(kwargs).items()
+        if atranscription or key != "stream"
+    }
 
     client: openai.AsyncOpenAI | openai.OpenAI | openai.AzureOpenAI | openai.AsyncAzureOpenAI | None = kwargs.pop(
         "client", None
