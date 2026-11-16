@@ -9,14 +9,20 @@ Pins (PR2):
 
 from __future__ import annotations
 
+import asyncio
 import io
+import json
+from itertools import groupby
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 from fastapi import HTTPException
+from openai.types.audio import TranscriptionTextDeltaEvent, TranscriptionTextDoneEvent
 
+import litellm
 from litellm import Router
+from litellm.llms.openai.transcriptions.streaming import TranscriptionStream
 from litellm.proxy import proxy_server
 from litellm.proxy._types import ProxyErrorTypes, ProxyException
 from litellm.types.llms.openai import HttpxBinaryResponseContent
@@ -125,9 +131,7 @@ def patched_transcription(monkeypatch):
         return data
 
     monkeypatch.setattr(proxy_server, "add_litellm_data_to_request", _add_data)
-    monkeypatch.setattr(
-        proxy_server, "check_file_size_under_limit", lambda **kwargs: True
-    )
+    monkeypatch.setattr(proxy_server, "check_file_size_under_limit", lambda **kwargs: True)
 
     async def _form_data(request):
         from starlette.datastructures import FormData, UploadFile
@@ -359,3 +363,117 @@ def test_audio_transcription_error(client, auth_as, patched_transcription_error,
         response = client.post(path, files=files, data=data)
     assert response.status_code == 500
     assert len(response.content) > 0
+
+
+_STREAMED_EVENTS = (
+    TranscriptionTextDeltaEvent(type="transcript.text.delta", delta="hello "),
+    TranscriptionTextDoneEvent(type="transcript.text.done", text="hello world"),
+)
+
+
+def _transcription_stream(gap_after_first: float = 0.0, fail_after_first: bool = False) -> TranscriptionStream:
+    async def events():
+        yield _STREAMED_EVENTS[0]
+        await asyncio.sleep(gap_after_first)
+        if fail_after_first:
+            raise ValueError("upstream dropped the stream")
+        yield _STREAMED_EVENTS[1]
+
+    return TranscriptionStream(events=events(), hidden_params={"model_id": "deployment-1"})
+
+
+@pytest.fixture
+def stream_form(monkeypatch, patched_transcription):
+    def _set(stream_value: str) -> None:
+        async def _form_data(request):
+            from starlette.datastructures import FormData, UploadFile
+
+            upload = UploadFile(filename="audio.mp3", file=io.BytesIO(b"\x00\x01\x02"))
+            return FormData([("file", upload), ("model", "gpt-transcribe"), ("stream", stream_value)])
+
+        monkeypatch.setattr(proxy_server, "get_form_data", _form_data)
+
+    return _set
+
+
+def _serve_stream(monkeypatch, stream: TranscriptionStream, upstream_answer_delay: float = 0.0) -> None:
+    async def _llm_call():
+        await asyncio.sleep(upstream_answer_delay)
+        return stream
+
+    async def _fake_route_request(*args, **kwargs):
+        return _llm_call()
+
+    monkeypatch.setattr(proxy_server, "route_request", _fake_route_request)
+
+
+def _post_transcription(client, auth_as):
+    with auth_as():
+        return client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("audio.mp3", b"\x00\x01\x02", "audio/mpeg")},
+            data={"model": "gpt-transcribe"},
+        )
+
+
+def _sse_frames(body: str) -> list[str]:
+    return [frame for frame in body.split("\n\n") if frame]
+
+
+def test_streamed_transcription_is_relayed_as_sse_events(client, auth_as, stream_form, monkeypatch):
+    stream_form("true")
+    _serve_stream(monkeypatch, _transcription_stream())
+
+    response = _post_transcription(client, auth_as)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["x-litellm-model-id"] == "deployment-1"
+    assert [json.loads(frame.removeprefix("data: ")) for frame in _sse_frames(response.text)] == [
+        event.model_dump(exclude_unset=True) for event in _STREAMED_EVENTS
+    ]
+
+
+_EVENT_FRAMES = [f"data: {event.to_json(indent=None)}" for event in _STREAMED_EVENTS]
+
+
+@pytest.mark.parametrize(
+    ("upstream_answer_delay", "gap_after_first", "expected_frames"),
+    [
+        pytest.param(0.4, 0.0, [": ping", *_EVENT_FRAMES], id="before_the_upstream_answers"),
+        pytest.param(0.0, 0.4, [_EVENT_FRAMES[0], ": ping", _EVENT_FRAMES[1]], id="between_events"),
+    ],
+)
+def test_streamed_transcription_sends_keepalives_while_the_upstream_is_silent(
+    client, auth_as, stream_form, monkeypatch, upstream_answer_delay, gap_after_first, expected_frames
+):
+    monkeypatch.setattr(litellm, "sse_keepalive_ping_interval_seconds", 0.05)
+    stream_form("true")
+    _serve_stream(monkeypatch, _transcription_stream(gap_after_first=gap_after_first), upstream_answer_delay)
+
+    response = _post_transcription(client, auth_as)
+
+    assert response.status_code == 200
+    assert [frame for frame, _ in groupby(_sse_frames(response.text))] == expected_frames
+
+
+def test_streamed_transcription_that_fails_midway_ends_with_an_error_frame(client, auth_as, stream_form, monkeypatch):
+    stream_form("true")
+    _serve_stream(monkeypatch, _transcription_stream(fail_after_first=True))
+    proxy_server.proxy_logging_obj.post_call_failure_hook.return_value = None
+
+    response = _post_transcription(client, auth_as)
+
+    frames = _sse_frames(response.text)
+    assert frames[0] == f"data: {_STREAMED_EVENTS[0].to_json(indent=None)}"
+    assert "upstream dropped the stream" in json.loads(frames[-1].removeprefix("data: "))["error"]["message"]
+    proxy_server.proxy_logging_obj.post_call_failure_hook.assert_awaited_once()
+
+
+def test_unparseable_stream_value_is_rejected_as_a_bad_request(client, auth_as, stream_form):
+    stream_form("maybe")
+
+    response = _post_transcription(client, auth_as)
+
+    assert response.status_code == 400
+    assert response.json()["error"]["param"] == "stream"

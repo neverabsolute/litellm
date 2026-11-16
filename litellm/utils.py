@@ -2685,7 +2685,7 @@ _NEVER_STREAMING_CALL_TYPES: Final = frozenset(
     }
 )
 
-_RESULT_DECIDES_STREAMING_CALL_TYPES: Final = frozenset({"get_responses", "aget_responses"})
+_RESULT_DECIDES_STREAMING_CALL_TYPES: Final = frozenset({"get_responses", "aget_responses", "atranscription"})
 
 
 def _is_streaming_request(
@@ -4402,6 +4402,14 @@ def get_optional_params_transcription(
             model=model,
             drop_params=drop_params if drop_params is not None else False,
         )
+
+    if (
+        custom_llm_provider == "openai"
+        and provider_config is not None
+        and "stream" in provider_config.get_supported_openai_params(model=model)
+        and "stream" in passed_params
+    ):
+        optional_params["stream"] = passed_params.pop("stream")
 
     optional_params = add_provider_specific_params_to_optional_params(
         optional_params=optional_params,
