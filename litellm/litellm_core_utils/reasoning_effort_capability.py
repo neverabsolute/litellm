@@ -277,7 +277,7 @@ def _catalog_reasoning_effort(
     from litellm.utils import ModelInfoLookupMiss, lookup_catalog_model_info
 
     gate: Final = {"openai": OpenAIGPT5Config, "azure": AzureOpenAIGPT5Config}.get(custom_llm_provider or "")
-    if gate is None or not gate.is_model_gpt_5_model(model) or not gate.refuses_reasoning_effort_level(model, level):
+    if gate is None or not gate.refuses_reasoning_effort_level(model, level):
         return level
     model_info: Final = lookup_catalog_model_info(model, custom_llm_provider)
     if isinstance(model_info, ModelInfoLookupMiss):

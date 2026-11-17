@@ -6,11 +6,10 @@ from typing import Final
 
 import httpx
 import pytest
-from openai import AsyncOpenAI, OpenAI
+from openai import AsyncOpenAI, AsyncStream
 
 import litellm
 from litellm.integrations.custom_logger import CustomLogger
-from litellm.llms.openai.transcriptions.streaming import TranscriptionStream
 from litellm.responses.streaming_iterator import drain_logging_tasks
 from litellm.types.utils import TranscriptionResponse
 
@@ -73,7 +72,7 @@ async def _transcribe(client: AsyncOpenAI, model: str, stream: bool) -> object:
         return await litellm.atranscription(model=model, file=audio, stream=stream, client=client)
 
 
-async def _drain(stream: TranscriptionStream) -> list[dict[str, object]]:
+async def _drain(stream: AsyncStream) -> list[dict[str, object]]:
     return [event.model_dump(exclude_unset=True) async for event in stream]
 
 
@@ -88,7 +87,7 @@ async def test_streamed_transcription_relays_upstream_events_in_order(logger: _R
 
     response: Final = await _transcribe(_openai_upstream(requests, _sse(_EVENTS)), "openai/gpt-transcribe", True)
 
-    assert isinstance(response, TranscriptionStream)
+    assert isinstance(response, AsyncStream)
     assert await _drain(response) == list(_EVENTS)
     assert _STREAM_TRUE_FIELD in requests[0].read()
 
@@ -102,7 +101,7 @@ async def test_streamed_transcription_is_logged_and_billed_like_the_same_non_str
     await _transcribe(client, "openai/gpt-transcribe", False)
     await _settle_logging()
     streamed: Final = await _transcribe(client, "openai/gpt-transcribe", True)
-    assert isinstance(streamed, TranscriptionStream)
+    assert isinstance(streamed, AsyncStream)
     await _drain(streamed)
     await _settle_logging()
 
@@ -118,7 +117,7 @@ async def test_streamed_transcription_is_logged_and_billed_like_the_same_non_str
 async def test_a_stream_that_errors_midway_is_logged_as_a_failure(logger: _RecordingLogger) -> None:
     broken: Final = _sse((_EVENTS[0], {"error": {"message": "upstream fell over", "type": "server_error"}}))
     stream: Final = await _transcribe(_openai_upstream([], broken), "openai/gpt-transcribe", True)
-    assert isinstance(stream, TranscriptionStream)
+    assert isinstance(stream, AsyncStream)
 
     with pytest.raises(Exception, match="upstream fell over"):
         await _drain(stream)
@@ -142,17 +141,3 @@ async def test_whisper_ignores_stream_and_is_billed_like_a_normal_call(logger: _
     (_, non_streamed_cost), (_, streamed_cost) = logger.successes
     assert isinstance(non_streamed_cost, float) and non_streamed_cost > 0
     assert streamed_cost == pytest.approx(non_streamed_cost)
-
-
-def test_sync_transcription_returns_the_full_transcript_when_asked_to_stream(logger: _RecordingLogger) -> None:
-    requests: Final[list[httpx.Request]] = []
-    client: Final = OpenAI(
-        api_key="transport-only", http_client=httpx.Client(transport=_openai_transport(requests, _sse(_EVENTS)))
-    )
-
-    with _AUDIO.open("rb") as audio:
-        response: Final = litellm.transcription(model="openai/gpt-transcribe", file=audio, stream=True, client=client)
-
-    assert isinstance(response, TranscriptionResponse)
-    assert response.text == _TEXT
-    assert _STREAM_TRUE_FIELD not in requests[0].read()

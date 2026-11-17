@@ -6,8 +6,7 @@ on:
       - main
   pull_request:
     paths:
-      - Dockerfile
-      - docker/**
+      - litellm/deploy/docker/**
       - .github/workflows/publish-image.yml
   workflow_dispatch:
 
@@ -33,7 +32,7 @@ jobs:
           persist-credentials: false
 
       - name: Build
-        run: docker build --platform linux/amd64 -t "${IMAGE}" .
+        run: docker build --platform linux/amd64 -f litellm/deploy/docker/Dockerfile -t "${IMAGE}" .
 
       - name: Boot against a fresh Postgres
         run: |

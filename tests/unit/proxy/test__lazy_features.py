@@ -1,6 +1,7 @@
 import sys
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from types import ModuleType
 from typing import Final
 
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from litellm.proxy._lazy_features import (
+    LAZY_FEATURES,
     LazyFeature,
     LazyFeatureMiddleware,
     attach_lazy_features,
@@ -50,6 +52,7 @@ def _paths(app: FastAPI) -> tuple[str, ...]:
 
 def _has_lazy_middleware(app: FastAPI) -> bool:
     return any(middleware.cls is LazyFeatureMiddleware for middleware in app.user_middleware)
+
 
 
 @pytest.mark.parametrize("disable_lazy_routes", ("false", "true"))

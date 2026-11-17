@@ -113,6 +113,7 @@ LAZY_FEATURES: Final[tuple[LazyFeature, ...]] = (
             "/mistral/",
             "/nvidia_nim/",
             "/openai/",
+            "/opensearch/",
             "/openai_passthrough/",
             "/tinyfish/",
             "/transcribe",
@@ -219,8 +220,8 @@ class LazyFeatureMiddleware:
             fastapi_app.state.lazy_locks = {}
 
     @property
-    def _loaded(self) -> set:
-        return self._fastapi_app.state.lazy_loaded
+    def _loaded(self) -> set[str]:
+        return _lazy_loaded(self._fastapi_app)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         # Short-circuit once every feature has loaded.
@@ -367,10 +368,13 @@ def _lazy_lock(app: "FastAPI", module_path: str) -> asyncio.Lock:
 
 
 def _register_feature(app: "FastAPI", feat: LazyFeature, module: object, features: tuple[LazyFeature, ...]) -> None:
-    before: Final = len(app.router.routes)
+    routes_before: Final = frozenset(id(route) for route in app.router.routes)
     feat.register_fn(app, module)
     lazy_routes: Final[Mapping[str, tuple[BaseRoute, ...]]] = MappingProxyType(
-        {**_lazy_routes(app), feat.module_path: tuple(app.router.routes[before:])}
+        {
+            **_lazy_routes(app),
+            feat.module_path: tuple(route for route in app.router.routes if id(route) not in routes_before),
+        }
     )
     app.state.lazy_routes = lazy_routes  # rebind-ok: the app owns the record of which routes each feature added
     app.router.routes[:] = _route_table(  # rebind-ok: the app owns its route table
