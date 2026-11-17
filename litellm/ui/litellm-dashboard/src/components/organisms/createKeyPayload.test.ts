@@ -1,0 +1,531 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildKeyCreatePayload, type KeyCreateInput, type KeyPayloadResult } from "./createKeyPayload";
+
+const baseInput: KeyCreateInput = {
+  formValues: {},
+  existingKeys: null,
+  keyOwner: "you",
+  userID: "test-user",
+  loggingSettings: [],
+  disabledCallbacks: [],
+  autoRotationEnabled: false,
+  rotationInterval: "30d",
+  modelAliases: {},
+  routerSettings: null,
+  budgetLimits: [],
+  tagRateLimits: [],
+  budgetFallbacks: {},
+  modelMaxBudget: {},
+};
+
+const build = (formValues: Record<string, unknown>, overrides: Partial<KeyCreateInput> = {}): KeyPayloadResult =>
+  buildKeyCreatePayload({ ...baseInput, ...overrides, formValues });
+
+it.each([false, true])("preserves the prompt storage restriction %s in key metadata", (store) => {
+  const result = build({ metadata: JSON.stringify({ note: "keep", store_prompts_in_spend_logs: store }) });
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") throw new Error(result.kind);
+  expect(JSON.parse(String(result.payload.metadata))).toEqual({ note: "keep", store_prompts_in_spend_logs: store });
+});
+
+it("merges the budget alert rows into the metadata JSON box content", () => {
+  const result = build(
+    {
+      metadata: JSON.stringify({ cost_center: "ops" }),
+      max_budget_alert_emails: [
+        { threshold: 80, emails: "shared-mailbox@example.com" },
+        { threshold: null, emails: "ignored@example.com" },
+      ],
+    },
+    { disabledCallbacks: ["langfuse"] },
+  );
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") throw new Error(result.kind);
+  expect(result.payload).not.toHaveProperty("max_budget_alert_emails");
+  expect(JSON.parse(String(result.payload.metadata))).toEqual({
+    cost_center: "ops",
+    litellm_disabled_callbacks: ["langfuse"],
+    max_budget_alert_emails: { "80": ["shared-mailbox@example.com"] },
+  });
+});
+
+it("keeps typed recipient entries the rows cannot show and lets the rows own every threshold they can", () => {
+  const result = build({
+    metadata: JSON.stringify({
+      cost_center: "ops",
+      max_budget_alert_emails: { "500": "typed@example.com", "80": ["stale@example.com"] },
+    }),
+    max_budget_alert_emails: [{ threshold: 50, emails: "row@example.com" }],
+  });
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") throw new Error(result.kind);
+  expect(JSON.parse(String(result.payload.metadata))).toEqual({
+    cost_center: "ops",
+    max_budget_alert_emails: { "500": "typed@example.com", "50": ["row@example.com"] },
+  });
+});
+
+it("stores a typed max_budget_alert_emails string as typed when no row is set", () => {
+  const result = build({ metadata: JSON.stringify({ cost_center: "ops", max_budget_alert_emails: "ops@qa.test" }) });
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") throw new Error(result.kind);
+  expect(JSON.parse(String(result.payload.metadata))).toEqual({
+    cost_center: "ops",
+    max_budget_alert_emails: "ops@qa.test",
+  });
+});
+
+it("replaces a typed max_budget_alert_emails string with the threshold rows", () => {
+  const result = build({
+    metadata: JSON.stringify({ cost_center: "ops", max_budget_alert_emails: "ops@qa.test" }),
+    max_budget_alert_emails: [{ threshold: 80, emails: "row@example.com" }],
+  });
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") throw new Error(result.kind);
+  expect(JSON.parse(String(result.payload.metadata))).toEqual({
+    cost_center: "ops",
+    max_budget_alert_emails: { "80": ["row@example.com"] },
+  });
+});
+
+it("keeps the budget alert rows when the metadata JSON box holds null", () => {
+  const result = build({
+    metadata: "null",
+    max_budget_alert_emails: [{ threshold: 80, emails: "shared-mailbox@example.com" }],
+  });
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") throw new Error(result.kind);
+  expect(JSON.parse(String(result.payload.metadata))).toEqual({
+    max_budget_alert_emails: { "80": ["shared-mailbox@example.com"] },
+  });
+});
+
+const payloadOf = (result: KeyPayloadResult): Record<string, unknown> => {
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") throw new Error("unreachable");
+  return result.payload;
+};
+
+const wireKeys = (payload: Record<string, unknown>): string[] =>
+  Object.keys(JSON.parse(JSON.stringify(payload)) as Record<string, unknown>);
+
+const DROPPED_AT_SERIALISATION = [
+  "allowed_passthrough_routes",
+  "budget_duration",
+  "enable_prompt_caching",
+  "max_budget",
+  "organization_id",
+  "prompts",
+  "rpm_limit",
+  "tags",
+  "throttle_on_budget_exceeded",
+  "tpd_limit",
+  "tpm_limit",
+];
+
+const CLOSED_SECTIONS_VALUES = {
+  organization_id: undefined,
+  team_id: null,
+  key_alias: "my-key",
+  models: [],
+  key_type: "llm_api",
+};
+
+const OPTIONAL_SETTINGS_VALUES = {
+  ...CLOSED_SECTIONS_VALUES,
+  max_budget: undefined,
+  budget_duration: undefined,
+  tpm_limit: undefined,
+  tpm_limit_type: "key",
+  rpm_limit: undefined,
+  rpm_limit_type: "key",
+  tpd_limit: undefined,
+  throttle_on_budget_exceeded: undefined,
+  enable_prompt_caching: undefined,
+  prompts: undefined,
+  allowed_passthrough_routes: undefined,
+  tags: undefined,
+};
+
+const aliasOnly = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+  key_alias: "my-key",
+  user_id: "test-user",
+  duration: null,
+  metadata: "{}",
+  ...overrides,
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("always-present keys", () => {
+  it("emits the eight keys the closed form sends, and nothing else", () => {
+    const closedFormValues = { ...CLOSED_SECTIONS_VALUES };
+    const closedFormPayload = {
+      ...closedFormValues,
+      user_id: "test-user",
+      duration: null,
+      metadata: "{}",
+    };
+    expect(payloadOf(build(closedFormValues))).toStrictEqual(closedFormPayload);
+  });
+
+  it("injects user_id, duration and metadata even when the form reported none of them", () => {
+    expect(payloadOf(build({ key_alias: "my-key" }))).toStrictEqual(aliasOnly());
+  });
+
+  it("keeps a mounted-but-untouched field as an undefined-valued key rather than dropping it", () => {
+    expect(payloadOf(build({ key_alias: "my-key", prompts: undefined, tags: undefined }))).toStrictEqual(
+      aliasOnly({ prompts: undefined, tags: undefined }),
+    );
+  });
+});
+
+describe("duration", () => {
+  it("forwards a typed duration by value", () => {
+    expect(payloadOf(build({ key_alias: "my-key", duration: "45d" }))).toStrictEqual(aliasOnly({ duration: "45d" }));
+  });
+
+  it.each([
+    ["an empty string", ""],
+    ["a whitespace-only string", "   "],
+    ["undefined", undefined],
+  ])("coalesces %s to null", (_label, duration) => {
+    expect(payloadOf(build({ key_alias: "my-key", duration }))).toStrictEqual(aliasOnly({ duration: null }));
+  });
+
+  it("does not coerce a non-string duration", () => {
+    expect(() => build({ key_alias: "my-key", duration: 30 })).toThrow(TypeError);
+  });
+});
+
+describe("key ownership", () => {
+  it("overwrites user_id with the signed-in user when the key is owned by you", () => {
+    expect(payloadOf(build({ key_alias: "my-key", user_id: "someone-else" }))).toStrictEqual(
+      aliasOnly({ user_id: "test-user" }),
+    );
+  });
+
+  it("leaves the form's user_id alone for another_user", () => {
+    const expected = { key_alias: "my-key", user_id: "someone-else", duration: null, metadata: "{}" };
+    expect(
+      payloadOf(build({ key_alias: "my-key", user_id: "someone-else" }, { keyOwner: "another_user" })),
+    ).toStrictEqual(expected);
+  });
+
+  it("stamps the alias into metadata as the service account id and sends no user_id", () => {
+    expect(payloadOf(build({ key_alias: "svc-key" }, { keyOwner: "service_account" }))).toStrictEqual({
+      key_alias: "svc-key",
+      duration: null,
+      metadata: '{"service_account_id":"svc-key"}',
+    });
+  });
+});
+
+describe("metadata", () => {
+  it("re-serialises the parsed form value", () => {
+    expect(payloadOf(build({ key_alias: "my-key", metadata: '{"team":"core"}' }))).toStrictEqual(
+      aliasOnly({ metadata: '{"team":"core"}' }),
+    );
+  });
+
+  it("falls back to an empty object and logs when the JSON is malformed", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(payloadOf(build({ key_alias: "my-key", metadata: "{not json" }))).toStrictEqual(aliasOnly());
+    expect(consoleError).toHaveBeenCalledWith("Error parsing metadata:", expect.any(SyntaxError));
+  });
+
+  it("merges logging configs, dropping rows with no callback selected", () => {
+    expect(
+      payloadOf(
+        build(
+          { key_alias: "my-key", metadata: '{"team":"core"}' },
+          { loggingSettings: [{ callback_name: "langfuse" }, { callback_name: "" }] },
+        ),
+      ),
+    ).toStrictEqual(aliasOnly({ metadata: '{"team":"core","logging":[{"callback_name":"langfuse"}]}' }));
+  });
+
+  it("maps disabled callbacks from display names to internal names", () => {
+    expect(payloadOf(build({ key_alias: "my-key" }, { disabledCallbacks: ["Langfuse"] }))).toStrictEqual(
+      aliasOnly({ metadata: '{"litellm_disabled_callbacks":["langfuse"]}' }),
+    );
+  });
+
+  it("keeps an array metadata as an array when stamping the service account id", () => {
+    expect(
+      payloadOf(build({ key_alias: "svc-key", metadata: '["a"]' }, { keyOwner: "service_account" })),
+    ).toStrictEqual({ key_alias: "svc-key", duration: null, metadata: '["a"]' });
+  });
+
+  it("rejects a service account whose metadata parses to a primitive", () => {
+    expect(() => build({ key_alias: "svc-key", metadata: "5" }, { keyOwner: "service_account" })).toThrow(TypeError);
+  });
+
+  it("keeps every metadata contributor in one object", () => {
+    expect(
+      payloadOf(
+        build(
+          { key_alias: "svc-key", metadata: '{"team":"core"}' },
+          {
+            keyOwner: "service_account",
+            loggingSettings: [{ callback_name: "otel" }],
+            disabledCallbacks: ["Datadog"],
+          },
+        ),
+      ),
+    ).toStrictEqual({
+      key_alias: "svc-key",
+      duration: null,
+      metadata:
+        '{"team":"core","service_account_id":"svc-key","logging":[{"callback_name":"otel"}],"litellm_disabled_callbacks":["datadog"]}',
+    });
+  });
+});
+
+describe("rotation flags", () => {
+  it("adds the rotation fields only when auto rotation is enabled", () => {
+    expect(
+      payloadOf(build({ key_alias: "my-key" }, { autoRotationEnabled: true, rotationInterval: "7d" })),
+    ).toStrictEqual(aliasOnly({ auto_rotate: true, rotation_interval: "7d" }));
+  });
+
+  it("sends no rotation fields when auto rotation is off", () => {
+    expect(payloadOf(build({ key_alias: "my-key" }, { rotationInterval: "7d" }))).toStrictEqual(aliasOnly());
+  });
+});
+
+describe("keys sourced from component state", () => {
+  it("serialises model aliases", () => {
+    expect(payloadOf(build({ key_alias: "my-key" }, { modelAliases: { fast: "gpt-4o-mini" } }))).toStrictEqual(
+      aliasOnly({ aliases: '{"fast":"gpt-4o-mini"}' }),
+    );
+  });
+
+  it("sends router settings that hold at least one value", () => {
+    expect(
+      payloadOf(build({ key_alias: "my-key" }, { routerSettings: { router_settings: { num_retries: 3 } } })),
+    ).toStrictEqual(aliasOnly({ router_settings: { num_retries: 3 } }));
+  });
+
+  it("skips router settings whose every field is blank", () => {
+    expect(
+      payloadOf(
+        build(
+          { key_alias: "my-key" },
+          { routerSettings: { router_settings: { num_retries: null, timeout: undefined, routing_strategy: "" } } },
+        ),
+      ),
+    ).toStrictEqual(aliasOnly());
+  });
+
+  it("keeps only budget windows that carry both a duration and a limit", () => {
+    expect(
+      payloadOf(
+        build(
+          { key_alias: "my-key" },
+          {
+            budgetLimits: [
+              { budget_duration: "1h", max_budget: 5 },
+              { budget_duration: "", max_budget: 3 },
+              { budget_duration: "7d", max_budget: null },
+            ],
+          },
+        ),
+      ),
+    ).toStrictEqual(aliasOnly({ budget_limits: [{ budget_duration: "1h", max_budget: 5 }] }));
+  });
+
+  it("keeps a zero budget window rather than treating it as unset", () => {
+    expect(
+      payloadOf(build({ key_alias: "my-key" }, { budgetLimits: [{ budget_duration: "1h", max_budget: 0 }] })),
+    ).toStrictEqual(aliasOnly({ budget_limits: [{ budget_duration: "1h", max_budget: 0 }] }));
+  });
+
+  it("omits budget_limits when no window is complete", () => {
+    expect(
+      payloadOf(build({ key_alias: "my-key" }, { budgetLimits: [{ budget_duration: "7d", max_budget: null }] })),
+    ).toStrictEqual(aliasOnly());
+  });
+
+  it("reduces tag rows into a tag_rpm_limit map", () => {
+    expect(
+      payloadOf(
+        build(
+          { key_alias: "my-key" },
+          {
+            tagRateLimits: [
+              { id: "r-1", tag: "prod", rpm_limit: 10 },
+              { id: "r-2", tag: "  ", rpm_limit: 5 },
+              { id: "r-3", tag: "dev", rpm_limit: null },
+            ],
+          },
+        ),
+      ),
+    ).toStrictEqual(aliasOnly({ tag_rpm_limit: { prod: 10 } }));
+  });
+
+  it("omits tag_rpm_limit when no row is complete", () => {
+    expect(
+      payloadOf(build({ key_alias: "my-key" }, { tagRateLimits: [{ id: "r-1", tag: "", rpm_limit: 10 }] })),
+    ).toStrictEqual(aliasOnly());
+  });
+
+  it("sends configured budget fallbacks", () => {
+    expect(payloadOf(build({ key_alias: "my-key" }, { budgetFallbacks: { "gpt-4": ["gpt-4o"] } }))).toStrictEqual(
+      aliasOnly({ budget_fallbacks: { "gpt-4": ["gpt-4o"] } }),
+    );
+  });
+});
+
+describe("budget duration", () => {
+  it("turns the never-resets sentinel into null", () => {
+    expect(payloadOf(build({ key_alias: "my-key", budget_duration: "none" }))).toStrictEqual(
+      aliasOnly({ budget_duration: null }),
+    );
+  });
+
+  it("forwards a real budget duration untouched", () => {
+    expect(payloadOf(build({ key_alias: "my-key", budget_duration: "30d" }))).toStrictEqual(
+      aliasOnly({ budget_duration: "30d" }),
+    );
+  });
+});
+
+describe("tpd_limit", () => {
+  it("forwards the daily batch token budget alongside the minute limits", () => {
+    expect(payloadOf(build({ key_alias: "my-key", tpd_limit: 250000, rpm_limit: 5 }))).toStrictEqual(
+      aliasOnly({ tpd_limit: 250000, rpm_limit: 5 }),
+    );
+  });
+
+  it("keeps a zero tpd_limit rather than treating it as unset", () => {
+    expect(payloadOf(build({ key_alias: "my-key", tpd_limit: 0 }))).toStrictEqual(aliasOnly({ tpd_limit: 0 }));
+  });
+});
+
+describe("purity", () => {
+  it("leaves the submitted form values untouched", () => {
+    const values = {
+      key_alias: "my-key",
+      metadata: '{"team":"core"}',
+      duration: "",
+    };
+    const before = structuredClone(values);
+    build(values);
+    expect(values).toStrictEqual(before);
+  });
+});
+
+describe("serialised wire shape", () => {
+  it("keeps an untouched closed form at eight object keys and seven wire keys", () => {
+    const payload = payloadOf(build(CLOSED_SECTIONS_VALUES));
+    expect(Object.keys(payload)).toHaveLength(8);
+    expect(wireKeys(payload)).toStrictEqual([
+      "team_id",
+      "key_alias",
+      "models",
+      "key_type",
+      "user_id",
+      "duration",
+      "metadata",
+    ]);
+    expect(payload.duration).toBeNull();
+  });
+
+  it("drops the undefined picker and keeps the null one, which is what the two Form.Items differ on", () => {
+    const payload = payloadOf(build(CLOSED_SECTIONS_VALUES));
+    expect(payload.organization_id).toBeUndefined();
+    expect(payload.team_id).toBeNull();
+    expect(wireKeys(payload)).not.toContain("organization_id");
+    expect(wireKeys(payload)).toContain("team_id");
+  });
+
+  it("forwards a selected team by value", () => {
+    expect(payloadOf(build({ ...CLOSED_SECTIONS_VALUES, team_id: "team-1" })).team_id).toBe("team-1");
+  });
+
+  it("adds twelve keys to the object and only the two limit types to the wire when Optional Settings opens", () => {
+    const payload = payloadOf(build(OPTIONAL_SETTINGS_VALUES));
+    expect(Object.keys(payload)).toHaveLength(20);
+    expect(wireKeys(payload)).toStrictEqual([
+      "team_id",
+      "key_alias",
+      "models",
+      "key_type",
+      "tpm_limit_type",
+      "rpm_limit_type",
+      "user_id",
+      "duration",
+      "metadata",
+    ]);
+  });
+
+  it("never turns an undefined-valued key into null or an empty string", () => {
+    const payload = payloadOf(build(OPTIONAL_SETTINGS_VALUES));
+    DROPPED_AT_SERIALISATION.forEach((key) => {
+      expect(payload[key]).toBeUndefined();
+    });
+    expect(wireKeys(payload)).toEqual(expect.not.arrayContaining(DROPPED_AT_SERIALISATION));
+  });
+});
+
+describe("duplicate alias", () => {
+  it("reports the clash instead of building a payload", () => {
+    expect(
+      build({ key_alias: "taken", team_id: "team-1" }, { existingKeys: [{ team_id: "team-1", key_alias: "taken" }] }),
+    ).toStrictEqual({ kind: "duplicate_alias", alias: "taken", teamId: "team-1" });
+  });
+
+  it("scopes the clash to the same team", () => {
+    expect(
+      payloadOf(
+        build({ key_alias: "taken", team_id: "team-2" }, { existingKeys: [{ team_id: "team-1", key_alias: "taken" }] }),
+      ).key_alias,
+    ).toBe("taken");
+  });
+
+  it("treats a keyless form and a teamless key as the same bucket", () => {
+    expect(build({}, { existingKeys: [{ team_id: null, key_alias: "" }] })).toStrictEqual({
+      kind: "duplicate_alias",
+      alias: "",
+      teamId: null,
+    });
+  });
+});
+
+describe("endpoint", () => {
+  it.each([
+    ["you", "standard"],
+    ["another_user", "standard"],
+    ["service_account", "service_account"],
+  ])("routes a %s key to the %s endpoint", (keyOwner, endpoint) => {
+    const result = build({ key_alias: "my-key" }, { keyOwner });
+    expect(result.kind === "ok" && result.endpoint).toBe(endpoint);
+  });
+});
+
+describe("model_max_budget", () => {
+  it("sends the per-model budgets in the shape the API stores", () => {
+    const payload = payloadOf(
+      build(
+        {},
+        {
+          modelMaxBudget: {
+            "claude-opus-4-8": { budget_limit: 200, time_period: "1mo" },
+            "gpt-4o": { budget_limit: 0.5, time_period: "30d" },
+          },
+        },
+      ),
+    );
+    expect(payload.model_max_budget).toEqual({
+      "claude-opus-4-8": { budget_limit: 200, time_period: "1mo" },
+      "gpt-4o": { budget_limit: 0.5, time_period: "30d" },
+    });
+  });
+
+  it("omits model_max_budget entirely when no model budget is set", () => {
+    expect(payloadOf(build({}))).not.toHaveProperty("model_max_budget");
+  });
+});

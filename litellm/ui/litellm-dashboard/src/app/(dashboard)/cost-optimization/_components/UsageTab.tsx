@@ -1,0 +1,153 @@
+"use client";
+
+import React, { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+
+import { AreaChart, BarChart, CustomLegend, DonutChart } from "@/components/shared/charts";
+import AdvancedDatePicker from "@/components/shared/advanced_date_picker";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  formatRangeLabel,
+  localIsoDay,
+  MAX_POINTS_WITH_DOTS,
+  SAVINGS_COLORS,
+  SAVINGS_DRIVERS,
+  SAVINGS_SERIES,
+  SavingsAccumulation,
+  SavingsPoint,
+  savingsSeriesOf,
+  shortDate,
+  sumOverDays,
+  toCumulative,
+  usd,
+  withStartAnchor,
+} from "./costOptimizationUtils";
+import SavingsTiles from "@/components/shared/SavingsTiles";
+import { DailyActivityRange } from "./useDailyActivityRange";
+
+interface UsageTabProps {
+  activity: DailyActivityRange;
+}
+
+const UsageTab: React.FC<UsageTabProps> = ({ activity }) => {
+  const { t } = useTranslation();
+  const { dateValue, onDateChange, results, loading } = activity;
+
+  const startTime = dateValue.from ?? null;
+  const endTime = dateValue.to ?? null;
+
+  const [accumulation, setAccumulation] = useState<SavingsAccumulation>("cumulative");
+
+  const perInterval = useMemo<SavingsPoint[]>(() => savingsSeriesOf(results), [results]);
+
+  // Cumulative anchors on a synthetic $0 point at the range start so a short
+  // range (down to a single day) rises from zero instead of floating as one dot.
+  const overTime = useMemo(() => {
+    if (accumulation !== "cumulative") return perInterval;
+    const startLabel = startTime ? shortDate(localIsoDay(startTime)) : "";
+    return withStartAnchor(toCumulative(perInterval), startLabel);
+  }, [accumulation, perInterval, startTime]);
+
+  const intervalLabel = t("costOptimization.usage.perDay");
+  const rangeLabel = formatRangeLabel(startTime ?? undefined, endTime ?? undefined);
+  const savingsSubtitle = [
+    accumulation === "cumulative"
+      ? t("costOptimization.usage.savings.runningTotal")
+      : t("costOptimization.usage.savings.savedPerInterval", { interval: intervalLabel.toLowerCase() }),
+    rangeLabel && t("costOptimization.usage.savings.rangeUtc", { range: rangeLabel }),
+  ]
+    .filter(Boolean)
+    .join(" \u00b7 ");
+
+  // A driver can come out negative (auto-router pays a cold-cache write on every
+  // model switch), and a negative slice has no meaning in a donut, so only drivers
+  // that actually saved are plotted; the range total keeps the signed truth.
+  const byDriver = useMemo(
+    () =>
+      SAVINGS_DRIVERS.map(({ name, color, of }) => ({
+        driver: name,
+        color,
+        usd: sumOverDays(results, of),
+      })).filter((d) => d.usd > 0),
+    [results],
+  );
+  const plottedDriverTotal = useMemo(() => byDriver.reduce((sum, d) => sum + d.usd, 0), [byDriver]);
+
+  return (
+    <div className="w-full space-y-6">
+      <div className="flex flex-wrap items-center justify-end gap-4">
+        <span className="text-sm text-muted-foreground">{t("costOptimization.usage.bucketedByUtcDay")}</span>
+        <AdvancedDatePicker value={dateValue} onValueChange={onDateChange} />
+      </div>
+
+      <SavingsTiles results={results} isLoading={loading} />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          {/* CardHeader's own slots rather than hand-rolled rows: the action column is
+              sized to its content and the title column takes the rest, so the subtitle
+              never competes with the controls for width and neither moves when it grows.
+              The controls wrap within their column instead of pushing past the card */}
+          <CardHeader>
+            <CardTitle>{t("costOptimization.usage.savings.title")}</CardTitle>
+            <CardDescription>{savingsSubtitle}</CardDescription>
+            <CardAction className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+              <CustomLegend categories={SAVINGS_SERIES} colors={SAVINGS_COLORS} />
+              <Tabs value={accumulation} onValueChange={(value) => setAccumulation(value as SavingsAccumulation)}>
+                <TabsList>
+                  <TabsTrigger value="cumulative">{t("costOptimization.usage.savings.cumulative")}</TabsTrigger>
+                  <TabsTrigger value="per-interval">{intervalLabel}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {accumulation === "cumulative" ? (
+              <AreaChart
+                data={overTime}
+                index="date"
+                categories={SAVINGS_SERIES}
+                colors={SAVINGS_COLORS}
+                valueFormatter={usd}
+                showLegend={false}
+                showDots={overTime.length <= MAX_POINTS_WITH_DOTS}
+              />
+            ) : (
+              // Not stacked: a driver can be negative once a model switch is charged
+              // for its cold cache, and stacking would draw that segment below the axis
+              // while the remaining bar still read as the day's total
+              <BarChart
+                data={overTime}
+                index="date"
+                categories={SAVINGS_SERIES}
+                colors={SAVINGS_COLORS}
+                valueFormatter={usd}
+                showLegend={false}
+              />
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("costOptimization.usage.savingsByDriver")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DonutChart
+              className="h-80"
+              data={byDriver}
+              index="driver"
+              category="usd"
+              colors={byDriver.map((d) => d.color)}
+              valueFormatter={usd}
+              showLabel
+              label={usd(plottedDriverTotal)}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+export default UsageTab;
